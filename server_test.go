@@ -32,3 +32,16 @@ func TestHomePageExplainsAppIsNotReadyForChatYet(t *testing.T) {
 		t.Fatalf("home page does not contain the workspace heading")
 	}
 }
+
+func TestVersionEndpointReturnsBuildVersion(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/version", nil)
+	rec := httptest.NewRecorder()
+	newServer().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Body.String(); got != "dev\n" {
+		t.Fatalf("body = %q, want %q", got, "dev\n")
+	}
+}

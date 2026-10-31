@@ -6,6 +6,8 @@ import (
 	"os"
 )
 
+var version = "dev"
+
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {

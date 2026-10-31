@@ -6,11 +6,14 @@ A private, self-hosted chatbot for a small household. The initial foundation use
 
 Requirements: Docker Desktop with Compose.
 
-The local image is tagged `everyonesoftware/agent:latest`.
+Local builds use the number of commits reachable from `HEAD` as the image tag and embedded app version. In PowerShell, set it before building and running:
 
-```sh
+```powershell
+$env:APP_VERSION = (git rev-list --count HEAD).Trim()
 docker compose up --build
 ```
+
+The GitHub Actions workflow publishes `ghcr.io/everyonesoftware/agent:<commit-count>` on pushes to `main` and version tags. It also publishes `latest`, branch/tag, and short-SHA tags.
 
 Open http://127.0.0.1:8080. The container is published only on the host loopback interface. To reach it from other devices, configure Tailscale Serve on the host to proxy to `http://127.0.0.1:8080`; do not change the Compose binding to `0.0.0.0` or forward the port from your router.
 
