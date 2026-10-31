@@ -1,10 +1,7 @@
 services:
   everyoneagent:
-    image: everyonesoftware/agent:${APP_VERSION:-dev}
-    build:
-      context: .
-      args:
-        VERSION: ${APP_VERSION:-dev}
+    image: ghcr.io/everyonesoftware/agent:${APP_VERSION:-latest}
+    pull_policy: always
     container_name: everyoneagent
     restart: unless-stopped
     environment:

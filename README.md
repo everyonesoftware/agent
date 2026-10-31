@@ -6,14 +6,13 @@ A private, self-hosted chatbot for a small household. The initial foundation use
 
 Requirements: Docker Desktop with Compose.
 
-Local builds use the number of commits reachable from `HEAD` as the image tag and embedded app version. In PowerShell, set it before building and running:
+Compose pulls the published GHCR image by default. To run the latest published image:
 
 ```powershell
-$env:APP_VERSION = (git rev-list --count HEAD).Trim()
-docker compose up --build
+docker compose up -d
 ```
 
-The GitHub Actions workflow tests the code and publishes `ghcr.io/everyonesoftware/agent:<commit-count>` on pushes to `main` and version tags. The numeric count is also embedded in the app's `/version` endpoint and OCI version label. It additionally publishes `latest`, branch/tag, and short-SHA tags.
+To pin a specific commit-count release, set `APP_VERSION` before starting Compose; for example, `$env:APP_VERSION = "3"`. The GitHub Actions workflow tests the code and publishes `ghcr.io/everyonesoftware/agent:<commit-count>` on pushes to `main` and version tags. The numeric count is also embedded in the app's `/version` endpoint and OCI version label. It additionally publishes `latest`, branch/tag, and short-SHA tags.
 
 Open http://127.0.0.1:8080. The container is published only on the host loopback interface. To reach it from other devices, configure Tailscale Serve on the host to proxy to `http://127.0.0.1:8080`; do not change the Compose binding to `0.0.0.0` or forward the port from your router.
 
