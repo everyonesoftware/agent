@@ -1,0 +1,11 @@
+services:
+  everyoneagent:
+    build: .
+    image: everyonesoftware/agent:latest
+    container_name: everyoneagent
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+    ports:
+      # Bind only to this PC; use Tailscale Serve for tailnet access.
+      - "127.0.0.1:8080:8080"
