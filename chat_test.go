@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -130,5 +132,47 @@ func TestChatAPIDoesNotExposeProviderErrorsOrCredentials(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), apiKey) {
 		t.Fatal("provider error exposed the API key to the browser")
+	}
+}
+
+func TestChatAPILogsSafeProviderDiagnostics(t *testing.T) {
+	const apiKey = "private-test-key"
+	const providerMessage = "private provider response detail"
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Request-Id", "req_test_401")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = fmt.Fprintf(w, `{"error":{"message":%q,"type":"authentication_error","code":"invalid_api_key"}}`, providerMessage)
+	}))
+	defer provider.Close()
+
+	t.Setenv("LLM_BASE_URL", provider.URL+"/v1")
+	t.Setenv("LLM_API_KEY", apiKey)
+	t.Setenv("LLM_MODEL", "test-model")
+
+	var logOutput bytes.Buffer
+	originalLogOutput := log.Writer()
+	log.SetOutput(&logOutput)
+	defer log.SetOutput(originalLogOutput)
+
+	body := `{"messages":[{"role":"user","content":"Hi"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	newServer().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadGateway, rec.Body.String())
+	}
+	logs := logOutput.String()
+	for _, expected := range []string{"status=401", `request_id="req_test_401"`, `error_type="authentication_error"`, `error_code="invalid_api_key"`} {
+		if !strings.Contains(logs, expected) {
+			t.Errorf("diagnostic logs do not contain %q: %s", expected, logs)
+		}
+	}
+	for _, forbidden := range []string{apiKey, providerMessage, `"content":"Hi"`} {
+		if strings.Contains(logs, forbidden) {
+			t.Errorf("diagnostic logs exposed sensitive content %q: %s", forbidden, logs)
+		}
 	}
 }

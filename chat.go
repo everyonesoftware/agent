@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 )
@@ -54,11 +55,21 @@ func chatHandler(provider modelProvider) http.HandlerFunc {
 
 		reply, err := provider.complete(r.Context(), request.Messages)
 		if err != nil {
+			logProviderFailure(err)
 			writeChatError(w, http.StatusBadGateway, "The model provider could not complete this request.")
 			return
 		}
 		writeChatJSON(w, http.StatusOK, map[string]string{"reply": reply})
 	}
+}
+
+func logProviderFailure(err error) {
+	var failure *providerFailure
+	if !errors.As(err, &failure) {
+		log.Print("chat provider failure kind=internal")
+		return
+	}
+	log.Printf("chat provider failure kind=%s status=%d request_id=%q error_type=%q error_code=%q", failure.kind, failure.status, failure.requestID, failure.errorType, failure.errorCode)
 }
 
 func validateChatMessages(messages []chatMessage) error {
