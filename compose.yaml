@@ -6,6 +6,9 @@ services:
     restart: unless-stopped
     environment:
       PORT: "8080"
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
     ports:
       # Bind only to this PC; use Tailscale Serve for tailnet access.
       - "127.0.0.1:8080:8080"

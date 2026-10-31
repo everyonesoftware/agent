@@ -20,7 +20,7 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 }
 
-func TestHomePageExplainsAppIsNotReadyForChatYet(t *testing.T) {
+func TestHomePageOffersAChatComposer(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	newServer().ServeHTTP(rec, req)
@@ -28,8 +28,8 @@ func TestHomePageExplainsAppIsNotReadyForChatYet(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
-	if !strings.Contains(rec.Body.String(), "Your private AI workspace") {
-		t.Fatalf("home page does not contain the workspace heading")
+	if !strings.Contains(rec.Body.String(), `id="chat-form"`) || !strings.Contains(rec.Body.String(), `id="message-input"`) {
+		t.Fatalf("home page does not contain the chat composer")
 	}
 }
 
