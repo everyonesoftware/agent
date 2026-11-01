@@ -18,15 +18,18 @@ var errModelNotConfigured = errors.New("model provider is not configured")
 
 type modelProvider interface {
 	configured() bool
-	complete(context.Context, []chatMessage) (string, error)
+	complete(context.Context, []chatMessage, string) (string, error)
+	models(context.Context) ([]modelOption, error)
 }
 
 type providerFailure struct {
-	kind      string
-	status    int
-	requestID string
-	errorType string
-	errorCode string
+	kind       string
+	status     int
+	requestID  string
+	errorType  string
+	errorCode  string
+	errorParam string
+	errorShape string
 }
 
 func (e *providerFailure) Error() string {
@@ -58,7 +61,7 @@ func (p *openAICompatibleProvider) configured() bool {
 	return p != nil && p.baseURL != "" && p.model != ""
 }
 
-func (p *openAICompatibleProvider) complete(ctx context.Context, messages []chatMessage) (string, error) {
+func (p *openAICompatibleProvider) complete(ctx context.Context, messages []chatMessage, _ string) (string, error) {
 	if !p.configured() {
 		return "", errModelNotConfigured
 	}
@@ -87,20 +90,7 @@ func (p *openAICompatibleProvider) complete(ctx context.Context, messages []chat
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		var providerError struct {
-			Error struct {
-				Type string `json:"type"`
-				Code string `json:"code"`
-			} `json:"error"`
-		}
-		_ = json.NewDecoder(io.LimitReader(resp.Body, 4<<10)).Decode(&providerError)
-		return "", &providerFailure{
-			kind:      "http",
-			status:    resp.StatusCode,
-			requestID: safeDiagnosticToken(resp.Header.Get("X-Request-Id")),
-			errorType: safeDiagnosticToken(providerError.Error.Type),
-			errorCode: safeDiagnosticToken(providerError.Error.Code),
-		}
+		return "", readSafeAPIError(resp, "http")
 	}
 
 	var result struct {
@@ -127,6 +117,19 @@ func (p *openAICompatibleProvider) complete(ctx context.Context, messages []chat
 	return result.Choices[0].Message.Content, nil
 }
 
+func safeDiagnosticParam(value string) string {
+	value = strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || strings.ContainsRune("._-[]:", r) {
+			return r
+		}
+		return -1
+	}, value)
+	if len(value) > 128 {
+		return value[:128]
+	}
+	return value
+}
+
 func safeDiagnosticToken(value string) string {
 	value = strings.Map(func(r rune) rune {
 		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || strings.ContainsRune("._-", r) {
@@ -138,4 +141,61 @@ func safeDiagnosticToken(value string) string {
 		return value[:128]
 	}
 	return value
+}
+
+func (p *openAICompatibleProvider) models(_ context.Context) ([]modelOption, error) {
+	if !p.configured() {
+		return nil, errModelNotConfigured
+	}
+	return []modelOption{{ID: p.model, Name: p.model}}, nil
+}
+
+type hybridProvider struct {
+	api   *openAICompatibleProvider
+	oauth *responsesProvider
+}
+
+func newHybridProvider(api *openAICompatibleProvider, auth *siwcService) *hybridProvider {
+	return &hybridProvider{
+		api: api,
+		oauth: &responsesProvider{
+			auth:         auth,
+			defaultModel: strings.TrimSpace(os.Getenv("LLM_MODEL")),
+		},
+	}
+}
+
+func (p *hybridProvider) useOAuth() bool {
+	if p == nil || p.oauth == nil || p.oauth.auth == nil {
+		return false
+	}
+	credentials, err := p.oauth.auth.store.Load()
+	if err != nil {
+		return !errors.Is(err, os.ErrNotExist)
+	}
+	return credentialsUseOAuth(credentials)
+}
+
+func (p *hybridProvider) configured() bool {
+	return p != nil && (p.useOAuth() || (p.api != nil && p.api.configured()))
+}
+
+func (p *hybridProvider) complete(ctx context.Context, messages []chatMessage, model string) (string, error) {
+	if p.useOAuth() {
+		return p.oauth.complete(ctx, messages, model)
+	}
+	if p.api == nil {
+		return "", errModelNotConfigured
+	}
+	return p.api.complete(ctx, messages, model)
+}
+
+func (p *hybridProvider) models(ctx context.Context) ([]modelOption, error) {
+	if p.useOAuth() {
+		return p.oauth.models(ctx)
+	}
+	if p.api == nil {
+		return nil, errModelNotConfigured
+	}
+	return p.api.models(ctx)
 }

@@ -6,9 +6,17 @@ import (
 )
 
 func newServer() http.Handler {
-	provider := newModelProviderFromEnv()
+	siwc := newSIWCServiceFromEnv()
+	provider := newHybridProvider(newModelProviderFromEnv(), siwc)
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/chat", chatHandler(provider))
+	mux.HandleFunc("GET /api/models", modelsHandler(provider))
+	mux.HandleFunc("GET /auth/start", siwc.startHandler)
+	mux.HandleFunc("GET /auth/callback", siwc.callbackHandler)
+	mux.HandleFunc("GET /api/auth/status", siwc.statusHandler)
+	mux.HandleFunc("GET /api/auth/profiles", siwc.profilesHandler)
+	mux.HandleFunc("POST /api/auth/profiles/active", siwc.selectProfileHandler)
+	mux.HandleFunc("POST /api/auth/disconnect", siwc.disconnectHandler)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = fmt.Fprintln(w, "ok")

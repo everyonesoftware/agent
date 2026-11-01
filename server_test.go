@@ -28,8 +28,8 @@ func TestHomePageOffersAChatComposer(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
-	if !strings.Contains(rec.Body.String(), `id="chat-form"`) || !strings.Contains(rec.Body.String(), `id="message-input"`) {
-		t.Fatalf("home page does not contain the chat composer")
+	if !strings.Contains(rec.Body.String(), `id="chat-form"`) || !strings.Contains(rec.Body.String(), `id="message-input"`) || !strings.Contains(rec.Body.String(), `id="connect-chatgpt"`) || !strings.Contains(rec.Body.String(), `id="model-select"`) || !strings.Contains(rec.Body.String(), `id="account-select"`) || !strings.Contains(rec.Body.String(), `id="add-chatgpt-account"`) {
+		t.Fatalf("home page does not contain the chat composer and account management controls")
 	}
 }
 

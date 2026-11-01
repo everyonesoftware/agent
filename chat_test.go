@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,6 +11,18 @@ import (
 	"strings"
 	"testing"
 )
+
+type injectedChatFailureProvider struct{ err error }
+
+func (p injectedChatFailureProvider) configured() bool { return true }
+
+func (p injectedChatFailureProvider) complete(context.Context, []chatMessage, string) (string, error) {
+	return "", p.err
+}
+
+func (p injectedChatFailureProvider) models(context.Context) ([]modelOption, error) {
+	return nil, p.err
+}
 
 func TestChatAPIUsesConfiguredOpenAICompatibleProvider(t *testing.T) {
 	const apiKey = "test-provider-key"
@@ -127,8 +140,8 @@ func TestChatAPIDoesNotExposeProviderErrorsOrCredentials(t *testing.T) {
 	rec := httptest.NewRecorder()
 	newServer().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadGateway {
-		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadGateway, rec.Body.String())
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusUnauthorized, rec.Body.String())
 	}
 	if strings.Contains(rec.Body.String(), apiKey) {
 		t.Fatal("provider error exposed the API key to the browser")
@@ -142,7 +155,7 @@ func TestChatAPILogsSafeProviderDiagnostics(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Request-Id", "req_test_401")
 		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = fmt.Fprintf(w, `{"error":{"message":%q,"type":"authentication_error","code":"invalid_api_key"}}`, providerMessage)
+		_, _ = fmt.Fprintf(w, `{"error":{"message":%q,"type":"authentication_error","code":"invalid_api_key","param":"input[0].content"}}`, providerMessage)
 	}))
 	defer provider.Close()
 
@@ -161,11 +174,11 @@ func TestChatAPILogsSafeProviderDiagnostics(t *testing.T) {
 	rec := httptest.NewRecorder()
 	newServer().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadGateway {
-		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadGateway, rec.Body.String())
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusUnauthorized, rec.Body.String())
 	}
 	logs := logOutput.String()
-	for _, expected := range []string{"status=401", `request_id="req_test_401"`, `error_type="authentication_error"`, `error_code="invalid_api_key"`} {
+	for _, expected := range []string{"status=401", `request_id="req_test_401"`, `error_type="authentication_error"`, `error_code="invalid_api_key"`, `error_param="input[0].content"`, `error_shape="error_object"`} {
 		if !strings.Contains(logs, expected) {
 			t.Errorf("diagnostic logs do not contain %q: %s", expected, logs)
 		}
@@ -174,5 +187,57 @@ func TestChatAPILogsSafeProviderDiagnostics(t *testing.T) {
 		if strings.Contains(logs, forbidden) {
 			t.Errorf("diagnostic logs exposed sensitive content %q: %s", forbidden, logs)
 		}
+	}
+}
+
+func TestChatUsageLimitReturnsManageUsageAction(t *testing.T) {
+	provider := injectedChatFailureProvider{err: &providerFailure{
+		kind: "responses_stream", status: http.StatusOK, requestID: "req_usage_limit",
+		errorCode: "subscription_sharing_usage_limit_exceeded", errorShape: "stream_event",
+	}}
+	request := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"messages":[{"role":"user","content":"Hi"}]}`))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	chatHandler(provider).ServeHTTP(recorder, request)
+	var result map[string]string
+	if err := json.NewDecoder(recorder.Body).Decode(&result); err != nil {
+		t.Fatalf("decode usage-limit error: %v", err)
+	}
+	if recorder.Code != http.StatusTooManyRequests || result["action"] != "manage_usage" || !strings.Contains(result["error"], "shared ChatGPT plan") {
+		t.Fatalf("status=%d result=%#v", recorder.Code, result)
+	}
+}
+
+func TestChatTerminalRefreshErrorOffersReauthorization(t *testing.T) {
+	provider := injectedChatFailureProvider{err: &providerFailure{
+		kind: "oauth_refresh", status: http.StatusBadRequest, errorCode: "invalid_grant",
+	}}
+	request := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"messages":[{"role":"user","content":"Hi"}]}`))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	chatHandler(provider).ServeHTTP(recorder, request)
+	var result map[string]string
+	if err := json.NewDecoder(recorder.Body).Decode(&result); err != nil {
+		t.Fatalf("decode terminal refresh error: %v", err)
+	}
+	if recorder.Code != http.StatusUnauthorized || result["action"] != "reauthorize" {
+		t.Fatalf("status=%d result=%#v", recorder.Code, result)
+	}
+}
+
+func TestChatReauthorizeMarkerOffersSignInWithoutAPIFallback(t *testing.T) {
+	provider := injectedChatFailureProvider{err: &providerFailure{
+		kind: "oauth_reauthorize", status: http.StatusUnauthorized, errorCode: "invalid_grant",
+	}}
+	request := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"messages":[{"role":"user","content":"Hi"}]}`))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	chatHandler(provider).ServeHTTP(recorder, request)
+	var result map[string]string
+	if err := json.NewDecoder(recorder.Body).Decode(&result); err != nil {
+		t.Fatalf("decode reauthorization error: %v", err)
+	}
+	if recorder.Code != http.StatusUnauthorized || result["action"] != "reauthorize" {
+		t.Fatalf("status=%d result=%#v", recorder.Code, result)
 	}
 }
