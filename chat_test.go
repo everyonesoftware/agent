@@ -64,7 +64,7 @@ func TestChatAPIUsesConfiguredOpenAICompatibleProvider(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	newServer().ServeHTTP(rec, req)
+	serveChatAsNewUser(t, req, rec)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
@@ -101,7 +101,7 @@ func TestChatAPIExplainsWhenModelIsNotConfigured(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	newServer().ServeHTTP(rec, req)
+	serveChatAsNewUser(t, req, rec)
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
@@ -117,7 +117,7 @@ func TestChatAPIRejectsSystemMessagesFromBrowser(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	newServer().ServeHTTP(rec, req)
+	serveChatAsNewUser(t, req, rec)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body.String())
@@ -138,7 +138,7 @@ func TestChatAPIDoesNotExposeProviderErrorsOrCredentials(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	newServer().ServeHTTP(rec, req)
+	serveChatAsNewUser(t, req, rec)
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusUnauthorized, rec.Body.String())
@@ -172,7 +172,7 @@ func TestChatAPILogsSafeProviderDiagnostics(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	newServer().ServeHTTP(rec, req)
+	serveChatAsNewUser(t, req, rec)
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusUnauthorized, rec.Body.String())
@@ -203,7 +203,7 @@ func TestChatUsageLimitReturnsManageUsageAction(t *testing.T) {
 	if err := json.NewDecoder(recorder.Body).Decode(&result); err != nil {
 		t.Fatalf("decode usage-limit error: %v", err)
 	}
-	if recorder.Code != http.StatusTooManyRequests || result["action"] != "manage_usage" || !strings.Contains(result["error"], "shared ChatGPT plan") {
+	if recorder.Code != http.StatusTooManyRequests || result["action"] != "manage_usage" || !strings.Contains(result["error"], "ChatGPT plan") {
 		t.Fatalf("status=%d result=%#v", recorder.Code, result)
 	}
 }
@@ -240,4 +240,18 @@ func TestChatReauthorizeMarkerOffersSignInWithoutAPIFallback(t *testing.T) {
 	if recorder.Code != http.StatusUnauthorized || result["action"] != "reauthorize" {
 		t.Fatalf("status=%d result=%#v", recorder.Code, result)
 	}
+}
+
+func serveChatAsNewUser(t *testing.T, request *http.Request, response *httptest.ResponseRecorder) {
+	t.Helper()
+	t.Setenv("APP_DATA_DIR", t.TempDir())
+	handler := newServer()
+	register := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(`{"username":"chat-test","password":"correct-horse-battery"}`))
+	registered := httptest.NewRecorder()
+	handler.ServeHTTP(registered, register)
+	if registered.Code != http.StatusCreated {
+		t.Fatalf("create chat test user: status=%d body=%s", registered.Code, registered.Body.String())
+	}
+	request.AddCookie(registered.Result().Cookies()[0])
+	handler.ServeHTTP(response, request)
 }

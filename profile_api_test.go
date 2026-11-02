@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +13,24 @@ import (
 
 func TestProfileManagementIsLoopbackOnlyAndSelectsOneProfile(t *testing.T) {
 	dir := t.TempDir()
-	store := newFileCredentialStore(dir)
+	t.Setenv("APP_DATA_DIR", dir)
+	server := newServer()
+	register := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(`{"username":"profile-test","password":"correct-horse-battery"}`))
+	registered := httptest.NewRecorder()
+	server.ServeHTTP(registered, register)
+	if registered.Code != http.StatusCreated {
+		t.Fatalf("register: %d %s", registered.Code, registered.Body.String())
+	}
+	var user authUser
+	if err := json.NewDecoder(registered.Body).Decode(&user); err != nil {
+		t.Fatal(err)
+	}
+	accounts, err := newAccountStore(filepath.Join(dir, "everyoneagent.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := newSIWCService(siwcConfig{}, newFileCredentialStore(filepath.Join(dir, "base")))
+	store := accounts.siwcForUser(base, user).store
 	firstID, err := newProfileID()
 	if err != nil {
 		t.Fatalf("generate first profile ID: %v", err)
@@ -36,11 +54,10 @@ func TestProfileManagementIsLoopbackOnlyAndSelectsOneProfile(t *testing.T) {
 	if err := store.SetActiveProfile(firstID); err != nil {
 		t.Fatalf("select first profile: %v", err)
 	}
-	t.Setenv("SIWC_DATA_DIR", dir)
-	server := newServer()
-
+	cookie := registered.Result().Cookies()[0]
 	remoteRequest := httptest.NewRequest(http.MethodGet, "/api/auth/profiles", nil)
 	remoteRequest.Host = "everyoneagent.example.ts.net"
+	remoteRequest.AddCookie(cookie)
 	remoteRecorder := httptest.NewRecorder()
 	server.ServeHTTP(remoteRecorder, remoteRequest)
 	if remoteRecorder.Code != http.StatusForbidden {
@@ -49,6 +66,7 @@ func TestProfileManagementIsLoopbackOnlyAndSelectsOneProfile(t *testing.T) {
 
 	listRequest := httptest.NewRequest(http.MethodGet, "/api/auth/profiles", nil)
 	listRequest.Host = "127.0.0.1:8080"
+	listRequest.AddCookie(cookie)
 	listRecorder := httptest.NewRecorder()
 	server.ServeHTTP(listRecorder, listRequest)
 	if listRecorder.Code != http.StatusOK {
@@ -77,6 +95,7 @@ func TestProfileManagementIsLoopbackOnlyAndSelectsOneProfile(t *testing.T) {
 
 	selectRequest := httptest.NewRequest(http.MethodPost, "/api/auth/profiles/active", bytes.NewBufferString(`{"profile_id":"`+secondID+`"}`))
 	selectRequest.Host = "127.0.0.1:8080"
+	selectRequest.AddCookie(cookie)
 	selectRecorder := httptest.NewRecorder()
 	server.ServeHTTP(selectRecorder, selectRequest)
 	if selectRecorder.Code != http.StatusOK {
@@ -89,6 +108,7 @@ func TestProfileManagementIsLoopbackOnlyAndSelectsOneProfile(t *testing.T) {
 
 	remoteSelect := httptest.NewRequest(http.MethodPost, "/api/auth/profiles/active", bytes.NewBufferString(`{"profile_id":"`+firstID+`"}`))
 	remoteSelect.Host = "everyoneagent.example.ts.net"
+	remoteSelect.AddCookie(cookie)
 	remoteSelectRecorder := httptest.NewRecorder()
 	server.ServeHTTP(remoteSelectRecorder, remoteSelect)
 	if remoteSelectRecorder.Code != http.StatusForbidden {
@@ -108,6 +128,7 @@ func TestProfileManagementIsLoopbackOnlyAndSelectsOneProfile(t *testing.T) {
 	}
 	pendingSelect := httptest.NewRequest(http.MethodPost, "/api/auth/profiles/active", bytes.NewBufferString(`{"profile_id":"`+pendingID+`"}`))
 	pendingSelect.Host = "127.0.0.1:8080"
+	pendingSelect.AddCookie(cookie)
 	pendingRecorder := httptest.NewRecorder()
 	server.ServeHTTP(pendingRecorder, pendingSelect)
 	if pendingRecorder.Code != http.StatusConflict {

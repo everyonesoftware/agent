@@ -83,16 +83,41 @@ func TestAuthStartRejectsCrossSiteNavigationToLoopback(t *testing.T) {
 
 func TestAuthStatusDoesNotExposeCredentials(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("APP_DATA_DIR", dir)
+	server := newServer()
+	register := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(`{"username":"alice","password":"correct-horse-battery"}`))
+	registered := httptest.NewRecorder()
+	server.ServeHTTP(registered, register)
+	if registered.Code != http.StatusCreated {
+		t.Fatalf("register test account: %d %s", registered.Code, registered.Body.String())
+	}
+	var user authUser
+	if err := json.NewDecoder(registered.Body).Decode(&user); err != nil {
+		t.Fatal(err)
+	}
+	if user.ID == "" {
+		t.Fatalf("registration response omitted account ID: %s", registered.Body.String())
+	}
+	accounts, err := newAccountStore(filepath.Join(dir, "everyoneagent.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := newSIWCService(siwcConfig{}, newFileCredentialStore(filepath.Join(dir, "base")))
+	service := accounts.siwcForUser(base, user)
 	credentials := testOAuthCredentials("access-secret", "refresh-secret", time.Now().Add(time.Hour))
 	credentials.ClientID = "client-secret"
-	if err := newFileCredentialStore(dir).Save(credentials); err != nil {
+	if err := service.store.Save(credentials); err != nil {
 		t.Fatalf("save test credentials: %v", err)
 	}
-	t.Setenv("SIWC_DATA_DIR", dir)
+	stored, loadErr := service.store.Load()
+	if loadErr != nil || !credentialsConnected(stored) {
+		t.Fatalf("saved account credentials unavailable: %#v %v at %s", stored, loadErr, service.store.(*fileCredentialStore).dir)
+	}
 	request := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
+	request.AddCookie(registered.Result().Cookies()[0])
 	recorder := httptest.NewRecorder()
 
-	newServer().ServeHTTP(recorder, request)
+	server.ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body = %s", recorder.Code, http.StatusOK, recorder.Body.String())

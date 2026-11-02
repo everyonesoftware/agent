@@ -165,6 +165,54 @@ func newHybridProvider(api *openAICompatibleProvider, auth *siwcService) *hybrid
 	}
 }
 
+type userScopedProvider struct {
+	api      *openAICompatibleProvider
+	baseAuth *siwcService
+	accounts *accountStore
+}
+
+func (p *userScopedProvider) service(ctx context.Context) (*siwcService, error) {
+	user, ok := currentAuthUser(ctx)
+	if !ok || p.accounts == nil {
+		return nil, errChatGPTNotConnected
+	}
+	return p.accounts.siwcForUser(p.baseAuth, user), nil
+}
+
+func (p *userScopedProvider) configured() bool { return true }
+
+func (p *userScopedProvider) oauthSelected(ctx context.Context) (*siwcService, bool) {
+	service, err := p.service(ctx)
+	if err != nil {
+		return nil, false
+	}
+	credentials, err := service.store.Load()
+	if err != nil {
+		return service, !errors.Is(err, os.ErrNotExist)
+	}
+	return service, credentialsUseOAuth(credentials)
+}
+
+func (p *userScopedProvider) complete(ctx context.Context, messages []chatMessage, model string) (string, error) {
+	if service, selected := p.oauthSelected(ctx); selected {
+		return (&responsesProvider{auth: service, defaultModel: strings.TrimSpace(os.Getenv("LLM_MODEL"))}).complete(ctx, messages, model)
+	}
+	if p.api == nil {
+		return "", errModelNotConfigured
+	}
+	return p.api.complete(ctx, messages, model)
+}
+
+func (p *userScopedProvider) models(ctx context.Context) ([]modelOption, error) {
+	if service, selected := p.oauthSelected(ctx); selected {
+		return service.availableModels(ctx)
+	}
+	if p.api == nil {
+		return nil, errModelNotConfigured
+	}
+	return p.api.models(ctx)
+}
+
 func (p *hybridProvider) useOAuth() bool {
 	if p == nil || p.oauth == nil || p.oauth.auth == nil {
 		return false

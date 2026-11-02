@@ -21,11 +21,16 @@ type chatMessage struct {
 }
 
 type chatRequest struct {
-	Messages []chatMessage `json:"messages"`
-	Model    string        `json:"model"`
+	Messages       []chatMessage `json:"messages"`
+	Model          string        `json:"model"`
+	ConversationID string        `json:"conversation_id,omitempty"`
 }
 
 func chatHandler(provider modelProvider) http.HandlerFunc {
+	return chatHandlerWithStore(provider, nil)
+}
+
+func chatHandlerWithStore(provider modelProvider, accounts *accountStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !provider.configured() {
 			writeChatError(w, http.StatusServiceUnavailable, "Connect ChatGPT from a browser on the EveryoneAgent host, or configure LLM_MODEL and provider settings.")
@@ -60,11 +65,29 @@ func chatHandler(provider modelProvider) http.HandlerFunc {
 
 		reply, err := provider.complete(r.Context(), request.Messages, request.Model)
 		if err != nil {
+			if errors.Is(err, errModelNotConfigured) {
+				writeChatError(w, http.StatusServiceUnavailable, "Connect your ChatGPT account or configure LLM_MODEL and provider settings.")
+				return
+			}
 			logProviderFailure(err)
 			writeChatProviderError(w, err)
 			return
 		}
-		writeChatJSON(w, http.StatusOK, map[string]string{"reply": reply})
+		result := map[string]string{"reply": reply}
+		if accounts != nil {
+			user, ok := currentAuthUser(r.Context())
+			if !ok {
+				writeChatError(w, http.StatusUnauthorized, "Sign in to continue.")
+				return
+			}
+			conversationID, saveErr := accounts.saveExchange(user, request.ConversationID, []chatMessage{request.Messages[len(request.Messages)-1], {Role: "assistant", Content: reply}})
+			if saveErr != nil {
+				writeChatError(w, http.StatusInternalServerError, "The reply was generated, but the conversation could not be saved.")
+				return
+			}
+			result["conversation_id"] = conversationID
+		}
+		writeChatJSON(w, http.StatusOK, result)
 	}
 }
 
@@ -86,7 +109,7 @@ func writeChatProviderError(w http.ResponseWriter, err error) {
 	switch failure.errorCode {
 	case "subscription_sharing_usage_limit_exceeded":
 		writeChatJSON(w, http.StatusTooManyRequests, map[string]string{
-			"error":  "The shared ChatGPT plan usage limit has been reached.",
+			"error":  "The ChatGPT plan usage limit has been reached.",
 			"action": "manage_usage",
 		})
 		return
@@ -133,7 +156,7 @@ func writeChatProviderError(w http.ResponseWriter, err error) {
 	switch failure.status {
 	case http.StatusUnauthorized:
 		if isChatGPTProviderFailure(failure.kind) {
-			message = "ChatGPT could not validate the current session. Retry or reconnect the shared account."
+			message = "ChatGPT could not validate the current session. Retry or reconnect your account."
 		} else {
 			message = "The configured model provider rejected authentication. Check its credentials."
 		}
@@ -197,6 +220,10 @@ func modelsHandler(provider modelProvider) http.HandlerFunc {
 		}
 		models, err := provider.models(r.Context())
 		if err != nil {
+			if errors.Is(err, errModelNotConfigured) {
+				writeChatError(w, http.StatusServiceUnavailable, "Connect your ChatGPT account or configure LLM_MODEL and provider settings before loading models.")
+				return
+			}
 			logProviderFailure(err)
 			writeChatProviderError(w, err)
 			return

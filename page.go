@@ -12,6 +12,12 @@ const homePage = `<!doctype html>
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; }
     .app { width: min(54rem, 100%); height: 100vh; height: 100dvh; margin: 0 auto; display: flex; flex-direction: column; background: #fff; border-inline: 1px solid #e9e4df; }
+    .auth-gate { width: min(26rem, calc(100% - 2rem)); margin: 12vh auto; padding: 1.5rem; background: #fff; border: 1px solid #e9e4df; border-radius: 1rem; }
+    .auth-gate[hidden], .app[hidden] { display: none; }
+    .auth-gate h1 { margin-top: 0; }
+    .auth-gate input { display: block; width: 100%; margin: .75rem 0; padding: .7rem; border: 1px solid #ddd6df; border-radius: .6rem; font: inherit; }
+    .auth-gate button { padding: .65rem .85rem; color: #fff; background: #6d4a94; font-weight: 650; }
+    .auth-error { min-height: 1.5rem; color: #a23e36; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid #eee9e4; }
     .brand { color: #6d4a94; font-size: .82rem; font-weight: 750; letter-spacing: .09em; }
     .subtitle { margin: .15rem 0 0; color: #716b72; font-size: .82rem; }
@@ -57,14 +63,29 @@ const homePage = `<!doctype html>
   </style>
 </head>
 <body>
-  <main class="app">
+  <main class="auth-gate" id="auth-gate">
+    <div class="brand">EVERYONEAGENT</div>
+    <h1 id="auth-title">Sign in</h1>
+    <form id="account-form">
+      <label for="username-input">Username</label>
+      <input id="username-input" name="username" minlength="3" maxlength="64" autocomplete="username" required>
+      <label for="password-input">Password</label>
+      <input id="password-input" name="password" type="password" minlength="12" maxlength="72" autocomplete="current-password" required>
+      <p class="auth-error" id="auth-error" role="alert"></p>
+      <button id="account-submit" type="submit">Sign in</button>
+    </form>
+    <p><button class="reset" type="button" id="toggle-account-mode">Create an account</button></p>
+  </main>
+  <main class="app" id="chat-app" hidden>
     <header>
       <div>
         <div class="brand">EVERYONEAGENT</div>
-        <p class="subtitle">A private chat for your household</p>
+        <p class="subtitle">Your private, saved conversations</p>
       </div>
       <div class="header-actions">
-        <label class="visually-hidden" for="account-select">Household ChatGPT account</label>
+        <label class="visually-hidden" for="conversation-select">Saved conversation</label>
+        <select class="model-select" id="conversation-select"><option value="">New conversation</option></select>
+        <label class="visually-hidden" for="account-select">Your ChatGPT account</label>
         <select class="model-select" id="account-select" hidden disabled><option value="">Loading accounts…</option></select>
         <label class="visually-hidden" for="model-select">Model</label>
         <select class="model-select" id="model-select" disabled><option value="">Loading models…</option></select>
@@ -72,6 +93,7 @@ const homePage = `<!doctype html>
         <button class="reset" id="add-chatgpt-account" type="button" hidden>Add account</button>
         <button class="reset" id="disconnect-chatgpt" type="button" hidden>Disconnect</button>
         <button class="reset" id="new-chat" type="button">New chat</button>
+        <button class="reset" id="logout-button" type="button">Sign out</button>
       </div>
     </header>
     <p class="connection-status" id="connection-status" role="status">Checking ChatGPT connection…</p>
@@ -82,7 +104,7 @@ const homePage = `<!doctype html>
       </div>
     </section>
     <div class="composer-wrap">
-      <p class="notice" id="notice" role="status">Messages are sent to your configured model provider and are not saved by this app yet.</p>
+      <p class="notice" id="notice" role="status">Messages and replies are saved to your account after each successful request.</p>
       <form class="composer" id="chat-form" autocomplete="off">
         <label class="visually-hidden" for="message-input">Message</label>
         <textarea id="message-input" name="message" rows="1" maxlength="8192" placeholder="Message EveryoneAgent" required></textarea>
@@ -107,6 +129,85 @@ const homePage = `<!doctype html>
       const localHost = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(window.location.hostname);
       const conversation = [];
       let busy = false;
+      let conversationId = '';
+      let modelStorageKey = 'everyoneagent.model';
+
+      const authGate = document.getElementById('auth-gate');
+      const chatApp = document.getElementById('chat-app');
+      const accountForm = document.getElementById('account-form');
+      const authError = document.getElementById('auth-error');
+      const accountSubmit = document.getElementById('account-submit');
+      const accountModeButton = document.getElementById('toggle-account-mode');
+      let registering = false;
+
+      accountModeButton.addEventListener('click', function () {
+        registering = !registering;
+        document.getElementById('auth-title').textContent = registering ? 'Create your account' : 'Sign in';
+        accountSubmit.textContent = registering ? 'Create account' : 'Sign in';
+        accountModeButton.textContent = registering ? 'I already have an account' : 'Create an account';
+        document.getElementById('password-input').autocomplete = registering ? 'new-password' : 'current-password';
+        authError.textContent = registering ? 'Use a password with at least 12 characters.' : '';
+      });
+
+      accountForm.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        accountSubmit.disabled = true;
+        authError.textContent = '';
+        try {
+          const response = await fetch(registering ? '/api/auth/register' : '/api/auth/login', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: document.getElementById('username-input').value, password: document.getElementById('password-input').value })
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'Account request failed.');
+          window.location.reload();
+        } catch (error) { authError.textContent = error.message || 'Account request failed.'; }
+        finally { accountSubmit.disabled = false; }
+      });
+
+      async function refreshConversations() {
+        const select = document.getElementById('conversation-select');
+        try {
+          const response = await fetch('/api/conversations', { cache: 'no-store' });
+          const result = await response.json();
+          if (!response.ok) throw new Error('load');
+          select.replaceChildren(new Option('New conversation', ''));
+          for (const item of result.conversations || []) select.appendChild(new Option(item.title || 'Conversation', item.id));
+        } catch (_) { select.replaceChildren(new Option('Saved conversations unavailable', '')); }
+      }
+
+      async function requireSignIn() {
+        try {
+          const response = await fetch('/api/auth/me', { cache: 'no-store' });
+          if (!response.ok) throw new Error('signed out');
+          const user = await response.json();
+          modelStorageKey = 'everyoneagent.model.' + user.id;
+          authGate.hidden = true;
+          chatApp.hidden = false;
+          connectionStatus.textContent = 'Signed in as ' + user.username + '.';
+          await refreshConnectionState();
+          await refreshConversations();
+        } catch (_) { authGate.hidden = false; chatApp.hidden = true; }
+      }
+
+      document.getElementById('logout-button').addEventListener('click', async function () {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        window.location.reload();
+      });
+
+      document.getElementById('conversation-select').addEventListener('change', async function () {
+        conversationId = this.value;
+        conversation.length = 0;
+        messageList.replaceChildren();
+        if (!conversationId) { document.getElementById('new-chat').click(); return; }
+        try {
+          const response = await fetch('/api/conversations/' + encodeURIComponent(conversationId), { cache: 'no-store' });
+          const result = await response.json();
+          if (!response.ok) throw new Error('load');
+          for (const item of result.messages || []) { addMessage(item.role, item.content); conversation.push({ role: item.role, content: item.content }); }
+          notice.textContent = 'This conversation is saved to your account.';
+        } catch (_) { showError('That conversation could not be loaded.', ''); }
+      });
 
       function addMessage(role, content) {
         const bubble = document.createElement('article');
@@ -190,12 +291,12 @@ const homePage = `<!doctype html>
         connectionStatus.textContent = !statusAvailable
           ? 'ChatGPT connection status is unavailable.'
           : (connected && planUsageEnabled
-            ? accountPrefix + 'Connected. Everyone using this server shares its plan allowance; account selection applies to everyone.'
+            ? accountPrefix + 'Connected. This EveryoneAgent account uses its ChatGPT plan allowance.'
             : (connected
               ? accountPrefix + 'ChatGPT sign-in is connected, but plan usage is not enabled. Continue with ChatGPT to review the permission.'
               : (localHost
                 ? accountPrefix + 'ChatGPT is not connected. Continue with ChatGPT to use your ChatGPT plan.'
-                : 'The selected household ChatGPT account is not connected. Manage accounts on the Windows host running Docker.')));
+                : 'Your ChatGPT account is not connected. Manage accounts on the Windows host running Docker.')));
         connectButton.hidden = !localHost || (connected && planUsageEnabled);
         disconnectButton.hidden = !localHost || !oauthSelected;
 
@@ -213,7 +314,7 @@ const homePage = `<!doctype html>
           }
           if (!modelSelect.options.length) throw new Error('empty models');
           let preferredModel = '';
-          try { preferredModel = localStorage.getItem('everyoneagent.model') || ''; } catch (_) {}
+          try { preferredModel = localStorage.getItem(modelStorageKey) || ''; } catch (_) {}
           modelSelect.value = result.models.some(model => model.id === preferredModel)
             ? preferredModel
             : modelSelect.options[0].value;
@@ -249,7 +350,7 @@ const homePage = `<!doctype html>
           if (!response.ok) throw new Error('select account');
           await refreshConnectionState();
         } catch (_) {
-          showError('The household ChatGPT account could not be changed.', '');
+          showError('Your ChatGPT account selection could not be changed.', '');
           await refreshConnectionState();
         }
       });
@@ -272,10 +373,10 @@ const homePage = `<!doctype html>
       });
 
       modelSelect.addEventListener('change', function () {
-        try { localStorage.setItem('everyoneagent.model', modelSelect.value); } catch (_) {}
+        try { localStorage.setItem(modelStorageKey, modelSelect.value); } catch (_) {}
       });
 
-      void refreshConnectionState();
+      void requireSignIn();
 
       form.addEventListener('submit', async function (event) {
         event.preventDefault();
@@ -297,7 +398,7 @@ const homePage = `<!doctype html>
           const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: requestMessages, model: modelSelect.value })
+            body: JSON.stringify({ messages: requestMessages, model: modelSelect.value, conversation_id: conversationId })
           });
           const result = await response.json();
           if (!response.ok) {
@@ -306,10 +407,13 @@ const homePage = `<!doctype html>
             throw requestError;
           }
           thinking.remove();
+          conversationId = result.conversation_id || conversationId;
           addMessage('assistant', result.reply);
           conversation.push({ role: 'user', content: content }, { role: 'assistant', content: result.reply });
           if (conversation.length > 40) conversation.splice(0, conversation.length - 40);
-          notice.textContent = 'This conversation is in this browser tab only; it is not saved yet.';
+          notice.textContent = 'This conversation is saved to your account.';
+          await refreshConversations();
+          document.getElementById('conversation-select').value = conversationId;
         } catch (error) {
           thinking.remove();
           addMessage('assistant', 'I could not complete that request.');
@@ -332,6 +436,8 @@ const homePage = `<!doctype html>
       document.getElementById('new-chat').addEventListener('click', function () {
         if (busy) return;
         conversation.length = 0;
+        conversationId = '';
+        document.getElementById('conversation-select').value = '';
         messageList.replaceChildren();
         const welcome = document.createElement('div');
         welcome.className = 'welcome';
@@ -342,7 +448,7 @@ const homePage = `<!doctype html>
         prompt.textContent = 'Ask a question to start a conversation.';
         welcome.append(title, prompt);
         messageList.appendChild(welcome);
-        notice.textContent = 'Messages are sent to your configured model provider and are not saved by this app yet.';
+        notice.textContent = 'Messages are saved to your account after each reply.';
         notice.classList.remove('error');
         input.focus();
       });
