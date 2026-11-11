@@ -1055,7 +1055,14 @@ func isLoopbackHost(hostPort string) bool {
 }
 
 func requestIsCrossSite(r *http.Request) bool {
-	if site := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site"))); site == "cross-site" || site == "cross-origin" {
+	// Browser-provided metadata survives TLS termination and Host rewrites.
+	// Do not trust forwarding headers to authorize an origin.
+	switch strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site"))) {
+	case "same-origin", "none":
+		return false
+	case "":
+		// Older browsers fall back to comparing Origin with the request Host.
+	default:
 		return true
 	}
 	origin := strings.TrimSpace(r.Header.Get("Origin"))
@@ -1063,7 +1070,9 @@ func requestIsCrossSite(r *http.Request) bool {
 		return false
 	}
 	parsed, err := url.Parse(origin)
-	return err != nil || !isLoopbackHost(parsed.Host)
+	return err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") ||
+		parsed.Host == "" || parsed.User != nil || parsed.Path != "" ||
+		parsed.RawQuery != "" || parsed.Fragment != "" || !strings.EqualFold(parsed.Host, r.Host)
 }
 
 func validSIWCRedirectURI(raw string) bool {

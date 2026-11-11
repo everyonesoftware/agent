@@ -82,7 +82,7 @@ func (s *accountStore) siwcForUser(base *siwcService, user authUser) *siwcServic
 func (s *accountStore) scopedSIWCHandler(base *siwcService, handler func(*siwcService, http.ResponseWriter, *http.Request)) http.Handler {
 	return s.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if requestIsCrossSite(r) {
-			http.Error(w, "Cross-site account requests are not allowed.", http.StatusForbidden)
+			writeChatError(w, http.StatusForbidden, "Cross-site account requests are not allowed.")
 			return
 		}
 		user, ok := currentAuthUser(r.Context())
@@ -233,7 +233,7 @@ func (s *accountStore) accountHandler(w http.ResponseWriter, r *http.Request, re
 		return
 	}
 	if requestIsCrossSite(r) {
-		http.Error(w, "Cross-site account requests are not allowed.", http.StatusForbidden)
+		writeChatError(w, http.StatusForbidden, "Cross-site account requests are not allowed.")
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
@@ -277,7 +277,7 @@ func (s *accountStore) logoutHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if requestIsCrossSite(r) {
-		http.Error(w, "Cross-site account requests are not allowed.", http.StatusForbidden)
+		writeChatError(w, http.StatusForbidden, "Cross-site account requests are not allowed.")
 		return
 	}
 	if cookie, err := r.Cookie(authCookieName); err == nil {
