@@ -57,7 +57,7 @@ const homePage = `<!doctype html>
     .provider-actions { display: flex; gap: 7px; flex-wrap: wrap; }
     .connection-status { margin: 0 0 12px; padding: 0; border: 0; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
     .menu-error { margin: 8px 0; color: #efada5; font-size: 12px; }
-    .settings-panel { position: relative; flex: 1; min-height: 0; overflow-y: auto; padding: 30px; }
+    .settings-panel { position: relative; flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; padding: 30px; }
     .settings-content { max-width: 600px; margin: 0 auto; }
     .settings-content > p, .settings-card > p { color: var(--muted); font-size: 12px; }
     .settings-card { margin-top: 24px; padding: 22px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); }
@@ -105,6 +105,17 @@ const homePage = `<!doctype html>
     .settings-card .provider-actions .send { margin: 0; }
     .danger { color: #efada5; }
     .provider-actions .danger { margin-left: auto; background: transparent; }
+    .settings-card .provider-actions.with-guidance { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 12px; align-items: start; }
+    .with-guidance > .connection-help { display: contents; }
+    .with-guidance > .connection-help::details-content { display: contents; }
+    .with-guidance > .connection-help > summary { grid-column: 1; grid-row: 1; display: flex; align-items: center; gap: 7px; width: 100%; min-height: 44px; padding: 9px 0; list-style: none; }
+    .with-guidance > .connection-help > summary::-webkit-details-marker { display: none; }
+    .with-guidance > .connection-help > summary::before { content: '›'; font-size: 17px; line-height: 1; flex: none; }
+    .with-guidance > .connection-help[open] > summary::before { transform: rotate(90deg); }
+    .with-guidance > .connection-help > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .with-guidance > .connection-help > div { grid-column: 1 / -1; grid-row: 2; padding-top: 6px; }
+    .with-guidance > .connection-help:not([open]) > div { display: none; }
+    .with-guidance > .danger { grid-column: 2; grid-row: 1; min-height: 44px; }
 
     #provider-feedback { margin: 14px 0 0; color: var(--accent); font-size: 12px; }
     #provider-feedback.warning { color: #dfc38e; }
@@ -253,10 +264,10 @@ const homePage = `<!doctype html>
               <details class="connection-help"><summary>Why can’t I connect from here?</summary><p>ChatGPT returns sign-in to a local address on the computer running your browser. On another device, that points to that device—not your Agent server. Open the address above on the computer running Agent, not on another device. If the server has no browser, use a localhost tunnel from a trusted computer for setup.</p></details>
             </div>
           </div>
-          <details class="connection-help" id="remote-connection-help" hidden><summary>Add or reconnect an account</summary><div id="remote-connection-help-slot"></div></details>
           <p class="connection-detail" id="local-connection-config-error" hidden>Local connection address unavailable. Ask the server operator to set SIWC_REDIRECT_URI to a valid loopback callback matching the published host port.</p>
 
           <div class="provider-actions" id="provider-actions">
+            <details class="connection-help" id="remote-connection-help" hidden><summary>Add or reconnect an account</summary><div id="remote-connection-help-slot"></div></details>
             <button class="send" id="connect-chatgpt" type="button" hidden>Continue with ChatGPT ↗</button>
             <button class="reset" id="add-chatgpt-account" type="button" hidden>Add account ↗</button>
 
@@ -901,7 +912,9 @@ const homePage = `<!doctype html>
         document.getElementById('remote-connection-action').textContent = 'Open Settings, then choose ' + (ready ? 'Add account' : connectButton.textContent.replace(' ↗', '')) + '.';
         addAccountButton.hidden = !localHost || profileCount === 0 || !connectionAvailable;
         disconnectButton.hidden = !oauthSelected || !selectedProfile || !connectionAvailable;
-        document.getElementById('provider-actions').hidden = [connectButton, addAccountButton, disconnectButton].every(button => button.hidden);
+        const providerActions = document.getElementById('provider-actions');
+        providerActions.classList.toggle('with-guidance', !remoteHelp.hidden);
+        providerActions.hidden = remoteHelp.hidden && [connectButton, addAccountButton, disconnectButton].every(button => button.hidden);
         if (!localHost && connectionAvailable && ready) connectionStatus.textContent = 'Add or reconnect from Agent’s local address on the computer running it.';
         if (!localHost && connectionAvailable && connected && !planUsageEnabled) connectionStatus.textContent = 'To review permissions, open Agent’s local address on the computer running it.';
 

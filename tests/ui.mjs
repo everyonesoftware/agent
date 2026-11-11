@@ -659,7 +659,18 @@ try {
   await expectEventually("!document.querySelector('#check-chatgpt').disabled", 'Remote status refresh unfinished');
   ok(await js("document.querySelector('#connect-chatgpt').hidden && document.querySelector('#add-chatgpt-account').hidden && !document.querySelector('#disconnect-chatgpt').hidden && !document.querySelector('#account-select').hidden && !document.querySelector('#remote-connection-help').hidden && !document.querySelector('#remote-connection-help').open && document.querySelector('#connection-status').hidden"), 'Ready remote connection keeps Disconnect visible and setup instructions collapsed without redundant ready copy');
   await screenshot('agent-panel-remote-connected');
-  await js("document.querySelector('#remote-connection-help').open=true");
+  for (const [width, height] of [[1280,850],[390,640],[320,640]]) {
+    await viewport(width, height);
+    await js("document.querySelector('#remote-connection-help').open=false; document.querySelector('#settings-panel').scrollTop=0");
+    const restingDisconnect = await js("(() => { const r=document.querySelector('#disconnect-chatgpt').getBoundingClientRect(); return {x:r.x,y:r.y}; })()");
+    ok(await js("(() => { const a=document.querySelector('#remote-connection-help > summary').getBoundingClientRect(); const b=document.querySelector('#disconnect-chatgpt').getBoundingClientRect(); return Math.abs(a.top-b.top)<1 && a.right<=b.left && a.height>=44; })()"), `Add or reconnect and Disconnect share one accessible row at ${width}px`);
+    await click('#remote-connection-help > summary');
+
+    ok(await js(`(() => { const r=document.querySelector('#disconnect-chatgpt').getBoundingClientRect(); return document.querySelector('#remote-connection-help').open && Math.abs(r.x-${restingDisconnect.x})<1 && Math.abs(r.y-${restingDisconnect.y})<1; })()`), `Expanding guidance leaves Disconnect stationary at ${width}px`);
+    ok(await js("(() => { const p=document.querySelector('#settings-panel'); const a=document.querySelector('#remote-connection-help-slot').getBoundingClientRect(); const b=document.querySelector('#disconnect-chatgpt').getBoundingClientRect(); return a.top>=b.bottom && a.right>=b.right && p.scrollWidth<=p.clientWidth; })()"), `Expanded guidance spans beneath both actions without overflow at ${width}px`);
+    await screenshot('agent-connection-action-row-' + width);
+  }
+  await viewport(1280,850);
   ok(await js("document.querySelectorAll('#remote-connection-setup ol > li').length===3 && document.querySelector('#remote-connection-setup').textContent.includes('same Agent account') && document.querySelector('#remote-connection-setup').textContent.includes('status pill')"), 'Remote setup provides the three approved steps and points to the refresh pill');
   ok(await js("document.querySelector('#remote-connection-action').textContent.includes('Add account')"), 'Connected setup guidance names the actual available localhost action');
   ok(await js("!document.querySelector('#local-connection-address').hidden && document.querySelector('#local-connection-url').textContent==='http://127.0.0.1:8182'"), 'Remote setup shows the configured callback origin, not the container port or remote host');
