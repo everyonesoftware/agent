@@ -113,7 +113,7 @@ const homePage = `<!doctype html>
     .hint { margin: 7px 0 0; color: var(--muted); font-size: 10px; text-align: center; }
     .auth-gate { width: 100%; height: 100vh; height: 100dvh; margin: 0; padding: 0; border: 0; border-radius: 0; background: #202322; display: flex; flex-direction: column; overflow-y: auto; }
     .auth-header { min-height: 90px; padding: 20px 44px; border: 0; }
-    .auth-header small { color: var(--muted); font-size: 11px; }
+
     .auth-center { flex: 1; display: grid; place-items: center; padding: 30px 24px; }
     .auth-content { width: min(360px, 100%); }
     .auth-content h1 { margin: 0 0 8px; font-size: 32px; line-height: 1.3; font-weight: 450; letter-spacing: -1px; }
@@ -128,7 +128,7 @@ const homePage = `<!doctype html>
     .auth-gate #account-submit { width: 100%; min-height: 44px; background: var(--accent); color: #1c281a; font-size: 13px; font-weight: 600; border-radius: 5px; }
     .auth-switch { margin: 24px 0 0; text-align: center; color: var(--muted); font-size: 12px; }
     .auth-gate #toggle-account-mode { padding: 4px; background: none; color: var(--accent); font-weight: 400; font-size: 12px; }
-    .auth-footer { display: flex; justify-content: space-between; gap: 16px; padding: 24px 44px; color: var(--muted); font-size: 10px; }
+
     @media (max-width: 700px) {
       .app { display: block; }
       .workspace { height: 100%; }
@@ -146,17 +146,14 @@ const homePage = `<!doctype html>
       .session, .account-toggle, .new-chat { min-height: 44px; }
       .account-menu button, .account-menu select { min-height: 44px; }
       .auth-header { min-height: 75px; padding: 18px 25px; }
-      .auth-header small { display: none; }
       .auth-center { padding: 20px 25px; }
-      .auth-footer { padding: 20px 25px; font-size: 9px; }
-      .auth-footer span:last-child { max-width: 150px; text-align: right; }
     }
     @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
   </style>
 </head>
 <body>
   <main class="auth-gate" id="auth-gate">
-    <header class="auth-header"><div class="brand"><span class="mark" aria-hidden="true">e1</span>Agent</div><small>Your personal conversation space</small></header>
+    <header class="auth-header"><div class="brand"><span class="mark" aria-hidden="true">e1</span>Agent</div></header>
     <div class="auth-center"><div class="auth-content">
     <h1 id="auth-title">Welcome back.</h1>
     <p id="auth-intro">Sign in to pick up the conversation.</p>
@@ -171,7 +168,7 @@ const homePage = `<!doctype html>
     </form>
     <p class="auth-switch"><span id="account-mode-label">New to Agent?</span> <button type="button" id="toggle-account-mode">Create an account</button></p>
     </div></div>
-    <footer class="auth-footer"><span>Agent · Your own space</span><span>Connect your ChatGPT account after signing in.</span></footer>
+
   </main>
   <main class="app" id="chat-app" hidden>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Close session navigation" tabindex="-1" hidden></button>

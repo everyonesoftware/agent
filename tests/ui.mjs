@@ -192,6 +192,7 @@ try {
   await until(() => visible('#auth-gate'), 'Login missing');
   ok(await js("document.title==='Agent' && document.querySelector('.auth-header .brand').textContent==='e1Agent' && document.querySelector('.auth-header .mark').textContent==='e1'"), 'Login uses the Agent name and e1 mark');
   ok(await js("!document.body.textContent.includes('EveryoneAgent') && document.querySelector('#account-mode-label').textContent==='New to Agent?'"), 'Login copy uses the new display name');
+  ok(await js(`['Your personal conversation space', 'Connect your ChatGPT account after signing in.', 'Agent · Your own space'].every(text => !document.querySelector('#auth-gate').textContent.includes(text))`), 'Login omits supplementary header and footer copy');
   ok(await visible('#toggle-password'), 'Quiet entry has password visibility control');
   ok(await js("[document.body, document.documentElement].some(e=>getComputedStyle(e).backgroundColor === 'rgb(32, 35, 34)')"), 'Focus charcoal theme applied');
   await screenshot('agent-login-desktop');

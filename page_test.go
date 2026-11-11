@@ -53,7 +53,6 @@ func TestHomePageUsesQuietEntryAuthentication(t *testing.T) {
 	for _, required := range []string{
 		`Welcome back.`, `id="auth-intro"`, `id="toggle-password"`,
 		`id="password-hint"`, `autocomplete="username"`, `autocomplete="current-password"`,
-		`Connect your ChatGPT account after signing in.`,
 	} {
 		if !strings.Contains(homePage, required) {
 			t.Errorf("Quiet entry authentication is missing %s", required)
@@ -66,6 +65,18 @@ func TestHomePageUsesQuietEntryAuthentication(t *testing.T) {
 	} {
 		if !strings.Contains(homePage, preserved) {
 			t.Errorf("existing authentication or provider control missing: %s", preserved)
+		}
+	}
+}
+
+func TestLoginPageOmitsSupplementaryCopy(t *testing.T) {
+	for _, removed := range []string{
+		`Your personal conversation space`,
+		`Connect your ChatGPT account after signing in.`,
+		`Agent · Your own space`,
+	} {
+		if strings.Contains(homePage, removed) {
+			t.Errorf("login page still contains %q", removed)
 		}
 	}
 }
