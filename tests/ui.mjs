@@ -263,6 +263,15 @@ try {
   ok(await js("document.querySelector('#session-sidebar').getBoundingClientRect().width===480"), 'Sidebar growth leaves room for the conversation');
   await drag('#sidebar-resize', -248, 0);
   ok(await visible('#composer-resize'), 'Composer has a custom resize handle');
+  assert.deepEqual(await js(`(() => {
+    const handle = document.querySelector('#composer-resize'), icon = handle.querySelector('svg');
+    const bounds = handle.getBoundingClientRect(), graphic = icon.getBoundingClientRect();
+    return { cursor: getComputedStyle(handle).cursor, width: bounds.width, height: bounds.height,
+      iconWidth: graphic.width, iconHeight: graphic.height, color: getComputedStyle(handle).color,
+      strokeWidth: icon.getAttribute('stroke-width'), path: icon.querySelector('path').getAttribute('d') };
+  })()`), { cursor: 'nesw-resize', width: 44, height: 44, iconWidth: 13, iconHeight: 13,
+    color: 'rgb(127, 139, 130)', strokeWidth: '1.25', path: 'M3.5 3.5l9 9M7.5 3.5l5 5M11.5 3.5l1 1' },
+  'Composer uses the approved small corner texture with a diagonal cursor and generous grab target');
   ok(await js(`(() => { const r=document.querySelector('#composer-resize').getBoundingClientRect(), t=document.querySelector('#message-input').getBoundingClientRect(); return r.top<=t.top+8 && r.right>=t.right-8 && getComputedStyle(document.querySelector('#message-input')).resize==='none'; })()`), 'Resize grip is at the top-right and replaces the native bottom-right grip');
   const composerHeight = await js("document.querySelector('#message-input').getBoundingClientRect().height");
   await js("document.querySelector('#message-input').value='Keep this draft'");

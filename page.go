@@ -138,9 +138,10 @@ const homePage = `<!doctype html>
     .notice { min-height: 18px; color: var(--muted); font-size: 11px; margin: 0 0 8px; }
     .notice.error { color: #efada5; }
     .composer { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); box-shadow: none; }
-    textarea { width: 100%; flex: 1 0 100%; min-width: 0; min-height: 52px; max-height: min(400px, 45dvh); padding: 3px 22px 3px 3px; border: 0; resize: none; outline: none; color: inherit; background: transparent; }
-    .composer-resize { position: absolute; top: 3px; right: 3px; display: grid; place-items: center; width: 24px; height: 24px; padding: 3px; color: var(--muted); cursor: nesw-resize; touch-action: none; }
-    .composer-resize:hover { color: var(--accent); }
+    textarea { width: 100%; flex: 1 0 100%; min-width: 0; min-height: 52px; max-height: min(400px, 45dvh); padding: 3px 32px 3px 3px; border: 0; resize: none; outline: none; color: inherit; background: transparent; }
+    .composer-resize { position: absolute; top: 0; right: 0; display: flex; align-items: flex-start; justify-content: flex-end; width: 44px; height: 44px; padding: 0; color: #7f8b82; cursor: nesw-resize; touch-action: none; }
+    .composer-resize svg { margin: 8px 8px 0 0; }
+    .composer-resize:hover, .composer-resize:focus-visible { color: var(--accent); }
     textarea::placeholder { color: var(--muted); }
     .model-select { min-width: 0; max-width: min(70%, 300px); padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--field); color: #c5cec7; font-size: 11px; }
     .send { margin-left: auto; min-width: 54px; padding: 7px 12px; border-radius: 5px; background: var(--accent); color: #1c281a; font-size: 12px; font-weight: 600; }
@@ -300,7 +301,7 @@ const homePage = `<!doctype html>
       <form class="composer" id="chat-form" autocomplete="off">
         <label class="visually-hidden" for="message-input">Message</label>
         <textarea id="message-input" name="message" rows="1" maxlength="8192" placeholder="Message Agent" required></textarea>
-        <button class="composer-resize" id="composer-resize" type="button" aria-label="Resize message box" title="Drag upward to expand; use Up and Down arrow keys" aria-controls="message-input"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12 12 4M5 4h7v7"/></svg></button>
+        <button class="composer-resize" id="composer-resize" type="button" aria-label="Resize message box" title="Drag upward to expand; use Up and Down arrow keys" aria-controls="message-input"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" aria-hidden="true"><path d="M3.5 3.5l9 9M7.5 3.5l5 5M11.5 3.5l1 1"/></svg></button>
         <label class="visually-hidden" for="model-select">Model</label>
         <select class="model-select" id="model-select" disabled><option value="">Loading models…</option></select>
         <button class="send" id="send-button" type="submit">Send</button>
