@@ -74,6 +74,9 @@ func (s *siwcService) selectProfileHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "A valid ChatGPT account must be selected.", http.StatusBadRequest)
 		return
 	}
+	// Match disconnect/refresh lock ordering: tokenMu before store/model locks.
+	s.tokenMu.Lock()
+	defer s.tokenMu.Unlock()
 	profile, err := s.store.LoadProfile(body.ProfileID)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

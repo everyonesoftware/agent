@@ -881,11 +881,26 @@ func (s *siwcService) disconnectHandler(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Manage the ChatGPT connection from a browser on the Agent host.", http.StatusForbidden)
 		return
 	}
+	var body struct {
+		ProfileID string `json:"profile_id"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != io.EOF {
+		if err != nil || !validProfileID(body.ProfileID) || decoder.Decode(new(any)) != io.EOF {
+			http.Error(w, "A valid ChatGPT account confirmation is required.", http.StatusBadRequest)
+			return
+		}
+	}
 	s.tokenMu.Lock()
 	defer s.tokenMu.Unlock()
 	profileID, err := s.store.ActiveProfileID()
 	if err != nil {
 		http.Error(w, "The ChatGPT connection could not be read on this host.", http.StatusInternalServerError)
+		return
+	}
+	if body.ProfileID != "" && body.ProfileID != profileID {
+		http.Error(w, "The active ChatGPT account changed. Review the account and confirm again.", http.StatusConflict)
 		return
 	}
 	if profileID == "" {

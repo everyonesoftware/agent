@@ -62,6 +62,30 @@ const homePage = `<!doctype html>
     .settings-card label { display: block; margin: 16px 0 6px; font-size: 12px; }
     .settings-card input { display: block; width: 100%; padding: 10px 12px; color: inherit; background: #202322; border: 1px solid var(--line); border-radius: 5px; }
     .settings-card .send { margin: 16px 0 0; }
+    .connection-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+    .connection-heading h2 { margin: 0; }
+    .connection-badge { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 10px; color: var(--accent); border: 1px solid #45513f; border-radius: 20px; padding: 3px 8px; }
+    .connection-badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+    .connection-badge.warning { color: #dfc38e; border-color: #5c513b; }
+    .connection-badge.off { color: var(--muted); border-color: var(--line); }
+    .settings-card #account-select { display: block; width: 100%; max-width: 100%; min-height: 40px; margin-bottom: 14px; font-size: 12px; background: #202322; }
+    .settings-card .connection-status { margin: 14px 0 3px; color: inherit; font-size: 12px; }
+    .connection-detail { margin: 0; color: var(--muted); font-size: 11px; }
+    .settings-card .provider-actions { margin-top: 18px; gap: 8px; align-items: center; }
+    .settings-card .provider-actions .send { margin: 0; }
+    .danger { color: #efada5; }
+    .provider-actions .danger { margin-left: auto; background: transparent; }
+    .connection-note { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 13px; color: var(--muted); font-size: 11px; }
+    #provider-feedback { margin: 14px 0 0; color: var(--accent); font-size: 12px; }
+    #provider-feedback.warning { color: #dfc38e; }
+    .security-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0; text-align: left; }
+    .security-toggle h2 { margin: 0; }
+    .security-copy { margin: 7px 0 0; }
+    .connection-dialog { width: 420px; max-width: calc(100% - 32px); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 24px; border: 1px solid #465049; border-radius: 8px; background: var(--field); color: #e1e6e2; }
+    .connection-dialog::backdrop { background: #0009; }
+    .connection-dialog h2 { margin: 0 0 12px; font-size: 16px; font-weight: 500; }
+    .connection-dialog p { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
     #password-status { margin: 12px 0 0; font-size: 12px; color: var(--accent); }
     #password-status.error { color: #efada5; }
     #settings-title { margin: 0; font-size: 13px; font-weight: 500; }
@@ -117,6 +141,7 @@ const homePage = `<!doctype html>
       .settings-panel { padding: 22px 18px; }
       .settings-card { padding: 18px; }
       .settings-button { flex-basis: 44px; height: 44px; }
+      .settings-panel button, .settings-panel select, .connection-dialog button { min-height: 44px; }
       .composer-wrap { padding: 8px 14px 12px; }
       .session, .account-toggle, .new-chat { min-height: 44px; }
       .account-menu button, .account-menu select { min-height: 44px; }
@@ -159,17 +184,8 @@ const homePage = `<!doctype html>
       <div class="account-row"><button class="account-toggle" id="account-menu-toggle" type="button" aria-expanded="false" aria-controls="account-menu"><span class="avatar" id="user-avatar" aria-hidden="true">?</span><span><strong id="current-username"></strong><small>Your account</small></span></button>
       <button class="settings-button" id="settings-button" type="button" aria-label="Settings" title="Settings" aria-controls="settings-panel" aria-pressed="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 3-.6 2.2-1.5.9-2.2-.6-3 5.2 1.6 1.6v1.8l-1.6 1.6 3 5.2 2.2-.6 1.5.9L9 23h6l.6-2.2 1.5-.9 2.2.6 3-5.2-1.6-1.6v-1.8l1.6-1.6-3-5.2-2.2.6-1.5-.9L15 3Z" transform="translate(1 0) scale(.92)"/><circle cx="12" cy="12" r="3.2"/></svg></button></div>
       <section class="account-menu" id="account-menu" aria-label="Account settings" hidden>
-        <h2>ChatGPT accounts</h2>
-        <p class="connection-status" id="connection-status" role="status">Checking ChatGPT connection…</p>
-        <label class="visually-hidden" for="account-select">Your ChatGPT account</label>
-        <select class="model-select" id="account-select" hidden disabled><option value="">Loading accounts…</option></select>
-        <div class="provider-actions">
-        <button class="connect" id="connect-chatgpt" type="button" hidden>Continue with ChatGPT</button>
-        <button class="reset" id="add-chatgpt-account" type="button" hidden>Add account</button>
-        <button class="reset" id="disconnect-chatgpt" type="button" hidden>Disconnect</button>
-        </div>
-        <p id="provider-error" class="menu-error" role="alert" hidden></p>
-
+        <h2>Your account</h2>
+        <button class="reset" id="manage-connections" type="button">Manage connections &amp; settings</button>
       </section></div>
     </aside>
     <div class="workspace">
@@ -177,11 +193,29 @@ const homePage = `<!doctype html>
     <section class="settings-panel" id="settings-panel" aria-labelledby="settings-title" hidden>
       <div class="settings-content">
         <button class="reset" id="back-to-chat" type="button">← Back to conversation</button>
-        <p>Manage your account and security.</p>
+        <p>Manage your connections, account, and security.</p>
+        <section class="settings-card" aria-labelledby="connection-title">
+          <div class="connection-heading"><h2 id="connection-title">ChatGPT subscription</h2><span class="connection-badge off" id="connection-badge">Checking…</span></div>
+          <p>Manage the ChatGPT account Agent uses for conversations.</p>
+          <label id="account-select-label" for="account-select" hidden>Active ChatGPT account</label>
+          <select class="model-select" id="account-select" hidden disabled><option value="">Loading accounts…</option></select>
+          <p class="connection-status" id="connection-status" role="status">Checking ChatGPT connection…</p>
+          <p class="connection-detail">This connection is separate from your Agent sign-in.</p>
+          <div class="provider-actions">
+            <button class="send" id="connect-chatgpt" type="button" hidden>Continue with ChatGPT ↗</button>
+            <button class="reset" id="add-chatgpt-account" type="button" hidden>Add account ↗</button>
+            <button class="reset" id="check-chatgpt" type="button">Check connection</button>
+            <button class="reset danger" id="disconnect-chatgpt" type="button" hidden>Disconnect</button>
+          </div>
+          <p id="provider-error" class="menu-error" role="alert" hidden></p>
+          <p id="provider-feedback" role="status" aria-live="polite" hidden></p>
+          <div class="connection-note" id="connection-note">Adding or reconnecting an account opens ChatGPT authorization in your browser. No password is entered in Agent.</div>
+        </section>
         <section class="settings-card" aria-labelledby="password-title">
-          <h2 id="password-title">Reset password</h2>
-          <p>Choose a new password for your Agent account. Your other sessions will be signed out.</p>
-          <form id="password-form">
+          <button class="security-toggle" id="security-toggle" type="button" aria-expanded="false" aria-controls="password-form"><h2 id="password-title">Reset password</h2><span id="security-chevron" aria-hidden="true">＋</span></button>
+          <p class="security-copy">Change your Agent password, not your ChatGPT password.</p>
+          <form id="password-form" hidden>
+            <p class="connection-detail">Your other Agent sessions will be signed out.</p>
             <label for="current-password">Current password</label>
             <input id="current-password" name="current_password" type="password" autocomplete="current-password" maxlength="72" required>
             <label for="new-password">New password</label>
@@ -220,6 +254,12 @@ const homePage = `<!doctype html>
     </div>
     </div>
   </main>
+  <dialog class="connection-dialog" id="disconnect-dialog" aria-labelledby="disconnect-title" aria-describedby="disconnect-description">
+    <h2 id="disconnect-title">Disconnect ChatGPT?</h2>
+    <p id="disconnect-account"></p>
+    <p id="disconnect-description">Your saved conversations and ChatGPT subscription are not deleted. This does not sign you out of Agent.</p>
+    <div class="dialog-actions"><button class="reset" id="cancel-disconnect" type="button" autofocus>Cancel</button><button class="reset danger" id="confirm-disconnect" type="button">Disconnect account</button></div>
+  </dialog>
   <script>
     (function () {
       const form = document.getElementById('chat-form');
@@ -233,6 +273,19 @@ const homePage = `<!doctype html>
       const connectButton = document.getElementById('connect-chatgpt');
       const addAccountButton = document.getElementById('add-chatgpt-account');
       const disconnectButton = document.getElementById('disconnect-chatgpt');
+      const checkConnectionButton = document.getElementById('check-chatgpt');
+      const connectionBadge = document.getElementById('connection-badge');
+      const providerError = document.getElementById('provider-error');
+      const providerFeedback = document.getElementById('provider-feedback');
+      const disconnectDialog = document.getElementById('disconnect-dialog');
+      let connectionBusy = false;
+      let connectionRefresh = null;
+      let activeProfileID = '';
+      let selectedProfile = null;
+      let disconnectProfileID = '';
+      let profileCount = 0;
+      let connectionAvailable = false;
+      let pendingProfiles = [];
       const localHost = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(window.location.hostname);
       const conversation = [];
       let busy = false;
@@ -283,11 +336,20 @@ const homePage = `<!doctype html>
         closeAccount(false);
         setSidebar(false, false);
         if (!passwordBusy) { passwordForm.reset(); passwordStatus.textContent = ''; }
-        if (open) document.getElementById('back-to-chat').focus();
+        if (open) { document.getElementById('back-to-chat').focus(); if (!connectionBusy) refreshConnectionState(); }
         else input.focus();
       }
       settingsButton.addEventListener('click', function () { showSettings(true); });
+      document.getElementById('manage-connections').addEventListener('click', function () { showSettings(true); });
       document.getElementById('back-to-chat').addEventListener('click', function () { showSettings(false); });
+      document.getElementById('security-toggle').addEventListener('click', function () {
+        if (passwordBusy) return;
+        const open = passwordForm.hidden;
+        passwordForm.hidden = !open;
+        this.setAttribute('aria-expanded', String(open));
+        document.getElementById('security-chevron').textContent = open ? '−' : '＋';
+        if (!open) { passwordForm.reset(); passwordStatus.textContent = ''; }
+      });
       passwordForm.addEventListener('submit', async function (event) {
         event.preventDefault();
         if (passwordBusy) return;
@@ -579,12 +641,40 @@ const homePage = `<!doctype html>
         notice.classList.add('error');
       }
 
-      async function refreshConnectionState() {
+      function updateConnectionControls() {
+        const pending = connectionBusy || Boolean(connectionRefresh);
+        for (const button of [connectButton, addAccountButton, disconnectButton, checkConnectionButton]) button.disabled = pending;
+        accountSelect.disabled = pending || !localHost || profileCount === 0 || (profileCount === 1 && Boolean(activeProfileID));
+        checkConnectionButton.textContent = connectionRefresh ? 'Checking…' : 'Check connection';
+      }
+
+      function connectionFeedback(text, warning) {
+        providerFeedback.textContent = text;
+        providerFeedback.hidden = !text;
+        providerFeedback.classList.toggle('warning', Boolean(warning));
+      }
+
+      function refreshConnectionState() {
+        if (connectionRefresh) return connectionRefresh;
+        connectionRefresh = refreshConnectionData().finally(function () {
+          connectionRefresh = null;
+          updateConnectionControls();
+        });
+        updateConnectionControls();
+        return connectionRefresh;
+      }
+
+      async function refreshConnectionData() {
         let connected = false;
         let oauthSelected = false;
         let planUsageEnabled = false;
         let statusAvailable = false;
-        let accountLabel = '';
+
+        let profilesAvailable = !localHost;
+        selectedProfile = null;
+        activeProfileID = '';
+        profileCount = 0;
+        pendingProfiles = [];
         try {
           const response = await fetch('/api/auth/status', { cache: 'no-store' });
           if (!response.ok) throw new Error('status');
@@ -601,6 +691,10 @@ const homePage = `<!doctype html>
             if (!response.ok) throw new Error('profiles');
             const result = await response.json();
             const profiles = Array.isArray(result.profiles) ? result.profiles : [];
+            profilesAvailable = true;
+            profileCount = profiles.length;
+            activeProfileID = result.active_profile_id || '';
+            pendingProfiles = profiles.filter(profile => profile && profile.id && profile.registration_pending);
             accountSelect.replaceChildren();
             const placeholder = document.createElement('option');
             placeholder.value = '';
@@ -613,11 +707,13 @@ const homePage = `<!doctype html>
               option.dataset.registrationPending = profile.registration_pending ? 'true' : 'false';
               option.textContent = (profile.label || 'ChatGPT account') + (profile.email ? ' · ' + profile.email : '') + (profile.registration_pending ? ' · finish sign-in' : (profile.plan_usage_enabled ? ' · connected' : (profile.oauth_selected ? ' · sign-in required' : ' · disconnected')));
               accountSelect.appendChild(option);
-              if (profile.id === result.active_profile_id) accountLabel = option.textContent;
+              if (profile.id === activeProfileID) {
+                selectedProfile = profile;
+              }
             }
             accountSelect.value = result.active_profile_id || '';
             accountSelect.hidden = profiles.length === 0;
-            accountSelect.disabled = profiles.length === 0 || (profiles.length === 1 && Boolean(result.active_profile_id));
+
             addAccountButton.hidden = profiles.length === 0;
           } catch (_) {
             accountSelect.hidden = true;
@@ -628,18 +724,28 @@ const homePage = `<!doctype html>
           addAccountButton.hidden = true;
         }
 
-        const accountPrefix = accountLabel ? accountLabel + ': ' : '';
-        connectionStatus.textContent = !statusAvailable
-          ? 'ChatGPT connection status is unavailable.'
+        document.getElementById('account-select-label').hidden = accountSelect.hidden;
+        connectionAvailable = statusAvailable && profilesAvailable;
+        const pendingProfile = selectedProfile?.registration_pending || (!activeProfileID && pendingProfiles.length > 0);
+        const ready = connectionAvailable && connected && planUsageEnabled;
+        connectionBadge.textContent = !connectionAvailable ? 'Unavailable' : ready ? 'Connected' : pendingProfile ? 'Awaiting sign-in' : connected ? 'Permission required' : oauthSelected ? 'Sign-in required' : 'Not connected';
+        connectionBadge.className = 'connection-badge' + (ready ? '' : (!connectionAvailable || pendingProfile || connected || oauthSelected) ? ' warning' : ' off');
+        connectionStatus.textContent = !connectionAvailable
+          ? 'ChatGPT connection status is unavailable. Check the connection to try again.'
           : (connected && planUsageEnabled
-            ? accountPrefix + 'Connected. This Agent account uses its ChatGPT plan allowance.'
+            ? 'Using this account’s ChatGPT plan allowance.'
             : (connected
-              ? accountPrefix + 'ChatGPT sign-in is connected, but plan usage is not enabled. Continue with ChatGPT to review the permission.'
+              ? 'ChatGPT sign-in is connected, but plan usage is not enabled. Review ChatGPT permissions to continue.'
               : (localHost
-                ? accountPrefix + 'ChatGPT is not connected. Continue with ChatGPT to use your ChatGPT plan.'
+                ? 'ChatGPT is not connected. Continue with ChatGPT to use your ChatGPT plan.'
                 : 'Your ChatGPT account is not connected. Manage accounts on the Windows host running Docker.')));
-        connectButton.hidden = !localHost || (connected && planUsageEnabled);
-        disconnectButton.hidden = !localHost || !oauthSelected;
+        if (pendingProfile && connectionAvailable) connectionStatus.textContent = 'Finish authorization before using an incomplete account. Select it above to resume sign-in.';
+        connectButton.hidden = !localHost || ready;
+        connectButton.textContent = pendingProfile ? 'Resume sign-in ↗' : connected ? 'Review ChatGPT permissions ↗' : oauthSelected ? 'Reconnect with ChatGPT ↗' : 'Continue with ChatGPT ↗';
+        disconnectButton.hidden = !localHost || !oauthSelected || !selectedProfile || !connectionAvailable;
+        document.getElementById('connection-note').textContent = localHost
+          ? 'Adding or reconnecting an account opens ChatGPT authorization in your browser. No password is entered in Agent.'
+          : 'Connection management is available only from a browser on the Windows host running Agent. Open Agent there to add, switch, or disconnect accounts.';
 
         try {
           const response = await fetch('/api/models', { cache: 'no-store' });
@@ -663,26 +769,46 @@ const homePage = `<!doctype html>
         } catch (_) {
           modelSelect.replaceChildren(new Option('Models unavailable', ''));
           modelSelect.disabled = true;
-          if (connected && planUsageEnabled) connectionStatus.textContent = 'Connected to ChatGPT, but its model list could not be loaded.';
+          if (ready) connectionStatus.textContent = 'Connected to ChatGPT, but its model list could not be loaded.';
         }
       }
 
+      checkConnectionButton.addEventListener('click', async function () {
+        if (connectionBusy || connectionRefresh) return;
+        providerError.hidden = true;
+        connectionFeedback('');
+        await refreshConnectionState();
+        if (connectionAvailable) connectionFeedback('Connection status refreshed.');
+        else { providerError.textContent = 'Could not check the connection. Please try again. Your saved accounts have not been removed.'; providerError.hidden = false; }
+      });
+
       connectButton.addEventListener('click', function () {
+        if (!localHost || connectionBusy || connectionRefresh) return;
+        if (!activeProfileID && pendingProfiles.length > 1) {
+          providerError.textContent = 'Select the incomplete ChatGPT account above to resume its sign-in.';
+          providerError.hidden = false;
+          accountSelect.focus();
+          return;
+        }
         window.location.assign('/auth/start');
       });
 
       addAccountButton.addEventListener('click', function () {
+        if (!localHost || connectionBusy || connectionRefresh) return;
         window.location.assign('/auth/start?mode=add');
       });
 
       accountSelect.addEventListener('change', async function () {
-        document.getElementById('provider-error').hidden = true;
+        if (!localHost || connectionBusy || connectionRefresh) return;
+        providerError.hidden = true;
+        connectionFeedback('');
         if (!accountSelect.value) return;
         if (accountSelect.selectedOptions[0]?.dataset.registrationPending === 'true') {
           window.location.href = '/auth/start?mode=retry&profile_id=' + encodeURIComponent(accountSelect.value);
           return;
         }
-        accountSelect.disabled = true;
+        connectionBusy = true;
+        updateConnectionControls();
         try {
           const response = await fetch('/api/auth/profiles/active', {
             method: 'POST',
@@ -691,31 +817,62 @@ const homePage = `<!doctype html>
           });
           if (!response.ok) throw new Error('select account');
           await refreshConnectionState();
+          connectionFeedback('Active ChatGPT account changed.');
         } catch (_) {
           const error = document.getElementById('provider-error');
           error.textContent = 'Your ChatGPT account selection could not be changed.';
           error.hidden = false;
           await refreshConnectionState();
+        } finally {
+          connectionBusy = false;
+          updateConnectionControls();
         }
       });
 
-      disconnectButton.addEventListener('click', async function () {
-        document.getElementById('provider-error').hidden = true;
-        disconnectButton.disabled = true;
+      disconnectButton.addEventListener('click', function () {
+        if (!localHost || connectionBusy || connectionRefresh || !selectedProfile) return;
+        providerError.hidden = true;
+        connectionFeedback('');
+        disconnectProfileID = selectedProfile.id;
+        document.getElementById('disconnect-account').textContent = 'Disconnect ' + (selectedProfile.label || 'ChatGPT account') + (selectedProfile.email ? ' · ' + selectedProfile.email : '') + ' from Agent on this host?';
+        connectionBusy = true;
+        updateConnectionControls();
+        disconnectDialog.showModal();
+      });
+      document.getElementById('cancel-disconnect').addEventListener('click', function () { disconnectDialog.close(); });
+      disconnectDialog.addEventListener('close', function () {
+        if (disconnectDialog.returnValue === 'disconnect') return;
+        disconnectProfileID = '';
+        connectionBusy = false;
+        updateConnectionControls();
+        disconnectButton.focus();
+      });
+      document.getElementById('confirm-disconnect').addEventListener('click', async function () {
+        if (!disconnectDialog.open) return;
+        const profileID = disconnectProfileID;
+        disconnectProfileID = '';
+        disconnectDialog.close('disconnect');
         try {
-          const response = await fetch('/api/auth/disconnect', { method: 'POST' });
-          if (!response.ok) throw new Error('disconnect');
+          const response = await fetch('/api/auth/disconnect', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profile_id: profileID })
+          });
+          if (!response.ok) throw new Error(response.status === 409 ? 'The active ChatGPT account changed. Review the account and try again.' : 'The ChatGPT connection could not be removed. Please try again.');
           const result = await response.json();
           await refreshConnectionState();
-          connectionStatus.textContent = result.remote_revocation_confirmed
+          connectionFeedback(result.remote_revocation_confirmed
             ? 'Disconnected from ChatGPT on this host.'
-            : 'Tokens were cleared here, but remote revocation was not confirmed. Revoke this app in ChatGPT settings.';
-        } catch (_) {
+            : 'Tokens were cleared here, but remote revocation was not confirmed. Revoke this app in ChatGPT settings.', !result.remote_revocation_confirmed);
+        } catch (failure) {
           const error = document.getElementById('provider-error');
-          error.textContent = 'The ChatGPT connection could not be removed. Please try again.';
+          error.textContent = failure.message || 'The ChatGPT connection could not be removed. Please try again.';
           error.hidden = false;
+          await refreshConnectionState();
         } finally {
-          disconnectButton.disabled = false;
+          disconnectDialog.returnValue = '';
+          connectionBusy = false;
+          updateConnectionControls();
+          if (!settingsPanel.hidden) (disconnectButton.hidden ? connectButton : disconnectButton).focus();
         }
       });
 
