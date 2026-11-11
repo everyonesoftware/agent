@@ -4,6 +4,12 @@ services:
     pull_policy: always
     container_name: everyoneagent
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/everyoneagent", "healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     environment:
       PORT: "8080"
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}

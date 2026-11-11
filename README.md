@@ -28,6 +28,8 @@ Open http://127.0.0.1:8080. The container is published only on the host loopback
 
 Stop with `docker compose down`.
 
+Compose probes the public `/healthz` endpoint using `/everyoneagent healthz` every 30 seconds. The command uses the container's `PORT` (default `8080`), requests the loopback endpoint with a three-second timeout, and exits successfully only for HTTP 200 without following redirects. It does not initialize storage or contact a model provider. This is a web-server liveness check, not a database or ChatGPT readiness check. Docker marks the container unhealthy after three consecutive failures; the restart policy does not restart a container solely because it is unhealthy.
+
 ## Current status
 
 The app contains local account registration/login, owner-scoped saved conversations, per-user ChatGPT OAuth profile storage, direct Responses API requests with upstream streaming and `store: false`, model discovery, and an OpenAI-compatible fallback. OAuth sign-in remains unverified through live authorization or account approval. Existing host-wide ChatGPT profile files are left untouched and are not automatically assigned to a new user; each user should connect their own ChatGPT account after signing in. Anyone who can reach the service can create an account, so expose it only to trusted household devices.
