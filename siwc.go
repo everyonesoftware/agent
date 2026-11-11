@@ -695,16 +695,27 @@ func (s *siwcService) tokenEndpoint(ctx context.Context) (string, error) {
 }
 
 func (s *siwcService) startHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 	if !isLoopbackHost(r.Host) || requestIsCrossSite(r) {
-		http.Error(w, "Start ChatGPT sign-in from a browser on the Agent host.", http.StatusForbidden)
+		writeChatError(w, http.StatusForbidden, "Start ChatGPT sign-in from a browser on the Agent host.")
 		return
 	}
 	if !validSIWCRedirectURI(s.config.redirectURI) {
-		http.Error(w, "ChatGPT sign-in is not configured for this local server.", http.StatusServiceUnavailable)
+		writeChatError(w, http.StatusServiceUnavailable, "ChatGPT sign-in is not configured for this local server.")
+		return
+	}
+	s.tokenMu.Lock()
+	defer s.tokenMu.Unlock()
+	activeID, err := s.store.ActiveProfileID()
+	if err != nil {
+		writeChatError(w, http.StatusServiceUnavailable, "ChatGPT sign-in could not be prepared.")
+		return
+	}
+	if expected, ok := r.Context().Value(expectedConnectionProfileKey{}).(string); ok && r.URL.Query().Get("mode") == "" && expected != activeID {
+		writeChatError(w, http.StatusConflict, "The active ChatGPT account changed. Review the account and confirm again.")
 		return
 	}
 	authorizeURL := s.config.authorizeURL
@@ -712,27 +723,22 @@ func (s *siwcService) startHandler(w http.ResponseWriter, r *http.Request) {
 		metadata, discoveryErr := s.discoveryMetadata(r.Context())
 		if discoveryErr != nil {
 			logProviderFailure(discoveryErr)
-			http.Error(w, "ChatGPT sign-in endpoints are unavailable.", http.StatusServiceUnavailable)
+			writeChatError(w, http.StatusServiceUnavailable, "ChatGPT sign-in endpoints are unavailable.")
 			return
 		}
 		authorizeURL = metadata.AuthorizationEndpoint
 	}
 	hostID, err := s.store.HostID()
 	if err != nil {
-		http.Error(w, "ChatGPT sign-in could not be prepared.", http.StatusServiceUnavailable)
+		writeChatError(w, http.StatusServiceUnavailable, "ChatGPT sign-in could not be prepared.")
 		return
 	}
 	mode := r.URL.Query().Get("mode")
 	if mode != "" && mode != "add" && mode != "retry" {
-		http.Error(w, "The requested ChatGPT account action is invalid.", http.StatusBadRequest)
+		writeChatError(w, http.StatusBadRequest, "The requested ChatGPT account action is invalid.")
 		return
 	}
 	addAccount := mode == "add"
-	activeID, err := s.store.ActiveProfileID()
-	if err != nil {
-		http.Error(w, "ChatGPT sign-in could not be prepared.", http.StatusServiceUnavailable)
-		return
-	}
 	profileID, profileLabel := activeID, ""
 	loginHint := ""
 	clientID, idTokenHint, expectedSubject, existingScopes, newRegistration := siwcClientID, "", "", []string(nil), true
@@ -741,7 +747,7 @@ func (s *siwcService) startHandler(w http.ResponseWriter, r *http.Request) {
 		profileID = r.URL.Query().Get("profile_id")
 		profile, loadErr := s.store.LoadProfile(profileID)
 		if !validProfileID(profileID) || loadErr != nil || !profile.Credentials.RegistrationPending || profile.Credentials.Subject != "" {
-			http.Error(w, "That incomplete ChatGPT account could not be resumed.", http.StatusBadRequest)
+			writeChatError(w, http.StatusBadRequest, "That incomplete ChatGPT account could not be resumed.")
 			return
 		}
 		credentials := profile.Credentials
@@ -751,7 +757,7 @@ func (s *siwcService) startHandler(w http.ResponseWriter, r *http.Request) {
 	} else if !addAccount && activeID != "" {
 		profile, loadErr := s.store.LoadProfile(activeID)
 		if loadErr != nil {
-			http.Error(w, "ChatGPT sign-in could not be prepared.", http.StatusServiceUnavailable)
+			writeChatError(w, http.StatusServiceUnavailable, "ChatGPT sign-in could not be prepared.")
 			return
 		}
 		credentials := profile.Credentials
@@ -764,7 +770,7 @@ func (s *siwcService) startHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		profiles, listErr := s.store.ListProfiles()
 		if listErr != nil {
-			http.Error(w, "ChatGPT sign-in could not be prepared.", http.StatusServiceUnavailable)
+			writeChatError(w, http.StatusServiceUnavailable, "ChatGPT sign-in could not be prepared.")
 			return
 		}
 		if !addAccount {
@@ -775,7 +781,7 @@ func (s *siwcService) startHandler(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if len(pendingProfiles) > 1 {
-				http.Error(w, "Select the incomplete ChatGPT account from the host account selector to resume sign-in.", http.StatusConflict)
+				writeChatError(w, http.StatusConflict, "Select the incomplete ChatGPT account from the host account selector to resume sign-in.")
 				return
 			}
 			if len(pendingProfiles) == 1 {
@@ -789,29 +795,29 @@ func (s *siwcService) startHandler(w http.ResponseWriter, r *http.Request) {
 		if newRegistration {
 			profileID, err = newProfileID()
 			if err != nil {
-				http.Error(w, "ChatGPT sign-in could not be prepared.", http.StatusInternalServerError)
+				writeChatError(w, http.StatusInternalServerError, "ChatGPT sign-in could not be prepared.")
 				return
 			}
 			profileLabel = nextProfileLabel(profiles)
 		}
 	}
 	if profileID == "" {
-		http.Error(w, "ChatGPT sign-in could not be prepared.", http.StatusServiceUnavailable)
+		writeChatError(w, http.StatusServiceUnavailable, "ChatGPT sign-in could not be prepared.")
 		return
 	}
 	state, err := randomURLToken(32)
 	if err != nil {
-		http.Error(w, "ChatGPT sign-in could not be prepared.", http.StatusInternalServerError)
+		writeChatError(w, http.StatusInternalServerError, "ChatGPT sign-in could not be prepared.")
 		return
 	}
 	nonce, err := randomURLToken(32)
 	if err != nil {
-		http.Error(w, "ChatGPT sign-in could not be prepared.", http.StatusInternalServerError)
+		writeChatError(w, http.StatusInternalServerError, "ChatGPT sign-in could not be prepared.")
 		return
 	}
 	verifier, err := randomURLToken(32)
 	if err != nil {
-		http.Error(w, "ChatGPT sign-in could not be prepared.", http.StatusInternalServerError)
+		writeChatError(w, http.StatusInternalServerError, "ChatGPT sign-in could not be prepared.")
 		return
 	}
 	challengeBytes := sha256.Sum256([]byte(verifier))
@@ -852,6 +858,10 @@ func (s *siwcService) startHandler(w http.ResponseWriter, r *http.Request) {
 	query.Set("code_challenge", challenge)
 	query.Set("code_challenge_method", "S256")
 	w.Header().Set("Cache-Control", "no-store")
+	if strings.Contains(r.Header.Get("Accept"), "application/json") {
+		writeChatJSON(w, http.StatusOK, map[string]string{"authorization_url": authorizeURL + "?" + query.Encode()})
+		return
+	}
 	http.Redirect(w, r, authorizeURL+"?"+query.Encode(), http.StatusFound)
 }
 
@@ -877,8 +887,8 @@ func (s *siwcService) disconnectHandler(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	if !isLoopbackHost(r.Host) || requestIsCrossSite(r) {
-		http.Error(w, "Manage the ChatGPT connection from a browser on the Agent host.", http.StatusForbidden)
+	if requestIsCrossSite(r) {
+		writeChatError(w, http.StatusForbidden, "Cross-site connection requests are not allowed.")
 		return
 	}
 	var body struct {
@@ -888,7 +898,7 @@ func (s *siwcService) disconnectHandler(w http.ResponseWriter, r *http.Request) 
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&body); err != io.EOF {
 		if err != nil || !validProfileID(body.ProfileID) || decoder.Decode(new(any)) != io.EOF {
-			http.Error(w, "A valid ChatGPT account confirmation is required.", http.StatusBadRequest)
+			writeChatError(w, http.StatusBadRequest, "A valid ChatGPT account confirmation is required.")
 			return
 		}
 	}
@@ -896,11 +906,11 @@ func (s *siwcService) disconnectHandler(w http.ResponseWriter, r *http.Request) 
 	defer s.tokenMu.Unlock()
 	profileID, err := s.store.ActiveProfileID()
 	if err != nil {
-		http.Error(w, "The ChatGPT connection could not be read on this host.", http.StatusInternalServerError)
+		writeChatError(w, http.StatusInternalServerError, "The ChatGPT connection could not be read on this host.")
 		return
 	}
 	if body.ProfileID != "" && body.ProfileID != profileID {
-		http.Error(w, "The active ChatGPT account changed. Review the account and confirm again.", http.StatusConflict)
+		writeChatError(w, http.StatusConflict, "The active ChatGPT account changed. Review the account and confirm again.")
 		return
 	}
 	if profileID == "" {
@@ -909,7 +919,7 @@ func (s *siwcService) disconnectHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	profile, err := s.store.LoadProfile(profileID)
 	if err != nil {
-		http.Error(w, "The ChatGPT connection could not be read on this host.", http.StatusInternalServerError)
+		writeChatError(w, http.StatusInternalServerError, "The ChatGPT connection could not be read on this host.")
 		return
 	}
 	credentials := profile.Credentials
@@ -938,7 +948,7 @@ func (s *siwcService) disconnectHandler(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	if err := s.clearProfileSessionTokens(profile, false, false, true); err != nil {
-		http.Error(w, "The ChatGPT connection could not be cleared on this host.", http.StatusInternalServerError)
+		writeChatError(w, http.StatusInternalServerError, "The ChatGPT connection could not be cleared on this host.")
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")

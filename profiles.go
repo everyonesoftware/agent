@@ -26,18 +26,18 @@ func (s *siwcService) profilesHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	if !isLoopbackHost(r.Host) || requestIsCrossSite(r) {
-		http.Error(w, "Manage ChatGPT accounts from a browser on the Agent host.", http.StatusForbidden)
+	if requestIsCrossSite(r) {
+		writeChatError(w, http.StatusForbidden, "Manage ChatGPT accounts from a browser on the Agent host.")
 		return
 	}
 	profiles, err := s.store.ListProfiles()
 	if err != nil {
-		http.Error(w, "ChatGPT accounts could not be loaded on this host.", http.StatusInternalServerError)
+		writeChatError(w, http.StatusInternalServerError, "ChatGPT accounts could not be loaded on this host.")
 		return
 	}
 	activeID, err := s.store.ActiveProfileID()
 	if err != nil {
-		http.Error(w, "The active ChatGPT account could not be loaded on this host.", http.StatusInternalServerError)
+		writeChatError(w, http.StatusInternalServerError, "The active ChatGPT account could not be loaded on this host.")
 		return
 	}
 	views := make([]credentialProfileView, 0, len(profiles))
@@ -61,8 +61,8 @@ func (s *siwcService) selectProfileHandler(w http.ResponseWriter, r *http.Reques
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	if !isLoopbackHost(r.Host) || requestIsCrossSite(r) {
-		http.Error(w, "Manage ChatGPT accounts from a browser on the Agent host.", http.StatusForbidden)
+	if requestIsCrossSite(r) {
+		writeChatError(w, http.StatusForbidden, "Manage ChatGPT accounts from a browser on the Agent host.")
 		return
 	}
 	var body struct {
@@ -71,7 +71,7 @@ func (s *siwcService) selectProfileHandler(w http.ResponseWriter, r *http.Reques
 	decoder := json.NewDecoder(io.LimitReader(r.Body, 4096))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&body); err != nil || !validProfileID(body.ProfileID) {
-		http.Error(w, "A valid ChatGPT account must be selected.", http.StatusBadRequest)
+		writeChatError(w, http.StatusBadRequest, "A valid ChatGPT account must be selected.")
 		return
 	}
 	// Match disconnect/refresh lock ordering: tokenMu before store/model locks.
@@ -80,18 +80,18 @@ func (s *siwcService) selectProfileHandler(w http.ResponseWriter, r *http.Reques
 	profile, err := s.store.LoadProfile(body.ProfileID)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			http.Error(w, "That ChatGPT account was not found on this host.", http.StatusNotFound)
+			writeChatError(w, http.StatusNotFound, "That ChatGPT account was not found on this host.")
 			return
 		}
-		http.Error(w, "The active ChatGPT account could not be loaded.", http.StatusInternalServerError)
+		writeChatError(w, http.StatusInternalServerError, "The active ChatGPT account could not be loaded.")
 		return
 	}
 	if profile.Credentials.RegistrationPending || profile.Credentials.Subject == "" {
-		http.Error(w, "Complete sign-in before selecting this ChatGPT account.", http.StatusConflict)
+		writeChatError(w, http.StatusConflict, "Complete sign-in before selecting this ChatGPT account.")
 		return
 	}
 	if err := s.store.SetActiveProfile(body.ProfileID); err != nil {
-		http.Error(w, "The active ChatGPT account could not be changed.", http.StatusInternalServerError)
+		writeChatError(w, http.StatusInternalServerError, "The active ChatGPT account could not be changed.")
 		return
 	}
 	s.modelsMu.Lock()

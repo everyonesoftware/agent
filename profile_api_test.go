@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func TestProfileManagementIsLoopbackOnlyAndSelectsOneProfile(t *testing.T) {
+func TestProfileManagementAllowsRemoteReadAndConfirmedSelection(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("APP_DATA_DIR", dir)
 	server := newServer()
@@ -60,8 +60,8 @@ func TestProfileManagementIsLoopbackOnlyAndSelectsOneProfile(t *testing.T) {
 	remoteRequest.AddCookie(cookie)
 	remoteRecorder := httptest.NewRecorder()
 	server.ServeHTTP(remoteRecorder, remoteRequest)
-	if remoteRecorder.Code != http.StatusForbidden {
-		t.Fatalf("remote profile list status = %d, want %d", remoteRecorder.Code, http.StatusForbidden)
+	if remoteRecorder.Code != http.StatusOK {
+		t.Fatalf("remote profile list status = %d, want %d", remoteRecorder.Code, http.StatusOK)
 	}
 
 	listRequest := httptest.NewRequest(http.MethodGet, "/api/auth/profiles", nil)
@@ -93,7 +93,7 @@ func TestProfileManagementIsLoopbackOnlyAndSelectsOneProfile(t *testing.T) {
 		t.Fatalf("profile API did not return safe account labels: %s", bodyText)
 	}
 
-	selectRequest := httptest.NewRequest(http.MethodPost, "/api/auth/profiles/active", bytes.NewBufferString(`{"profile_id":"`+secondID+`"}`))
+	selectRequest := httptest.NewRequest(http.MethodPost, "/api/auth/profiles/active", bytes.NewBufferString(`{"profile_id":"`+secondID+`","password":"correct-horse-battery"}`))
 	selectRequest.Host = "127.0.0.1:8080"
 	selectRequest.AddCookie(cookie)
 	selectRecorder := httptest.NewRecorder()
@@ -106,17 +106,17 @@ func TestProfileManagementIsLoopbackOnlyAndSelectsOneProfile(t *testing.T) {
 		t.Fatalf("active profile after selection = %q, %v; want %q", activeID, err, secondID)
 	}
 
-	remoteSelect := httptest.NewRequest(http.MethodPost, "/api/auth/profiles/active", bytes.NewBufferString(`{"profile_id":"`+firstID+`"}`))
+	remoteSelect := httptest.NewRequest(http.MethodPost, "/api/auth/profiles/active", bytes.NewBufferString(`{"profile_id":"`+firstID+`","password":"correct-horse-battery"}`))
 	remoteSelect.Host = "everyoneagent.example.ts.net"
 	remoteSelect.AddCookie(cookie)
 	remoteSelectRecorder := httptest.NewRecorder()
 	server.ServeHTTP(remoteSelectRecorder, remoteSelect)
-	if remoteSelectRecorder.Code != http.StatusForbidden {
-		t.Fatalf("remote profile selection status = %d, want %d", remoteSelectRecorder.Code, http.StatusForbidden)
+	if remoteSelectRecorder.Code != http.StatusOK {
+		t.Fatalf("remote profile selection status = %d, want %d", remoteSelectRecorder.Code, http.StatusOK)
 	}
 	activeID, err = store.ActiveProfileID()
-	if err != nil || activeID != secondID {
-		t.Fatalf("remote selection changed active profile to %q, %v", activeID, err)
+	if err != nil || activeID != firstID {
+		t.Fatalf("remote selection did not change active profile to %q, %v", activeID, err)
 	}
 	pendingID, err := newProfileID()
 	if err != nil {
@@ -126,7 +126,7 @@ func TestProfileManagementIsLoopbackOnlyAndSelectsOneProfile(t *testing.T) {
 	if err := store.SaveProfile(credentialProfile{ID: pendingID, Label: "ChatGPT account 3", Credentials: pending}); err != nil {
 		t.Fatalf("save pending profile: %v", err)
 	}
-	pendingSelect := httptest.NewRequest(http.MethodPost, "/api/auth/profiles/active", bytes.NewBufferString(`{"profile_id":"`+pendingID+`"}`))
+	pendingSelect := httptest.NewRequest(http.MethodPost, "/api/auth/profiles/active", bytes.NewBufferString(`{"profile_id":"`+pendingID+`","password":"correct-horse-battery"}`))
 	pendingSelect.Host = "127.0.0.1:8080"
 	pendingSelect.AddCookie(cookie)
 	pendingRecorder := httptest.NewRecorder()
@@ -135,7 +135,7 @@ func TestProfileManagementIsLoopbackOnlyAndSelectsOneProfile(t *testing.T) {
 		t.Fatalf("pending profile selection status = %d, want %d", pendingRecorder.Code, http.StatusConflict)
 	}
 	activeID, err = store.ActiveProfileID()
-	if err != nil || activeID != secondID {
+	if err != nil || activeID != firstID {
 		t.Fatalf("pending profile selection changed active profile to %q, %v", activeID, err)
 	}
 }

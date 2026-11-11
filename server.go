@@ -33,12 +33,16 @@ func newServer() http.Handler {
 		mux.Handle("GET /api/conversations", accounts.middleware(http.HandlerFunc(accounts.listConversations)))
 		mux.Handle("GET /api/conversations/{id}", accounts.middleware(http.HandlerFunc(accounts.conversationMessages)))
 		mux.Handle("DELETE /api/conversations/{id}", accounts.middleware(http.HandlerFunc(accounts.deleteConversation)))
-		mux.Handle("GET /auth/start", accounts.scopedLocalSIWCHandler(siwc, (*siwcService).startHandler))
+		mux.HandleFunc("GET /auth/start", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Allow", "POST")
+			writeChatError(w, http.StatusMethodNotAllowed, "Use POST to confirm this connection action.")
+		})
+		mux.Handle("POST /auth/start", accounts.scopedPasswordSIWCHandler(siwc, true, (*siwcService).startHandler))
 		mux.Handle("GET /auth/callback", accounts.scopedOAuthCallbackHandler(siwc, (*siwcService).callbackHandler))
 		mux.Handle("GET /api/auth/status", accounts.scopedSIWCHandler(siwc, (*siwcService).statusHandler))
-		mux.Handle("GET /api/auth/profiles", accounts.scopedLocalSIWCHandler(siwc, (*siwcService).profilesHandler))
-		mux.Handle("POST /api/auth/profiles/active", accounts.scopedLocalSIWCHandler(siwc, (*siwcService).selectProfileHandler))
-		mux.Handle("POST /api/auth/disconnect", accounts.scopedLocalSIWCHandler(siwc, (*siwcService).disconnectHandler))
+		mux.Handle("GET /api/auth/profiles", accounts.scopedSIWCHandler(siwc, (*siwcService).profilesHandler))
+		mux.Handle("POST /api/auth/profiles/active", accounts.scopedPasswordSIWCHandler(siwc, false, (*siwcService).selectProfileHandler))
+		mux.Handle("POST /api/auth/disconnect", accounts.scopedPasswordSIWCHandler(siwc, false, (*siwcService).disconnectHandler))
 	} else {
 		log.Printf("local account database is unavailable: %v", accountErr)
 		unavailable := func(w http.ResponseWriter, _ *http.Request) {

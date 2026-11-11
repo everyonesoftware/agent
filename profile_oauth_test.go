@@ -45,7 +45,7 @@ func TestAddAccountCallbackSavesSeparateProfileWithoutChangingActiveSelection(t 
 		tokenURL:     tokenEndpoint.URL,
 	}, store)
 	service.verifier = fixedIdentityVerifier{identity: verifiedIdentity{subject: "second-subject", email: "second@example.test", name: "Second Account"}}
-	startRequest := httptest.NewRequest(http.MethodGet, "/auth/start?mode=add", nil)
+	startRequest := httptest.NewRequest(http.MethodPost, "/auth/start?mode=add", nil)
 	startRequest.Host = "127.0.0.1:8080"
 	startRecorder := httptest.NewRecorder()
 	service.startHandler(startRecorder, startRequest)

@@ -30,10 +30,11 @@ type authUser struct {
 type authContextKey struct{}
 
 type accountStore struct {
-	db            *sql.DB
-	dataDir       string
-	oauthMu       sync.Mutex
-	oauthServices map[string]*siwcService
+	db                  *sql.DB
+	dataDir             string
+	oauthMu             sync.Mutex
+	oauthServices       map[string]*siwcService
+	connectionPasswords connectionPasswordLimiter
 }
 
 func newAccountStore(path string) (*accountStore, error) {
@@ -94,17 +95,6 @@ func (s *accountStore) scopedSIWCHandler(base *siwcService, handler func(*siwcSe
 		}
 		handler(s.siwcForUser(base, user), w, r)
 	}))
-}
-
-func (s *accountStore) scopedLocalSIWCHandler(base *siwcService, handler func(*siwcService, http.ResponseWriter, *http.Request)) http.Handler {
-	protected := s.scopedSIWCHandler(base, handler)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !isLoopbackHost(r.Host) || requestIsCrossSite(r) {
-			http.Error(w, "Manage ChatGPT accounts from a browser on the Agent host.", http.StatusForbidden)
-			return
-		}
-		protected.ServeHTTP(w, r)
-	})
 }
 
 func (s *accountStore) scopedOAuthCallbackHandler(base *siwcService, handler func(*siwcService, http.ResponseWriter, *http.Request)) http.Handler {

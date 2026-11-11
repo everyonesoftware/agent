@@ -35,15 +35,10 @@ func testOAuthCredentials(accessToken, refreshToken string, expiresAt time.Time)
 }
 
 func TestAuthStartRejectsNonLoopbackHost(t *testing.T) {
-	t.Setenv("SIWC_DATA_DIR", t.TempDir())
-	request := httptest.NewRequest(http.MethodGet, "/auth/start", nil)
-	request.Host = "everyoneagent.example.ts.net"
-	recorder := httptest.NewRecorder()
-
-	newServer().ServeHTTP(recorder, request)
-
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body = %s", recorder.Code, http.StatusForbidden, recorder.Body.String())
+	f := newConnectionFixture(t)
+	out := f.request("POST", "/auth/start", `{"password":"correct-horse-battery","expected_active_profile_id":"`+f.id+`"}`, "everyoneagent.example.ts.net")
+	if out.Code != http.StatusForbidden {
+		t.Fatalf("remote start: %d %s", out.Code, out.Body.String())
 	}
 }
 
@@ -68,16 +63,15 @@ func TestSIWCRedirectURIRequiresLiteralLoopbackAddressAndValidPort(t *testing.T)
 }
 
 func TestAuthStartRejectsCrossSiteNavigationToLoopback(t *testing.T) {
-	t.Setenv("SIWC_DATA_DIR", t.TempDir())
-	request := httptest.NewRequest(http.MethodGet, "/auth/start", nil)
-	request.Host = "127.0.0.1:8080"
-	request.Header.Set("Sec-Fetch-Site", "cross-site")
-	recorder := httptest.NewRecorder()
-
-	newServer().ServeHTTP(recorder, request)
-
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body = %s", recorder.Code, http.StatusForbidden, recorder.Body.String())
+	f := newConnectionFixture(t)
+	req := httptest.NewRequest("POST", "/auth/start", strings.NewReader(`{"password":"correct-horse-battery","expected_active_profile_id":"`+f.id+`"}`))
+	req.Host = "127.0.0.1:8080"
+	req.AddCookie(f.cookie)
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	out := httptest.NewRecorder()
+	f.server.ServeHTTP(out, req)
+	if out.Code != http.StatusForbidden {
+		t.Fatalf("cross-site start: %d %s", out.Code, out.Body.String())
 	}
 }
 
@@ -171,7 +165,7 @@ func TestAuthStartUsesSIWCDynamicRegistrationAndPKCE(t *testing.T) {
 		redirectURI:  "http://127.0.0.1:8080/auth/callback",
 		authorizeURL: siwcAuthorizeURL,
 	}, store)
-	request := httptest.NewRequest(http.MethodGet, "/auth/start", nil)
+	request := httptest.NewRequest(http.MethodPost, "/auth/start", nil)
 	request.Host = "127.0.0.1:8080"
 	recorder := httptest.NewRecorder()
 
@@ -238,7 +232,7 @@ func TestAuthStartReusesIssuedRegistrationAndIdentityHint(t *testing.T) {
 		redirectURI:  "http://127.0.0.1:8080/auth/callback",
 		authorizeURL: siwcAuthorizeURL,
 	}, store)
-	request := httptest.NewRequest(http.MethodGet, "/auth/start", nil)
+	request := httptest.NewRequest(http.MethodPost, "/auth/start", nil)
 	request.Host = "127.0.0.1:8080"
 	recorder := httptest.NewRecorder()
 	service.startHandler(recorder, request)
@@ -292,7 +286,7 @@ func TestSIWCDiscoversAuthorizationTokenAndRevocationEndpoints(t *testing.T) {
 	}, newFileCredentialStore(t.TempDir()))
 	service.client = server.Client()
 
-	request := httptest.NewRequest(http.MethodGet, "/auth/start", nil)
+	request := httptest.NewRequest(http.MethodPost, "/auth/start", nil)
 	request.Host = "127.0.0.1:8080"
 	recorder := httptest.NewRecorder()
 	service.startHandler(recorder, request)
@@ -416,7 +410,7 @@ func TestDisconnectRevokesRefreshTokenAndRetainsRegistration(t *testing.T) {
 	}
 
 	service.config.authorizeURL = siwcAuthorizeURL
-	startRequest := httptest.NewRequest(http.MethodGet, "/auth/start", nil)
+	startRequest := httptest.NewRequest(http.MethodPost, "/auth/start", nil)
 	startRequest.Host = "127.0.0.1:8080"
 	startRecorder := httptest.NewRecorder()
 	service.startHandler(startRecorder, startRequest)
@@ -514,7 +508,7 @@ func TestAuthCallbackExchangesCodeAndStoresCredentials(t *testing.T) {
 	}, store)
 	service.verifier = testIDTokenVerifier{}
 
-	startRequest := httptest.NewRequest(http.MethodGet, "/auth/start", nil)
+	startRequest := httptest.NewRequest(http.MethodPost, "/auth/start", nil)
 	startRequest.Host = "127.0.0.1:8080"
 	service.startHandler(httptest.NewRecorder(), startRequest)
 	state := service.pending.state
@@ -619,7 +613,7 @@ func TestAuthCallbackPersistsIssuedClientIDBeforeTokenExchange(t *testing.T) {
 		authorizeURL: siwcAuthorizeURL,
 		tokenURL:     tokenEndpoint.URL,
 	}, store)
-	startRequest := httptest.NewRequest(http.MethodGet, "/auth/start", nil)
+	startRequest := httptest.NewRequest(http.MethodPost, "/auth/start", nil)
 	startRequest.Host = "127.0.0.1:8080"
 	startRecorder := httptest.NewRecorder()
 	service.startHandler(startRecorder, startRequest)
@@ -642,7 +636,7 @@ func TestAuthCallbackPersistsIssuedClientIDBeforeTokenExchange(t *testing.T) {
 		t.Fatalf("issued client registration was not retained for retry: credentials=%#v err=%v", credentials, err)
 	}
 	service.config.authorizeURL = siwcAuthorizeURL
-	retryRequest := httptest.NewRequest(http.MethodGet, "/auth/start", nil)
+	retryRequest := httptest.NewRequest(http.MethodPost, "/auth/start", nil)
 	retryRequest.Host = "127.0.0.1:8080"
 	retryRecorder := httptest.NewRecorder()
 	service.startHandler(retryRecorder, retryRequest)
@@ -680,7 +674,7 @@ func TestAuthCallbackRetainsSignInWhenPlanUsageScopeWasNotGranted(t *testing.T) 
 	if err != nil || !credentialsConnected(credentials) || credentialsPlanUsageEnabled(credentials) {
 		t.Fatalf("credentials=%#v err=%v; expected sign-in without plan usage", credentials, err)
 	}
-	startRequest := httptest.NewRequest(http.MethodGet, "/auth/start", nil)
+	startRequest := httptest.NewRequest(http.MethodPost, "/auth/start", nil)
 	startRequest.Host = "127.0.0.1:8080"
 	startRecorder := httptest.NewRecorder()
 	service.startHandler(startRecorder, startRequest)
@@ -829,7 +823,7 @@ func TestTerminalRefreshFailureClearsTokensAndOffersReauthorization(t *testing.T
 		t.Fatalf("expired OAuth state should offer reauthorization without API fallback: %#v", status)
 	}
 	service.config.authorizeURL = siwcAuthorizeURL
-	request := httptest.NewRequest(http.MethodGet, "/auth/start", nil)
+	request := httptest.NewRequest(http.MethodPost, "/auth/start", nil)
 	request.Host = "127.0.0.1:8080"
 	recorder := httptest.NewRecorder()
 	service.startHandler(recorder, request)
