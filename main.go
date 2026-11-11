@@ -18,7 +18,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) != 0 && (len(args) != 1 || args[0] != "healthz") {
-		return fmt.Errorf("usage: everyoneagent [healthz]")
+		return fmt.Errorf("usage: agent [healthz]")
 	}
 	port := os.Getenv("PORT")
 	if port == "" {

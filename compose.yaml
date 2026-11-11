@@ -5,7 +5,7 @@ services:
     container_name: everyoneagent
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "/everyoneagent", "healthz"]
+      test: ["CMD", "/agent", "healthz"]
       interval: 30s
       timeout: 5s
       start_period: 10s

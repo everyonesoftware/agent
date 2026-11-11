@@ -28,7 +28,7 @@ Open http://127.0.0.1:8080. The container is published only on the host loopback
 
 Stop with `docker compose down`.
 
-Compose probes the public `/healthz` endpoint using `/everyoneagent healthz` every 30 seconds. The command uses the container's `PORT` (default `8080`), requests the loopback endpoint with a three-second timeout, and exits successfully only for HTTP 200 without following redirects. It does not initialize storage or contact a model provider. This is a web-server liveness check, not a database or ChatGPT readiness check. Docker marks the container unhealthy after three consecutive failures; the restart policy does not restart a container solely because it is unhealthy.
+Compose probes the public `/healthz` endpoint using `/agent healthz` every 30 seconds. The image also retains `/everyoneagent` as a compatibility alias for existing health checks. The command uses the container's `PORT` (default `8080`), requests the loopback endpoint with a three-second timeout, and exits successfully only for HTTP 200 without following redirects. It does not initialize storage or contact a model provider. This is a web-server liveness check, not a database or ChatGPT readiness check. Docker marks the container unhealthy after three consecutive failures; the restart policy does not restart a container solely because it is unhealthy.
 
 ## Host-accessible data storage
 
@@ -69,7 +69,7 @@ data deletion is required to use a bind mount with the same existing data.
 ## Interface and development checks
 
 The interface is branded **Agent**, with a compact **e1** mark on login and in the
-sidebar. Existing database, session cookie, model preference, executable, and Compose
+sidebar. Existing database, session cookie, model preference, and Compose
 identifiers retain their original `everyoneagent` names for compatibility; no data
 migration is needed. New ChatGPT registrations request the Agent display name;
 previously registered connections retain their existing provider-side identity.

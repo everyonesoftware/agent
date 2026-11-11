@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -83,8 +84,33 @@ func TestHealthzCommandTimesOut(t *testing.T) {
 
 func TestUnknownCommand(t *testing.T) {
 	for _, args := range [][]string{{"unknown"}, {"healthz", "extra"}} {
-		if err := run(args); err == nil || !strings.Contains(err.Error(), "usage:") {
+		if err := run(args); err == nil || err.Error() != "usage: agent [healthz]" {
 			t.Fatalf("run(%q) = %v, want usage error", args, err)
 		}
+	}
+}
+
+func TestContainerExecutablePaths(t *testing.T) {
+	dockerfile, err := os.ReadFile("Dockerfile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		`-o /out/agent .`,
+		`COPY --from=build /out/agent /agent`,
+		`ENTRYPOINT ["/agent"]`,
+		// Existing Compose deployments can retain their old health checks.
+		`COPY --from=build /out/agent /everyoneagent`,
+	} {
+		if !strings.Contains(string(dockerfile), required) {
+			t.Errorf("container executable contract is missing %s", required)
+		}
+	}
+	compose, err := os.ReadFile("compose.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(compose), `test: ["CMD", "/agent", "healthz"]`) {
+		t.Error("default Compose health check must use /agent healthz")
 	}
 }
