@@ -5,98 +5,158 @@ const homePage = `<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="dark">
   <title>EveryoneAgent</title>
   <style>
-    :root { color-scheme: light; font: 16px/1.5 system-ui, sans-serif; color: #29252b; background: #f4f1ed; }
+    :root { color-scheme: dark; font: 14px/1.6 'Segoe UI', Arial, sans-serif; color: #e1e6e2; background: #202322; --muted: #a0aaa3; --line: #333936; --accent: #b4d6a3; --field: #252a27; }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; }
-    .app { width: min(54rem, 100%); height: 100vh; height: 100dvh; margin: 0 auto; display: flex; flex-direction: column; background: #fff; border-inline: 1px solid #e9e4df; }
-    .auth-gate { width: min(26rem, calc(100% - 2rem)); margin: 12vh auto; padding: 1.5rem; background: #fff; border: 1px solid #e9e4df; border-radius: 1rem; }
-    .auth-gate[hidden], .app[hidden] { display: none; }
-    .auth-gate h1 { margin-top: 0; }
-    .auth-gate input { display: block; width: 100%; margin: .75rem 0; padding: .7rem; border: 1px solid #ddd6df; border-radius: .6rem; font: inherit; }
-    .auth-gate button { padding: .65rem .85rem; color: #fff; background: #6d4a94; font-weight: 650; }
-    .auth-error { min-height: 1.5rem; color: #a23e36; }
-    header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid #eee9e4; }
-    .brand { color: #6d4a94; font-size: .82rem; font-weight: 750; letter-spacing: .09em; }
-    .subtitle { margin: .15rem 0 0; color: #716b72; font-size: .82rem; }
-    button, textarea { font: inherit; }
-    button { border: 0; border-radius: .7rem; cursor: pointer; }
-    button:focus-visible, textarea:focus-visible { outline: 3px solid #bda4da; outline-offset: 2px; }
-    .reset { padding: .55rem .8rem; color: #5c426f; background: #f3edf8; font-size: .88rem; }
-    .header-actions { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; flex-wrap: wrap; }
-    .model-select { max-width: 14rem; padding: .5rem .65rem; border: 1px solid #ddd6df; border-radius: .65rem; color: #4f4654; background: #fff; font: inherit; font-size: .82rem; }
-    .connect { padding: .55rem .8rem; color: #fff; background: #6d4a94; font-size: .88rem; font-weight: 650; }
-    .connect:hover { background: #583878; }
-    .connection-status { margin: 0; padding: .35rem 1.25rem; border-bottom: 1px solid #eee9e4; color: #746b78; font-size: .76rem; }
-    .messages { flex: 1; overflow-y: auto; padding: 1.5rem clamp(1rem, 5vw, 3rem); scroll-behavior: smooth; }
-    .welcome { max-width: 36rem; margin: 12vh auto 0; text-align: center; }
-    .welcome h1 { margin: 0 0 .5rem; font-size: clamp(1.7rem, 5vw, 2.3rem); letter-spacing: -.04em; }
-    .welcome p { margin: .4rem 0; color: #716b72; }
-    .message { width: fit-content; max-width: min(85%, 42rem); margin: 1rem 0; padding: .85rem 1rem; border-radius: 1rem; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .message.user { margin-left: auto; background: #f2edf7; border-bottom-right-radius: .3rem; }
-    .message.assistant { background: #f7f6f4; border-bottom-left-radius: .3rem; }
-    .sender { margin-bottom: .25rem; color: #746b78; font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-    .message-text { line-height: 1.6; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
     .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-    .composer-wrap { padding: .75rem clamp(.75rem, 3vw, 1.25rem) 1rem; border-top: 1px solid #eee9e4; }
-    .notice { min-height: 1.35rem; margin: 0 0 .5rem; color: #746b78; font-size: .78rem; }
-    .notice.error { color: #a23e36; }
-    .composer { display: flex; align-items: flex-end; gap: .65rem; padding: .6rem; border: 1px solid #ddd6df; border-radius: 1rem; background: #fff; box-shadow: 0 .4rem 1.4rem #30241b0d; }
-    textarea { flex: 1; min-height: 2.75rem; max-height: 10rem; resize: vertical; padding: .65rem .7rem; border: 0; outline: 0; color: inherit; background: transparent; }
-    textarea::placeholder { color: #928b94; }
-    .send { min-width: 4.4rem; padding: .68rem .9rem; color: #fff; background: #6d4a94; font-weight: 650; }
-    .send:hover:not(:disabled) { background: #583878; }
-    .send:disabled { cursor: wait; opacity: .55; }
-    .hint { margin: .5rem 0 0; color: #8b848c; font-size: .72rem; text-align: center; }
-    @media (max-width: 520px) {
-      .app { border: 0; }
-      header { padding: .8rem 1rem; }
-      .header-actions { gap: .35rem; }
-      .model-select { max-width: 9rem; }
-      .connection-status { padding-inline: 1rem; }
-      .messages { padding: 1rem; }
-      .welcome { margin-top: 8vh; }
-      .message { max-width: 94%; }
+    /* Focus: a bounded workspace with independent history and message scroll. */
+    [hidden] { display: none !important; }
+    button, input, textarea, select { font: inherit; }
+    button { color: inherit; border: 1px solid transparent; border-radius: 5px; background: transparent; cursor: pointer; }
+    header { display: flex; align-items: center; justify-content: space-between; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    button:disabled { opacity: .5; cursor: wait; }
+    a { color: var(--accent); }
+    .brand { display: flex; align-items: center; gap: 9px; color: #e1e6e2; font-size: 15px; font-weight: 600; letter-spacing: -.4px; }
+    .mark { display: grid; place-items: center; width: 26px; height: 26px; flex-shrink: 0; border-radius: 6px; color: #1c281a; background: var(--accent); font: 20px Georgia, serif; }
+    .app { position: relative; display: grid; grid-template-columns: 232px minmax(0, 1fr); width: 100%; height: 100vh; height: 100dvh; margin: 0; border: 0; background: #202322; }
+    .sidebar { display: flex; flex-direction: column; gap: 18px; min-height: 0; padding: 25px 14px 12px; border-right: 1px solid var(--line); background: #181b1a; }
+    .sidebar .brand { padding: 0 6px 8px; }
+    .reset, .connect { padding: 9px 12px; color: #e1e6e2; background: var(--field); border: 1px solid var(--line); font-size: 12px; font-weight: 400; }
+    .reset:hover:not(:disabled), .connect:hover:not(:disabled) { background: #2c3930; }
+    .new-chat { text-align: left; width: 100%; }
+    .search-label { display: block; }
+    .search-label input { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 5px; background: transparent; color: inherit; font-size: 12px; }
+    .history { position: relative; overflow-y: auto; flex: 1; min-height: 0; }
+    .history-group { color: var(--muted); font-size: 10px; font-weight: 500; margin: 18px 9px 6px; }
+    .history-group:first-child { margin-top: 0; }
+    .session { width: 100%; display: block; padding: 10px; text-align: left; font-size: 12px; overflow-wrap: anywhere; }
+    .session:hover { background: var(--field); }
+    .session[aria-current="true"] { color: var(--accent); background: #2c3930; }
+    .session small { display: block; color: var(--muted); font-size: 10px; margin-top: 3px; }
+    .history-state { color: var(--muted); font-size: 12px; padding: 6px 9px; }
+    .history-state.error { color: #efada5; }
+    .account-area { position: relative; border-top: 1px solid var(--line); padding-top: 10px; }
+    .account-toggle { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 6px; text-align: left; font-size: 12px; }
+    .avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #2c322e; color: var(--muted); }
+    .account-toggle small { display: block; color: var(--muted); font-size: 10px; }
+    #current-username { display: block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+    .account-menu { position: absolute; z-index: 12; bottom: calc(100% + 8px); left: 0; width: 300px; max-width: calc(100vw - 28px); max-height: calc(100dvh - 100px); overflow-y: auto; padding: 16px; background: #252a27; border: 1px solid var(--line); border-radius: 7px; box-shadow: 0 12px 35px #0005; }
+    .account-menu h2 { margin: 0 0 10px; font-size: 13px; font-weight: 600; }
+    .account-menu .model-select { width: 100%; max-width: 100%; margin-bottom: 8px; }
+    .provider-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+    .connection-status { margin: 0 0 12px; padding: 0; border: 0; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+    .menu-error { margin: 8px 0; color: #efada5; font-size: 12px; }
+    #logout-button { margin-top: 12px; width: 100%; text-align: left; }
+    .workspace { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+    .workspace-header { min-height: 65px; padding: 12px 30px; border-bottom: 1px solid var(--line); display: flex; justify-content: flex-start; gap: 12px; }
+    #conversation-title { margin: 0; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sidebar-toggle, .sidebar-backdrop { display: none; }
+    .messages { position: relative; flex: 1; min-height: 0; overflow-y: auto; padding: 30px max(24px, calc((100% - 800px) / 2)); scroll-behavior: auto; }
+    .welcome { max-width: 540px; margin: clamp(25px, 12vh, 130px) auto 0; text-align: left; }
+    .welcome h1 { margin: 0 0 8px; font-size: clamp(24px, 3vw, 32px); font-weight: 450; letter-spacing: -.8px; }
+    .welcome p { color: var(--muted); font-size: 13px; }
+    .message, .message.user, .message.assistant { width: 100%; max-width: 800px; padding: 0; margin: 0 auto 30px; border: 0; border-radius: 0; background: transparent; }
+    .sender { margin-bottom: 8px; font-size: 11px; color: var(--muted); font-weight: 500; text-transform: none; letter-spacing: 0; }
+    .message.user .message-text { color: #c1cbc3; }
+    .message-text { font-size: 14px; line-height: 1.85; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .composer-wrap { width: 100%; max-width: 856px; margin: 0 auto; padding: 10px 28px 18px; border: 0; }
+    .notice { min-height: 18px; color: var(--muted); font-size: 11px; margin: 0 0 8px; }
+    .notice.error { color: #efada5; }
+    .composer { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); box-shadow: none; }
+    textarea { width: 100%; flex: 1 0 100%; min-width: 0; min-height: 52px; max-height: min(150px, 22dvh); padding: 3px; border: 0; resize: vertical; outline: none; color: inherit; background: transparent; }
+    textarea::placeholder { color: var(--muted); }
+    .model-select { min-width: 0; max-width: min(70%, 300px); padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--field); color: #c5cec7; font-size: 11px; }
+    .send { margin-left: auto; min-width: 54px; padding: 7px 12px; border-radius: 5px; background: var(--accent); color: #1c281a; font-size: 12px; font-weight: 600; }
+    .send:hover:not(:disabled) { background: #c4e5b5; }
+    .hint { margin: 7px 0 0; color: var(--muted); font-size: 10px; text-align: center; }
+    .auth-gate { width: 100%; height: 100vh; height: 100dvh; margin: 0; padding: 0; border: 0; border-radius: 0; background: #202322; display: flex; flex-direction: column; overflow-y: auto; }
+    .auth-header { min-height: 90px; padding: 20px 44px; border: 0; }
+    .auth-header small { color: var(--muted); font-size: 11px; }
+    .auth-center { flex: 1; display: grid; place-items: center; padding: 30px 24px; }
+    .auth-content { width: min(360px, 100%); }
+    .auth-content h1 { margin: 0 0 8px; font-size: 32px; line-height: 1.3; font-weight: 450; letter-spacing: -1px; }
+    #auth-intro { margin: 0 0 32px; color: var(--muted); font-size: 13px; }
+    .auth-content label { display: block; margin: 18px 0 8px; font-size: 12px; }
+    .auth-gate input { margin: 0; width: 100%; padding: 11px 12px; color: inherit; background: var(--field); border: 1px solid var(--line); border-radius: 5px; font-size: 13px; }
+    .password-field { position: relative; }
+    .password-field input { padding-right: 65px; }
+    .auth-gate #toggle-password { position: absolute; right: 4px; top: 3px; bottom: 3px; padding: 5px 9px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 400; }
+    #password-hint { color: var(--muted); font-size: 11px; margin: 7px 0; }
+    .auth-error { min-height: 20px; margin: 14px 0 8px; color: #efada5; font-size: 12px; }
+    .auth-gate #account-submit { width: 100%; min-height: 44px; background: var(--accent); color: #1c281a; font-size: 13px; font-weight: 600; border-radius: 5px; }
+    .auth-switch { margin: 24px 0 0; text-align: center; color: var(--muted); font-size: 12px; }
+    .auth-gate #toggle-account-mode { padding: 4px; background: none; color: var(--accent); font-weight: 400; font-size: 12px; }
+    .auth-footer { display: flex; justify-content: space-between; gap: 16px; padding: 24px 44px; color: var(--muted); font-size: 10px; }
+    @media (max-width: 700px) {
+      .app { display: block; }
+      .workspace { height: 100%; }
+      .sidebar { display: none; position: absolute; inset: 0 auto 0 0; width: 268px; max-width: calc(100% - 56px); z-index: 20; }
+      .app.sidebar-open .sidebar { display: flex; }
+      .sidebar-toggle { display: block; min-width: 44px; min-height: 44px; font-size: 20px; }
+      .app.sidebar-open .sidebar-backdrop { display: block; position: absolute; inset: 0; z-index: 19; width: 100%; border: 0; border-radius: 0; background: #0008; }
+      .workspace-header { min-height: 60px; padding: 8px 12px; }
+      .messages { padding: 24px 21px; }
+      .composer-wrap { padding: 8px 14px 12px; }
+      .session, .account-toggle, .new-chat { min-height: 44px; }
+      .account-menu button, .account-menu select { min-height: 44px; }
+      .auth-header { min-height: 75px; padding: 18px 25px; }
+      .auth-header small { display: none; }
+      .auth-center { padding: 20px 25px; }
+      .auth-footer { padding: 20px 25px; font-size: 9px; }
+      .auth-footer span:last-child { max-width: 150px; text-align: right; }
     }
+    @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
   </style>
 </head>
 <body>
   <main class="auth-gate" id="auth-gate">
-    <div class="brand">EVERYONEAGENT</div>
-    <h1 id="auth-title">Sign in</h1>
+    <header class="auth-header"><div class="brand"><span class="mark" aria-hidden="true">e</span>EveryoneAgent</div><small>Your personal conversation space</small></header>
+    <div class="auth-center"><div class="auth-content">
+    <h1 id="auth-title">Welcome back.</h1>
+    <p id="auth-intro">Sign in to pick up the conversation.</p>
     <form id="account-form">
       <label for="username-input">Username</label>
       <input id="username-input" name="username" minlength="3" maxlength="64" autocomplete="username" required>
       <label for="password-input">Password</label>
-      <input id="password-input" name="password" type="password" minlength="12" maxlength="72" autocomplete="current-password" required>
+      <div class="password-field"><input id="password-input" name="password" type="password" minlength="12" maxlength="72" autocomplete="current-password" aria-describedby="password-hint" required><button id="toggle-password" type="button" aria-label="Show password" aria-pressed="false">Show</button></div>
+      <p id="password-hint" hidden>Use at least 12 characters.</p>
       <p class="auth-error" id="auth-error" role="alert"></p>
       <button id="account-submit" type="submit">Sign in</button>
     </form>
-    <p><button class="reset" type="button" id="toggle-account-mode">Create an account</button></p>
+    <p class="auth-switch"><span id="account-mode-label">New to EveryoneAgent?</span> <button type="button" id="toggle-account-mode">Create an account</button></p>
+    </div></div>
+    <footer class="auth-footer"><span>EveryoneAgent · Your own space</span><span>Connect your ChatGPT account after signing in.</span></footer>
   </main>
   <main class="app" id="chat-app" hidden>
-    <header>
-      <div>
-        <div class="brand">EVERYONEAGENT</div>
-        <p class="subtitle">Your private, saved conversations</p>
-      </div>
-      <div class="header-actions">
-        <label class="visually-hidden" for="conversation-select">Saved conversation</label>
-        <select class="model-select" id="conversation-select"><option value="">New conversation</option></select>
+    <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Close session navigation" tabindex="-1" hidden></button>
+    <aside class="sidebar" id="session-sidebar" aria-label="Session navigation">
+      <div class="brand"><span class="mark" aria-hidden="true">e</span>EveryoneAgent</div>
+      <button class="reset new-chat" id="new-chat" type="button">＋ New conversation</button>
+      <label class="search-label"><span class="visually-hidden">Search conversations</span><input type="search" id="conversation-search" placeholder="Search conversations" autocomplete="off"></label>
+      <nav class="history" id="conversation-list" aria-label="Previous sessions"><p class="history-state">Loading conversations…</p></nav>
+      <div class="account-area">
+      <button class="account-toggle" id="account-menu-toggle" type="button" aria-expanded="false" aria-controls="account-menu"><span class="avatar" id="user-avatar" aria-hidden="true">?</span><span><strong id="current-username"></strong><small>Your account</small></span></button>
+      <section class="account-menu" id="account-menu" aria-label="Account settings" hidden>
+        <h2>ChatGPT accounts</h2>
+        <p class="connection-status" id="connection-status" role="status">Checking ChatGPT connection…</p>
         <label class="visually-hidden" for="account-select">Your ChatGPT account</label>
         <select class="model-select" id="account-select" hidden disabled><option value="">Loading accounts…</option></select>
-        <label class="visually-hidden" for="model-select">Model</label>
-        <select class="model-select" id="model-select" disabled><option value="">Loading models…</option></select>
+        <div class="provider-actions">
         <button class="connect" id="connect-chatgpt" type="button" hidden>Continue with ChatGPT</button>
         <button class="reset" id="add-chatgpt-account" type="button" hidden>Add account</button>
         <button class="reset" id="disconnect-chatgpt" type="button" hidden>Disconnect</button>
-        <button class="reset" id="new-chat" type="button">New chat</button>
+        </div>
+        <p id="provider-error" class="menu-error" role="alert" hidden></p>
         <button class="reset" id="logout-button" type="button">Sign out</button>
-      </div>
-    </header>
-    <p class="connection-status" id="connection-status" role="status">Checking ChatGPT connection…</p>
+        <p id="logout-error" class="menu-error" role="alert" hidden></p>
+      </section></div>
+    </aside>
+    <div class="workspace">
+    <header class="workspace-header"><button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Open session navigation" aria-controls="session-sidebar" aria-expanded="false">☰</button><h1 id="conversation-title">New conversation</h1></header>
     <section class="messages" id="messages" aria-live="polite" aria-relevant="additions text" aria-label="Conversation">
       <div class="welcome" id="welcome">
         <h1>What can I help with?</h1>
@@ -108,9 +168,12 @@ const homePage = `<!doctype html>
       <form class="composer" id="chat-form" autocomplete="off">
         <label class="visually-hidden" for="message-input">Message</label>
         <textarea id="message-input" name="message" rows="1" maxlength="8192" placeholder="Message EveryoneAgent" required></textarea>
+        <label class="visually-hidden" for="model-select">Model</label>
+        <select class="model-select" id="model-select" disabled><option value="">Loading models…</option></select>
         <button class="send" id="send-button" type="submit">Send</button>
       </form>
       <p class="hint">Enter to send · Shift+Enter for a new line</p>
+    </div>
     </div>
   </main>
   <script>
@@ -129,6 +192,11 @@ const homePage = `<!doctype html>
       const localHost = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(window.location.hostname);
       const conversation = [];
       let busy = false;
+      let loadingConversation = false;
+      let conversationVersion = 0;
+      let savedConversations = [];
+      let historyError = '';
+      let historyRequest = 0;
       let conversationId = '';
       let modelStorageKey = 'everyoneagent.model';
 
@@ -139,41 +207,185 @@ const homePage = `<!doctype html>
       const accountSubmit = document.getElementById('account-submit');
       const accountModeButton = document.getElementById('toggle-account-mode');
       let registering = false;
+      let authBusy = false;
+      const usernameInput = document.getElementById('username-input');
+      const passwordInput = document.getElementById('password-input');
+      const passwordToggle = document.getElementById('toggle-password');
+      const conversationTitle = document.getElementById('conversation-title');
+      const conversationList = document.getElementById('conversation-list');
+      const conversationSearch = document.getElementById('conversation-search');
+      const sidebar = document.getElementById('session-sidebar');
+      const sidebarToggle = document.getElementById('sidebar-toggle');
+      const backdrop = document.getElementById('sidebar-backdrop');
+      const accountMenu = document.getElementById('account-menu');
+      const accountToggle = document.getElementById('account-menu-toggle');
+      const mobile = window.matchMedia('(max-width: 700px)');
+
+      function closeAccount(restoreFocus) {
+        accountMenu.hidden = true;
+        accountToggle.setAttribute('aria-expanded', 'false');
+        if (restoreFocus) accountToggle.focus();
+      }
+      function setSidebar(open, restoreFocus) {
+        const expanded = mobile.matches && open;
+        chatApp.classList.toggle('sidebar-open', expanded);
+        sidebarToggle.setAttribute('aria-expanded', String(expanded));
+        sidebarToggle.setAttribute('aria-label', expanded ? 'Close session navigation' : 'Open session navigation');
+        backdrop.hidden = !expanded;
+        sidebar.inert = mobile.matches && !expanded;
+        if (!expanded) closeAccount(false);
+        if (expanded) conversationSearch.focus();
+        else if (restoreFocus && mobile.matches) sidebarToggle.focus();
+      }
+      sidebarToggle.addEventListener('click', function () { setSidebar(!chatApp.classList.contains('sidebar-open'), true); });
+      backdrop.addEventListener('click', function () { setSidebar(false, true); });
+      mobile.addEventListener('change', function () { setSidebar(false, false); });
+      setSidebar(false, false);
+      accountToggle.addEventListener('click', function () {
+        const open = accountMenu.hidden;
+        accountMenu.hidden = !open;
+        accountToggle.setAttribute('aria-expanded', String(open));
+      });
+      document.addEventListener('click', function (event) {
+        if (!accountMenu.hidden && !event.target.closest('.account-area')) closeAccount(false);
+      });
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+          if (!accountMenu.hidden) { closeAccount(true); event.preventDefault(); }
+          else if (chatApp.classList.contains('sidebar-open')) { setSidebar(false, true); event.preventDefault(); }
+        }
+        if (event.key === 'Tab' && mobile.matches && chatApp.classList.contains('sidebar-open')) {
+          const controls = Array.from(sidebar.querySelectorAll('button, input, select, a[href]')).filter(el => !el.disabled && el.getClientRects().length);
+          const first = controls[0], last = controls[controls.length - 1];
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        }
+      });
+      passwordToggle.addEventListener('click', function () {
+        const visible = passwordInput.type === 'password';
+        passwordInput.type = visible ? 'text' : 'password';
+        passwordToggle.setAttribute('aria-pressed', String(visible));
+        passwordToggle.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
+        passwordToggle.textContent = visible ? 'Hide' : 'Show';
+      });
 
       accountModeButton.addEventListener('click', function () {
+        if (authBusy) return;
         registering = !registering;
-        document.getElementById('auth-title').textContent = registering ? 'Create your account' : 'Sign in';
+        document.getElementById('auth-title').textContent = registering ? 'Make yourself at home.' : 'Welcome back.';
+        document.getElementById('auth-intro').textContent = registering ? 'Create your personal EveryoneAgent account.' : 'Sign in to pick up the conversation.';
+        document.getElementById('account-mode-label').textContent = registering ? 'Already have an account?' : 'New to EveryoneAgent?';
+        document.getElementById('password-hint').hidden = !registering;
         accountSubmit.textContent = registering ? 'Create account' : 'Sign in';
-        accountModeButton.textContent = registering ? 'I already have an account' : 'Create an account';
-        document.getElementById('password-input').autocomplete = registering ? 'new-password' : 'current-password';
-        authError.textContent = registering ? 'Use a password with at least 12 characters.' : '';
+        accountModeButton.textContent = registering ? 'Sign in' : 'Create an account';
+        accountForm.reset();
+        passwordInput.autocomplete = registering ? 'new-password' : 'current-password';
+        passwordInput.type = 'password';
+        passwordToggle.setAttribute('aria-pressed', 'false');
+        passwordToggle.setAttribute('aria-label', 'Show password');
+        passwordToggle.textContent = 'Show';
+        authError.textContent = '';
+        usernameInput.removeAttribute('aria-invalid');
+        passwordInput.removeAttribute('aria-invalid');
+        usernameInput.focus();
       });
 
       accountForm.addEventListener('submit', async function (event) {
         event.preventDefault();
-        accountSubmit.disabled = true;
+        if (authBusy) return;
+        const credentials = { username: usernameInput.value, password: passwordInput.value };
+        authBusy = true;
+        for (const control of [accountSubmit, accountModeButton, usernameInput, passwordInput, passwordToggle]) control.disabled = true;
+        accountForm.setAttribute('aria-busy', 'true');
+        accountSubmit.setAttribute('aria-busy', 'true');
+        accountSubmit.textContent = registering ? 'Creating account…' : 'Signing in…';
         authError.textContent = '';
         try {
           const response = await fetch(registering ? '/api/auth/register' : '/api/auth/login', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: document.getElementById('username-input').value, password: document.getElementById('password-input').value })
+            body: JSON.stringify(credentials)
           });
           const result = await response.json();
           if (!response.ok) throw new Error(result.error || 'Account request failed.');
           window.location.reload();
-        } catch (error) { authError.textContent = error.message || 'Account request failed.'; }
-        finally { accountSubmit.disabled = false; }
+        } catch (error) {
+          authError.textContent = error.message || 'Account request failed.';
+          usernameInput.setAttribute('aria-invalid', 'true');
+          passwordInput.setAttribute('aria-invalid', 'true');
+        } finally {
+          authBusy = false;
+          for (const control of [accountSubmit, accountModeButton, usernameInput, passwordInput, passwordToggle]) control.disabled = false;
+          accountForm.setAttribute('aria-busy', 'false');
+          accountSubmit.setAttribute('aria-busy', 'false');
+          accountSubmit.textContent = registering ? 'Create account' : 'Sign in';
+        }
       });
 
+      function setInteractionState() {
+        const locked = busy || loadingConversation;
+        sendButton.disabled = locked;
+        document.getElementById('new-chat').disabled = locked;
+        for (const button of conversationList.querySelectorAll('.session')) button.disabled = locked;
+        form.setAttribute('aria-busy', String(locked));
+      }
+
+      function historyGroup(seconds) {
+        const date = new Date(Number(seconds) * 1000);
+        if (!Number.isFinite(date.getTime()) || !seconds) return 'Earlier';
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+        const week = new Date(today); week.setDate(week.getDate() - 7);
+        if (date >= today) return 'Today';
+        if (date >= yesterday) return 'Yesterday';
+        if (date >= week) return 'Previous 7 days';
+        return 'Earlier';
+      }
+
+      function renderConversations() {
+        conversationList.replaceChildren();
+        if (historyError) {
+          const error = document.createElement('p'); error.className = 'history-state error'; error.textContent = historyError;
+          const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'reset'; retry.textContent = 'Retry';
+          retry.addEventListener('click', function () { void refreshConversations(); });
+          conversationList.append(error, retry);
+        }
+        const query = conversationSearch.value.trim().toLocaleLowerCase();
+        const matches = savedConversations.filter(item => (item.title || 'Conversation').toLocaleLowerCase().includes(query));
+        for (const group of ['Today', 'Yesterday', 'Previous 7 days', 'Earlier']) {
+          const items = matches.filter(item => historyGroup(item.updated_at) === group);
+          if (!items.length) continue;
+          const heading = document.createElement('h2'); heading.className = 'history-group'; heading.textContent = group; conversationList.appendChild(heading);
+          for (const item of items) {
+            const button = document.createElement('button'); button.type = 'button'; button.className = 'session';
+            button.textContent = item.title || 'Conversation';
+            button.dataset.conversationId = item.id;
+            if (item.id === conversationId) button.setAttribute('aria-current', 'true');
+            const date = new Date(Number(item.updated_at) * 1000);
+            if (item.updated_at && Number.isFinite(date.getTime())) { const label = document.createElement('small'); label.textContent = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); button.appendChild(label); }
+            button.addEventListener('click', function () { void loadConversation(item); });
+            conversationList.appendChild(button);
+          }
+        }
+        if (!matches.length && !historyError) {
+          const empty = document.createElement('p'); empty.className = 'history-state'; empty.textContent = query ? 'No matching conversations.' : 'No saved conversations yet.'; conversationList.appendChild(empty);
+        }
+        setInteractionState();
+      }
+      conversationSearch.addEventListener('input', renderConversations);
+
       async function refreshConversations() {
-        const select = document.getElementById('conversation-select');
+        const request = ++historyRequest;
         try {
           const response = await fetch('/api/conversations', { cache: 'no-store' });
           const result = await response.json();
-          if (!response.ok) throw new Error('load');
-          select.replaceChildren(new Option('New conversation', ''));
-          for (const item of result.conversations || []) select.appendChild(new Option(item.title || 'Conversation', item.id));
-        } catch (_) { select.replaceChildren(new Option('Saved conversations unavailable', '')); }
+          if (!response.ok || !Array.isArray(result.conversations)) throw new Error('load');
+          if (request !== historyRequest) return;
+          savedConversations = result.conversations.filter(item => item && item.id).sort((a, b) => Number(b.updated_at || 0) - Number(a.updated_at || 0));
+          historyError = '';
+          const current = savedConversations.find(item => item.id === conversationId);
+          if (current) conversationTitle.textContent = current.title || 'Conversation';
+        } catch (_) { if (request !== historyRequest) return; historyError = 'Saved conversations could not be loaded.'; }
+        renderConversations();
       }
 
       async function requireSignIn() {
@@ -182,6 +394,8 @@ const homePage = `<!doctype html>
           if (!response.ok) throw new Error('signed out');
           const user = await response.json();
           modelStorageKey = 'everyoneagent.model.' + user.id;
+          document.getElementById('current-username').textContent = user.username;
+          document.getElementById('user-avatar').textContent = Array.from(user.username || '?')[0].toLocaleUpperCase();
           authGate.hidden = true;
           chatApp.hidden = false;
           connectionStatus.textContent = 'Signed in as ' + user.username + '.';
@@ -191,23 +405,49 @@ const homePage = `<!doctype html>
       }
 
       document.getElementById('logout-button').addEventListener('click', async function () {
-        await fetch('/api/auth/logout', { method: 'POST' });
-        window.location.reload();
+        const button = this;
+        const error = document.getElementById('logout-error');
+        error.hidden = true; button.disabled = true;
+        try {
+          const response = await fetch('/api/auth/logout', { method: 'POST' });
+          if (!response.ok) throw new Error('Sign out failed. Please try again.');
+          window.location.reload();
+        } catch (_) { error.textContent = 'Sign out failed. Please try again.'; error.hidden = false; }
+        finally { button.disabled = false; }
       });
 
-      document.getElementById('conversation-select').addEventListener('change', async function () {
-        conversationId = this.value;
-        conversation.length = 0;
-        messageList.replaceChildren();
-        if (!conversationId) { document.getElementById('new-chat').click(); return; }
+      async function loadConversation(item) {
+        if (busy || loadingConversation) return;
+        loadingConversation = true;
+        const version = ++conversationVersion;
+        setInteractionState();
+        setSidebar(false, true);
         try {
-          const response = await fetch('/api/conversations/' + encodeURIComponent(conversationId), { cache: 'no-store' });
+          const response = await fetch('/api/conversations/' + encodeURIComponent(item.id), { cache: 'no-store' });
           const result = await response.json();
-          if (!response.ok) throw new Error('load');
+          if (!response.ok || !Array.isArray(result.messages)) throw new Error('load');
+          if (version !== conversationVersion) return;
+          conversationId = item.id;
+          historyError = '';
+          conversationTitle.textContent = (result.conversation && result.conversation.title) || item.title || 'Conversation';
+          conversation.length = 0;
+          messageList.replaceChildren();
+          input.value = '';
           for (const item of result.messages || []) { addMessage(item.role, item.content); conversation.push({ role: item.role, content: item.content }); }
           notice.textContent = 'This conversation is saved to your account.';
-        } catch (_) { showError('That conversation could not be loaded.', ''); }
-      });
+          notice.classList.remove('error');
+          renderConversations();
+        } catch (_) {
+          if (version === conversationVersion) {
+            showError('That conversation could not be loaded. Your current conversation is unchanged.', '');
+            historyError = 'That conversation could not be loaded. Select it again to retry.';
+            renderConversations();
+          }
+        } finally {
+          loadingConversation = false;
+          setInteractionState();
+        }
+      }
 
       function addMessage(role, content) {
         const bubble = document.createElement('article');
@@ -335,6 +575,7 @@ const homePage = `<!doctype html>
       });
 
       accountSelect.addEventListener('change', async function () {
+        document.getElementById('provider-error').hidden = true;
         if (!accountSelect.value) return;
         if (accountSelect.selectedOptions[0]?.dataset.registrationPending === 'true') {
           window.location.href = '/auth/start?mode=retry&profile_id=' + encodeURIComponent(accountSelect.value);
@@ -350,12 +591,15 @@ const homePage = `<!doctype html>
           if (!response.ok) throw new Error('select account');
           await refreshConnectionState();
         } catch (_) {
-          showError('Your ChatGPT account selection could not be changed.', '');
+          const error = document.getElementById('provider-error');
+          error.textContent = 'Your ChatGPT account selection could not be changed.';
+          error.hidden = false;
           await refreshConnectionState();
         }
       });
 
       disconnectButton.addEventListener('click', async function () {
+        document.getElementById('provider-error').hidden = true;
         disconnectButton.disabled = true;
         try {
           const response = await fetch('/api/auth/disconnect', { method: 'POST' });
@@ -366,7 +610,9 @@ const homePage = `<!doctype html>
             ? 'Disconnected from ChatGPT on this host.'
             : 'Tokens were cleared here, but remote revocation was not confirmed. Revoke EveryoneAgent in ChatGPT settings.';
         } catch (_) {
-          connectionStatus.textContent = 'The ChatGPT connection could not be removed.';
+          const error = document.getElementById('provider-error');
+          error.textContent = 'The ChatGPT connection could not be removed. Please try again.';
+          error.hidden = false;
         } finally {
           disconnectButton.disabled = false;
         }
@@ -381,7 +627,8 @@ const homePage = `<!doctype html>
       form.addEventListener('submit', async function (event) {
         event.preventDefault();
         const content = input.value.trim();
-        if (!content || busy) return;
+        if (!content || busy || loadingConversation) return;
+        const version = conversationVersion;
 
         const welcome = document.getElementById('welcome');
         if (welcome) welcome.remove();
@@ -390,7 +637,7 @@ const homePage = `<!doctype html>
         const thinking = addMessage('assistant', 'Thinking…');
         input.value = '';
         busy = true;
-        sendButton.disabled = true;
+        setInteractionState();
         notice.textContent = 'Waiting for the model…';
         notice.classList.remove('error');
 
@@ -401,6 +648,7 @@ const homePage = `<!doctype html>
             body: JSON.stringify({ messages: requestMessages, model: modelSelect.value, conversation_id: conversationId })
           });
           const result = await response.json();
+          if (version !== conversationVersion) return;
           if (!response.ok) {
             const requestError = new Error(result.error || 'The request failed.');
             requestError.action = result.action;
@@ -408,36 +656,41 @@ const homePage = `<!doctype html>
           }
           thinking.remove();
           conversationId = result.conversation_id || conversationId;
+          if (conversationTitle.textContent === 'New conversation') conversationTitle.textContent = content.slice(0, 80);
           addMessage('assistant', result.reply);
           conversation.push({ role: 'user', content: content }, { role: 'assistant', content: result.reply });
           if (conversation.length > 40) conversation.splice(0, conversation.length - 40);
-          notice.textContent = 'This conversation is saved to your account.';
+          notice.textContent = conversationId ? 'This conversation is saved to your account.' : 'Reply received. This conversation has not been saved.';
           await refreshConversations();
-          document.getElementById('conversation-select').value = conversationId;
         } catch (error) {
+          if (version !== conversationVersion) return;
           thinking.remove();
           addMessage('assistant', 'I could not complete that request.');
           showError(error.message || 'Check the model provider settings and try again.', error.action);
           if (error.action === 'reauthorize') await refreshConnectionState();
         } finally {
           busy = false;
-          sendButton.disabled = false;
+          setInteractionState();
           input.focus();
         }
       });
 
       input.addEventListener('keydown', function (event) {
-        if (event.key === 'Enter' && !event.shiftKey) {
+        if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
           event.preventDefault();
           form.requestSubmit();
         }
       });
 
       document.getElementById('new-chat').addEventListener('click', function () {
-        if (busy) return;
+        if (busy || loadingConversation) return;
+        conversationVersion++;
         conversation.length = 0;
         conversationId = '';
-        document.getElementById('conversation-select').value = '';
+        conversationTitle.textContent = 'New conversation';
+        renderConversations();
+        setSidebar(false, false);
+        input.value = '';
         messageList.replaceChildren();
         const welcome = document.createElement('div');
         welcome.className = 'welcome';

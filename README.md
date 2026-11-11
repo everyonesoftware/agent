@@ -66,6 +66,37 @@ folder's access controls, then start the new deployment. Preserve separately
 mounted Tailscale state separately when applicable. No database migration or
 data deletion is required to use a bind mount with the same existing data.
 
+## Interface and development checks
+
+The Focus interface uses a dark chat workspace with searchable conversation history
+in the left sidebar, the current user at the bottom left, and model selection in
+the message composer. Open the user menu to manage connected ChatGPT accounts or
+sign out. On phones, the header menu opens session history over the conversation.
+The Quiet entry login keeps local EveryoneAgent sign-in separate from connecting
+a ChatGPT account afterward.
+
+Run backend tests and build with Go 1.25:
+
+```sh
+go test ./...
+go vet ./...
+go build ./...
+```
+
+Run the dependency-free browser regressions with Node 22+ and an installed
+Chromium-based browser:
+
+```sh
+node tests/ui.mjs
+```
+
+The browser runner detects standard Edge/Chrome paths on Windows and Chrome/Chromium
+paths on Linux. Set `UI_BROWSER` to override the executable path. It serves the
+actual embedded page against isolated in-memory API fixtures and uses a temporary
+browser profile; it does not access the running application's accounts or data.
+Set `UI_SCREENSHOTS` to an existing output directory to save desktop/phone evidence.
+These checks cover UI wiring and layout, not live ChatGPT authorization.
+
 ## Current status
 
 The app contains local account registration/login, owner-scoped saved conversations, per-user ChatGPT OAuth profile storage, direct Responses API requests with upstream streaming and `store: false`, model discovery, and an OpenAI-compatible fallback. OAuth sign-in remains unverified through live authorization or account approval. Existing host-wide ChatGPT profile files are left untouched and are not automatically assigned to a new user; each user should connect their own ChatGPT account after signing in. Anyone who can reach the service can create an account, so expose it only to trusted household devices.
