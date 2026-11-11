@@ -17,7 +17,7 @@ const homePage = `<!doctype html>
     button, input, textarea, select { font: inherit; }
     button { color: inherit; border: 1px solid transparent; border-radius: 5px; background: transparent; cursor: pointer; }
     header { display: flex; align-items: center; justify-content: space-between; }
-    button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     button:disabled { opacity: .5; cursor: wait; }
     a { color: var(--accent); }
     .brand { display: flex; align-items: center; gap: 9px; color: #e1e6e2; font-size: 15px; font-weight: 600; letter-spacing: -.4px; }
@@ -476,7 +476,7 @@ const homePage = `<!doctype html>
         backdrop.hidden = !expanded;
         sidebar.inert = mobile.matches && !expanded;
         if (!expanded) closeAccount(false);
-        if (expanded) conversationSearch.focus();
+        if (expanded) document.getElementById('new-chat').focus({ preventScroll: true });
         else if (restoreFocus && mobile.matches) sidebarToggle.focus();
       }
       sidebarToggle.addEventListener('click', function () { setSidebar(!chatApp.classList.contains('sidebar-open'), true); });

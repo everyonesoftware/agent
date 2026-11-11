@@ -248,6 +248,15 @@ try {
   await expectEventually("!document.querySelector('#chat-app').hidden && document.querySelectorAll('#conversation-list button').length>=3", 'Signed-in history missing');
   ok(calls.some(call => call.path === '/api/auth/register'), 'Create-account form uses the existing registration API');
   ok(await js("document.querySelector('.sidebar .brand').textContent==='e1Agent' && document.querySelector('#message-input').placeholder==='Message Agent'"), 'Chat sidebar and composer use the approved rebrand');
+  await click('#message-input');
+  await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
+  await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
+  await js("document.querySelector('#message-input').focus()");
+  ok(await js("document.activeElement.id==='message-input' && getComputedStyle(document.activeElement).outlineStyle==='none' && getComputedStyle(document.activeElement).boxShadow==='none'"), 'Focused message textbox has no decorative outline or shadow');
+  await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
+  await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
+  ok(await js("document.activeElement.matches('button, select') && getComputedStyle(document.activeElement).outlineStyle==='solid'"), 'Other composer controls retain their keyboard focus indicator');
+  await js('document.activeElement.blur()');
   ok(await js("document.querySelector('#current-username').textContent==='Browser Test'"), 'Bottom-left profile shows authenticated user');
   ok(await visible('#app-version') && await js("document.querySelector('#app-version').textContent==='Version 42' && document.querySelector('#app-version').getBoundingClientRect().top >= document.querySelector('.account-row').getBoundingClientRect().bottom"), 'Build version is visible underneath the logged-in user');
   ok(await visible('#settings-button'), 'Gear button is available beside the profile');
@@ -608,6 +617,9 @@ try {
   }
   await click('#sidebar-toggle');
   ok(await visible('#session-sidebar'), 'Phone menu opens session history');
+  ok(await js("document.activeElement.id==='new-chat'"), 'Opening the phone menu focuses navigation, not the search textbox');
+  await drag('#conversation-search', 0, 0);
+  ok(await js("document.activeElement.id==='conversation-search'"), 'Phone search remains focusable when explicitly selected');
   ok(await visible('#app-version') && await js("document.querySelector('#app-version').getBoundingClientRect().bottom <= innerHeight && document.querySelector('#app-version').getBoundingClientRect().top >= document.querySelector('.account-row').getBoundingClientRect().bottom"), 'Phone sidebar keeps the build version below the user and inside the viewport');
   ok(await js("document.querySelector('#sidebar-toggle').getAttribute('aria-expanded')==='true'"), 'Phone toggle announces expanded state');
   await screenshot('agent-chat-phone-menu');
