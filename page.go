@@ -63,15 +63,42 @@ const homePage = `<!doctype html>
     .settings-card label { display: block; margin: 16px 0 6px; font-size: 12px; }
     .settings-card input { display: block; width: 100%; padding: 10px 12px; color: inherit; background: #202322; border: 1px solid var(--line); border-radius: 5px; }
     .settings-card .send { margin: 16px 0 0; }
-    .connection-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+    .connection-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 6px; }
     .connection-heading h2 { margin: 0; }
-    .connection-badge { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 10px; color: var(--accent); border: 1px solid #45513f; border-radius: 20px; padding: 3px 8px; }
+    .connection-refresh { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 4px 10px; border: 1px solid #45513f; border-radius: 20px; color: var(--accent); }
+    .connection-refresh:has(.off) { border-color: var(--line); color: var(--muted); }
+    .connection-refresh:has(.warning) { border-color: #5c513b; color: #dfc38e; }
+    .connection-refresh:hover:not(:disabled) { border-color: #5b6a5f; background: #2c3930; }
+    .connection-refresh svg { width: 13px; height: 13px; flex-shrink: 0; }
+    .connection-refresh[aria-busy="true"] svg { animation: connection-refresh 1s linear infinite; }
+    @keyframes connection-refresh { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .connection-refresh[aria-busy="true"] svg { animation: none; } }
+    @media (max-width: 480px) { .connection-refresh { min-height: 44px; } }
+    .connection-badge { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 11px; color: var(--accent); }
     .connection-badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-    .connection-badge.warning { color: #dfc38e; border-color: #5c513b; }
-    .connection-badge.off { color: var(--muted); border-color: var(--line); }
+    .connection-badge.warning { color: #dfc38e; }
+    .connection-badge.off { color: var(--muted); }
+    .connection-setup { margin-top: 14px; font-size: 12px; }
+    .connection-setup .setup-lead { margin: 0 0 4px; font-size: 14px; font-weight: 500; }
+    .connection-setup p { margin: 8px 0; }
+    .connection-setup .setup-intro, .connection-setup li > span, .connection-setup .setup-return { color: var(--muted); }
+    .connection-setup ol { list-style: none; padding: 0; margin: 20px 0; counter-reset: setup-step; }
+    .connection-setup li { position: relative; padding-left: 31px; margin: 15px 0; counter-increment: setup-step; }
+    .connection-setup li::before { content: counter(setup-step); position: absolute; left: 0; top: 0; width: 21px; height: 21px; border: 1px solid #475249; border-radius: 50%; color: var(--accent); font-size: 11px; text-align: center; line-height: 19px; }
+    .connection-setup strong { font-weight: 500; }
+    .connection-setup li > span { display: block; margin-top: 2px; }
+    .connection-setup .setup-return { border-top: 1px solid var(--line); padding-top: 15px; }
+    .connection-help { margin-top: 17px; font-size: 12px; color: var(--muted); }
+    .connection-help summary { cursor: pointer; width: fit-content; padding: 4px 0; }
+    .connection-help p { margin: 8px 0 0; }
     .settings-card #account-select { display: block; width: 100%; max-width: 100%; min-height: 40px; margin-bottom: 14px; font-size: 12px; background: #202322; }
     .settings-card .connection-status { margin: 14px 0 3px; color: inherit; font-size: 12px; }
     .connection-detail { margin: 0; color: var(--muted); font-size: 11px; }
+    .local-connection-address { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 5px; background: #202322; }
+    .local-connection-address > div { flex: 1; min-width: 0; }
+    .local-connection-address code { display: block; overflow-wrap: anywhere; font-size: 12px; user-select: all; }
+    .local-connection-address button { min-height: 44px; flex-shrink: 0; }
+    #local-connection-config-error { margin-top: 12px; color: #dfc38e; }
     .settings-card .provider-actions { margin-top: 18px; gap: 8px; align-items: center; }
     .settings-card .provider-actions .send { margin: 0; }
     .danger { color: #efada5; }
@@ -197,15 +224,35 @@ const homePage = `<!doctype html>
         <button class="reset" id="back-to-chat" type="button">← Back to conversation</button>
         <p>Manage your connections, account, and security.</p>
         <section class="settings-card" aria-labelledby="connection-title">
-          <div class="connection-heading"><h2 id="connection-title">ChatGPT connection</h2><span class="connection-badge off" id="connection-badge">Checking…</span></div>
+          <div class="connection-heading"><h2 id="connection-title">ChatGPT connection</h2><button class="connection-refresh" id="check-chatgpt" type="button" title="Refresh connection status" aria-label="Refresh ChatGPT connection status" aria-busy="true"><span class="connection-badge off" id="connection-badge">Checking…</span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button></div>
           <label id="account-select-label" for="account-select" hidden>Active ChatGPT account</label>
           <select class="model-select" id="account-select" hidden disabled><option value="">Loading accounts…</option></select>
           <p class="connection-status" id="connection-status" role="status">Checking ChatGPT connection…</p>
+          <div id="remote-connection-setup-slot">
+            <div class="connection-setup" id="remote-connection-setup" hidden>
+              <p class="setup-lead" id="remote-connection-heading">Connect from the computer running Agent</p>
+              <p class="setup-intro" id="remote-connection-intro">You’re viewing Agent remotely. ChatGPT sign-in must be completed in a browser on the computer hosting Agent.</p>
+              <ol>
+                <li><strong>On that computer, open Agent’s local address.</strong>
+                  <div class="local-connection-address" id="local-connection-address" hidden>
+                    <div><span class="connection-detail">Configured local address</span><code id="local-connection-url"></code></div>
+                    <button class="reset" id="copy-local-connection-url" type="button" aria-label="Copy Agent’s configured local address">Copy</button>
+                  </div>
+                </li>
+                <li><strong>Sign in to the same Agent account.</strong><span id="remote-connection-action">Open Settings, then choose Continue with ChatGPT.</span></li>
+                <li><strong>Approve the connection in ChatGPT.</strong><span>Then return here and select the status pill above to refresh.</span></li>
+              </ol>
+              <p class="setup-return">Once connected, you can use Agent from this address. You only need localhost again to add or reconnect a ChatGPT account.</p>
+              <details class="connection-help"><summary>Why can’t I connect from here?</summary><p>ChatGPT returns sign-in to a local address on the computer running your browser. On another device, that points to that device—not your Agent server. Open the address above on the computer running Agent, not on another device. If the server has no browser, use a localhost tunnel from a trusted computer for setup.</p></details>
+            </div>
+          </div>
+          <details class="connection-help" id="remote-connection-help" hidden><summary>Add or reconnect an account</summary><div id="remote-connection-help-slot"></div></details>
+          <p class="connection-detail" id="local-connection-config-error" hidden>Local connection address unavailable. Ask the server operator to set SIWC_REDIRECT_URI to a valid loopback callback matching the published host port.</p>
 
-          <div class="provider-actions">
+          <div class="provider-actions" id="provider-actions">
             <button class="send" id="connect-chatgpt" type="button" hidden>Continue with ChatGPT ↗</button>
             <button class="reset" id="add-chatgpt-account" type="button" hidden>Add account ↗</button>
-            <button class="reset" id="check-chatgpt" type="button">Check connection</button>
+
             <button class="reset danger" id="disconnect-chatgpt" type="button" hidden>Disconnect</button>
           </div>
           <p id="provider-error" class="menu-error" role="alert" hidden></p>
@@ -281,11 +328,16 @@ const homePage = `<!doctype html>
       const disconnectButton = document.getElementById('disconnect-chatgpt');
       const checkConnectionButton = document.getElementById('check-chatgpt');
       const connectionBadge = document.getElementById('connection-badge');
+      const localConnectionAddress = document.getElementById('local-connection-address');
+      const localConnectionURL = document.getElementById('local-connection-url');
+      const localConnectionConfigError = document.getElementById('local-connection-config-error');
+      const copyLocalConnectionURL = document.getElementById('copy-local-connection-url');
       const providerError = document.getElementById('provider-error');
       const providerFeedback = document.getElementById('provider-feedback');
       const disconnectDialog = document.getElementById('disconnect-dialog');
       let connectionBusy = false;
       let connectionRefresh = null;
+      let connectionStateLabel = 'Checking…';
       let activeProfileID = '';
       let selectedProfile = null;
       let connectionChange = null;
@@ -653,9 +705,11 @@ const homePage = `<!doctype html>
 
       function updateConnectionControls() {
         const pending = connectionBusy || Boolean(connectionRefresh);
-        for (const button of [connectButton, addAccountButton, disconnectButton, checkConnectionButton]) button.disabled = pending;
+        for (const button of [connectButton, addAccountButton, disconnectButton, checkConnectionButton, copyLocalConnectionURL]) button.disabled = pending;
         accountSelect.disabled = pending || profileCount === 0 || (profileCount === 1 && Boolean(activeProfileID));
-        checkConnectionButton.textContent = connectionRefresh ? 'Checking…' : 'Check connection';
+        connectionBadge.textContent = connectionRefresh ? 'Checking…' : connectionStateLabel;
+        checkConnectionButton.setAttribute('aria-busy', String(Boolean(connectionRefresh)));
+        checkConnectionButton.setAttribute('aria-label', connectionRefresh ? 'Checking ChatGPT connection status' : connectionStateLabel + '. Refresh ChatGPT connection status');
       }
 
       function connectionFeedback(text, warning) {
@@ -679,6 +733,10 @@ const homePage = `<!doctype html>
         let oauthSelected = false;
         let planUsageEnabled = false;
         let statusAvailable = false;
+        let localURL = '';
+        localConnectionAddress.hidden = true;
+        localConnectionURL.textContent = '';
+        localConnectionConfigError.hidden = true;
 
         let profilesAvailable = false;
         selectedProfile = null;
@@ -692,6 +750,7 @@ const homePage = `<!doctype html>
           connected = Boolean(status.connected);
           oauthSelected = Boolean(status.oauth_selected);
           planUsageEnabled = Boolean(status.plan_usage_enabled);
+          localURL = typeof status.local_url === 'string' ? status.local_url : '';
           statusAvailable = true;
         } catch (_) {}
 
@@ -731,13 +790,24 @@ const homePage = `<!doctype html>
 
         document.getElementById('account-select-label').hidden = accountSelect.hidden;
         connectionAvailable = statusAvailable && profilesAvailable;
+        localConnectionURL.textContent = localURL;
+        localConnectionAddress.hidden = localHost || !localURL;
+        localConnectionConfigError.hidden = !statusAvailable || Boolean(localURL);
         const pendingProfile = selectedProfile?.registration_pending || (!activeProfileID && pendingProfiles.length > 0);
         const ready = connectionAvailable && connected && planUsageEnabled;
-        connectionStatus.hidden = ready && localHost;
-        connectionBadge.textContent = !connectionAvailable ? 'Unavailable' : ready ? 'Connected' : pendingProfile ? 'Awaiting sign-in' : connected ? 'Permission required' : oauthSelected ? 'Sign-in required' : 'Not connected';
+        const remoteSetup = document.getElementById('remote-connection-setup');
+        const remoteHelp = document.getElementById('remote-connection-help');
+        const setupSlot = document.getElementById(ready ? 'remote-connection-help-slot' : 'remote-connection-setup-slot');
+        if (remoteSetup.parentElement !== setupSlot) setupSlot.appendChild(remoteSetup);
+        remoteSetup.hidden = localHost || !connectionAvailable;
+        remoteHelp.hidden = localHost || !ready;
+        document.getElementById('remote-connection-heading').hidden = ready;
+        document.getElementById('remote-connection-intro').hidden = ready;
+        connectionStatus.hidden = ready || (!localHost && connectionAvailable);
+        connectionStateLabel = !connectionAvailable ? 'Unavailable' : ready ? 'Connected' : pendingProfile ? 'Awaiting sign-in' : connected ? 'Permission required' : oauthSelected ? 'Sign-in required' : 'Not connected';
         connectionBadge.className = 'connection-badge' + (ready ? '' : (!connectionAvailable || pendingProfile || connected || oauthSelected) ? ' warning' : ' off');
         connectionStatus.textContent = !connectionAvailable
-          ? 'Connection unavailable. Try checking again.'
+          ? 'Couldn’t check the ChatGPT connection. Select the status pill above to try again. Your saved accounts have not been removed.'
           : (connected && planUsageEnabled
             ? 'Active account: ' + (selectedProfile?.label || 'ChatGPT account') + '.'
             : (connected
@@ -748,10 +818,12 @@ const homePage = `<!doctype html>
         if (pendingProfile && connectionAvailable) connectionStatus.textContent = localHost
           ? 'Select an incomplete account to finish sign-in.'
           : 'To finish sign-in, open Agent’s local address on the computer running it.';
-        connectButton.hidden = !localHost || ready;
+        connectButton.hidden = !localHost || ready || !connectionAvailable;
         connectButton.textContent = pendingProfile ? 'Resume sign-in ↗' : connected ? 'Review ChatGPT permissions ↗' : oauthSelected ? 'Reconnect with ChatGPT ↗' : 'Continue with ChatGPT ↗';
+        document.getElementById('remote-connection-action').textContent = 'Open Settings, then choose ' + (ready ? 'Add account' : connectButton.textContent.replace(' ↗', '')) + '.';
         addAccountButton.hidden = !localHost || profileCount === 0 || !connectionAvailable;
         disconnectButton.hidden = !oauthSelected || !selectedProfile || !connectionAvailable;
+        document.getElementById('provider-actions').hidden = [connectButton, addAccountButton, disconnectButton].every(button => button.hidden);
         if (!localHost && connectionAvailable && ready) connectionStatus.textContent = 'Add or reconnect from Agent’s local address on the computer running it.';
         if (!localHost && connectionAvailable && connected && !planUsageEnabled) connectionStatus.textContent = 'To review permissions, open Agent’s local address on the computer running it.';
 
@@ -784,6 +856,17 @@ const homePage = `<!doctype html>
         }
       }
 
+      copyLocalConnectionURL.addEventListener('click', async function () {
+        const address = localConnectionURL.textContent;
+        if (localConnectionAddress.hidden || !address) return;
+        try {
+          await navigator.clipboard.writeText(address);
+          connectionFeedback('Local address copied.');
+        } catch (_) {
+          connectionFeedback('Copy unavailable. Select and copy the local address manually.', true);
+        }
+      });
+
       checkConnectionButton.addEventListener('click', async function () {
         if (connectionBusy || connectionRefresh) return;
         providerError.hidden = true;
@@ -815,9 +898,40 @@ const homePage = `<!doctype html>
         if (change.action !== 'disconnect') connectionPassword.focus();
       }
 
-      function authorizationChange(path, label, trigger) {
-        confirmConnectionChange({ action: 'authorize', path: path, expectedActive: activeProfileID,
-          title: 'Connect ChatGPT?', label: label, button: 'Continue to ChatGPT ↗', trigger: trigger || connectButton });
+      async function startChatGPTAuthorization(path, trigger) {
+        if (!localHost || connectionBusy || connectionRefresh) return;
+        const expectedActive = activeProfileID;
+        providerError.hidden = true;
+        connectionFeedback('Opening ChatGPT sign-in…');
+        connectionBusy = true;
+        updateConnectionControls();
+        let leaving = false;
+        try {
+          const response = await fetch(path, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ expected_active_profile_id: expectedActive })
+          });
+          let result = {};
+          if ((response.headers.get('content-type') || '').includes('application/json')) result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'ChatGPT sign-in could not be started. Please try again.');
+          if (typeof result.authorization_url !== 'string' || !result.authorization_url) throw new Error('ChatGPT did not return a sign-in address. Please try again.');
+          window.location.assign(result.authorization_url);
+          leaving = true;
+        } catch (failure) {
+          connectionFeedback('');
+          providerError.textContent = failure.message || 'ChatGPT sign-in could not be started. Please try again.';
+          providerError.hidden = false;
+          await refreshConnectionState();
+        } finally {
+          if (!leaving) {
+            connectionBusy = false;
+            updateConnectionControls();
+            if (!settingsPanel.hidden) {
+              const target = [trigger, connectButton, checkConnectionButton].find(control => control && !control.disabled && control.getClientRects().length);
+              if (target) target.focus();
+            }
+          }
+        }
       }
 
       connectButton.addEventListener('click', function () {
@@ -828,12 +942,12 @@ const homePage = `<!doctype html>
           accountSelect.focus();
           return;
         }
-        authorizationChange('/auth/start', selectedProfile ? (selectedProfile.label || 'ChatGPT account') : 'Connect your ChatGPT account to Agent.');
+        void startChatGPTAuthorization('/auth/start', connectButton);
       });
 
       addAccountButton.addEventListener('click', function () {
         if (!localHost || connectionBusy || connectionRefresh) return;
-        authorizationChange('/auth/start?mode=add', 'Add another ChatGPT account.', addAccountButton);
+        void startChatGPTAuthorization('/auth/start?mode=add', addAccountButton);
       });
 
       accountSelect.addEventListener('change', function () {
@@ -848,7 +962,7 @@ const homePage = `<!doctype html>
             providerError.hidden = false;
             return;
           }
-          authorizationChange('/auth/start?mode=retry&profile_id=' + encodeURIComponent(profileID), option.textContent, accountSelect);
+          void startChatGPTAuthorization('/auth/start?mode=retry&profile_id=' + encodeURIComponent(profileID), accountSelect);
           return;
         }
         confirmConnectionChange({ action: 'switch', profileID: profileID, title: 'Switch ChatGPT account?',
@@ -883,14 +997,13 @@ const homePage = `<!doctype html>
         const controls = Array.from(connectionConfirmForm.elements);
         const payload = { password: connectionPassword.value };
         connectionPassword.value = '';
-        if (change.action === 'authorize') payload.expected_active_profile_id = change.expectedActive;
-        else payload.profile_id = change.profileID;
+        payload.profile_id = change.profileID;
         controls.forEach(control => { control.disabled = true; });
         connectionConfirmForm.setAttribute('aria-busy', 'true');
         const confirm = document.getElementById('confirm-disconnect');
         confirm.textContent = 'Confirming…';
         try {
-          const response = await fetch(change.action === 'authorize' ? change.path : change.action === 'switch' ? '/api/auth/profiles/active' : '/api/auth/disconnect', {
+          const response = await fetch(change.action === 'switch' ? '/api/auth/profiles/active' : '/api/auth/disconnect', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify(payload)
           });
@@ -901,12 +1014,7 @@ const homePage = `<!doctype html>
             failure.passwordConfirmation = response.status === 401 || response.status === 429;
             throw failure;
           }
-          if (change.action === 'authorize') {
-            if (typeof result.authorization_url !== 'string' || !result.authorization_url) throw new Error('ChatGPT authorization could not be started. Please try again.');
-            disconnectDialog.close();
-            window.location.assign(result.authorization_url);
-            return;
-          }
+
           disconnectDialog.close();
           await refreshConnectionState();
           if (change.action === 'switch') connectionFeedback('Active ChatGPT account changed.');
@@ -945,6 +1053,13 @@ const homePage = `<!doctype html>
       });
 
       void requireSignIn();
+      window.addEventListener('pageshow', function (event) {
+        // Back navigation may restore the page with its outgoing sign-in lock.
+        if (event.persisted && !disconnectDialog.open) {
+          connectionBusy = false;
+          void requireSignIn();
+        }
+      });
 
       form.addEventListener('submit', async function (event) {
         event.preventDefault();

@@ -78,9 +78,13 @@ func TestConnectionPasswordOAuthStartsArePOSTAndLocal(t *testing.T) {
 	}
 	for _, mode := range []string{"", "?mode=add", "?mode=retry&profile_id=" + f.id} {
 		for _, host := range []string{"127.0.0.1:8080", "agent.example.test"} {
-			out = f.request("POST", "/auth/start"+mode, `{"password":"wrong-password","expected_active_profile_id":"`+f.id+`"}`, host)
-			if out.Code != 401 {
-				t.Fatalf("start missing password gate: %s %s: %d %s", host, mode, out.Code, out.Body.String())
+			out = f.request("POST", "/auth/start"+mode, `{"expected_active_profile_id":"`+f.id+`"}`, host)
+			want := http.StatusServiceUnavailable // Fixture callback is intentionally invalid.
+			if host == "agent.example.test" {
+				want = http.StatusForbidden
+			}
+			if out.Code != want {
+				t.Fatalf("password-free local start boundary: %s %s: %d %s", host, mode, out.Code, out.Body.String())
 			}
 		}
 	}
@@ -98,7 +102,7 @@ func TestConnectionPasswordOAuthJSONAndCapturedTarget(t *testing.T) {
 	mux.Handle("POST /auth/start", f.accounts.scopedPasswordSIWCHandler(service, true, (*siwcService).startHandler))
 	f.server = mux
 	for _, expected := range []string{"", "profile_abcdefghijklmnopqrstuv"} {
-		out := f.request("POST", "/auth/start", `{"password":"correct-horse-battery","expected_active_profile_id":"`+expected+`"}`, "127.0.0.1:8080")
+		out := f.request("POST", "/auth/start", `{"expected_active_profile_id":"`+expected+`"}`, "127.0.0.1:8080")
 		if out.Code != 409 {
 			t.Fatalf("changed target: %d %s", out.Code, out.Body.String())
 		}
@@ -106,7 +110,7 @@ func TestConnectionPasswordOAuthJSONAndCapturedTarget(t *testing.T) {
 			t.Fatal("stale confirmation started authorization")
 		}
 	}
-	req := httptest.NewRequest("POST", "/auth/start", strings.NewReader(`{"password":"correct-horse-battery","expected_active_profile_id":"`+f.id+`"}`))
+	req := httptest.NewRequest("POST", "/auth/start", strings.NewReader(`{"expected_active_profile_id":"`+f.id+`"}`))
 	req.Host = "127.0.0.1:8080"
 	req.AddCookie(f.cookie)
 	req.Header.Set("Content-Type", "application/json")

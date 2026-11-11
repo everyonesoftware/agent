@@ -34,9 +34,12 @@ let activeProfile = 'p1';
 let profileFailure = false;
 let disconnectFailure = false;
 let connectionStatusFailure = false;
+let configuredLocalURL = 'http://127.0.0.1:8182';
 let profilesFailure = false;
 let modelsFailure = false;
 let connectionDelay = 0;
+let authorizationFailure = false;
+let authorizationDelay = 0;
 let modelsDelay = 0;
 let remoteRevoked = true;
 const providerProfiles = [
@@ -80,8 +83,11 @@ const server = createServer(async (req, res) => {
   if (url.pathname === '/auth/start') {
     let text = ''; for await (const chunk of req) text += chunk;
     const payload = text ? JSON.parse(text) : {};
-    if (req.method !== 'POST') { json(405, { error: 'Use password confirmation.' }); return; }
-    if (payload.password !== 'synthetic-test-only') { json(401, { error: 'Agent password is incorrect.' }); return; }
+    if (req.method !== 'POST') { json(405, { error: 'Use POST.' }); return; }
+    call.payload = { keys: Object.keys(payload), expected_active_profile_id: payload.expected_active_profile_id };
+    if ('password' in payload) { json(400, { error: 'Authorization must not submit an Agent password.' }); return; }
+    await new Promise(resolve => setTimeout(resolve, authorizationDelay));
+    if (authorizationFailure) { json(503, { error: 'Test authorization start unavailable.' }); return; }
     json(200, { authorization_url: origin + '/fixture/authorize' + url.search }); return;
   }
   if (url.pathname === '/fixture/authorize') {
@@ -94,7 +100,7 @@ const server = createServer(async (req, res) => {
   if (url.pathname === '/api/auth/status') {
     await new Promise(resolve => setTimeout(resolve, connectionDelay));
     const selected = providerProfiles.find(p => p.id === activeProfile);
-    json(connectionStatusFailure ? 503 : 200, connectionStatusFailure ? { error: 'Fixture status unavailable' } : { connected: selected?.connected || false, oauth_selected: selected?.oauth_selected || false, plan_usage_enabled: selected?.plan_usage_enabled || false }); return;
+    json(connectionStatusFailure ? 503 : 200, connectionStatusFailure ? { error: 'Fixture status unavailable' } : { connected: selected?.connected || false, oauth_selected: selected?.oauth_selected || false, plan_usage_enabled: selected?.plan_usage_enabled || false, local_url: configuredLocalURL }); return;
   }
   if (url.pathname === '/api/auth/profiles') { json(profilesFailure ? 503 : 200, profilesFailure ? { error: 'Fixture profiles unavailable' } : { active_profile_id: activeProfile, profiles: providerProfiles }); return; }
   if (url.pathname === '/api/auth/profiles/active') {
@@ -180,11 +186,14 @@ async function confirmChange(password = 'synthetic-test-only') {
   await click('#confirm-disconnect');
 }
 async function changeAccount(id) {
+  const pendingRegistration = await js(`document.querySelector('#account-select option[value="${id}"]')?.dataset.registrationPending==='true'`);
   await js(`document.querySelector('#account-select').value=${JSON.stringify(id)};document.querySelector('#account-select').dispatchEvent(new Event('change'))`);
-  await confirmChange();
+  if (!pendingRegistration) await confirmChange();
 }
 async function viewport(width, height) {
   await cdp('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 600 });
+  // Let responsive media-query handlers settle before clicking mobile controls.
+  await js('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
 }
 async function screenshot(name) {
   if (!process.env.UI_SCREENSHOTS) return;
@@ -242,7 +251,10 @@ try {
   ok(await js("!!document.querySelector('#settings-panel #account-select') && !!document.querySelector('#settings-panel #connect-chatgpt') && !!document.querySelector('#settings-panel #disconnect-chatgpt')"), 'ChatGPT connection management lives in Settings');
   await expectEventually("document.querySelector('#connection-badge')?.textContent==='Connected'", 'Connected subscription badge missing');
   ok(await js("document.querySelector('#connection-title').textContent==='ChatGPT connection' && !document.querySelector('.settings-card').textContent.includes('This connection is separate') && !document.querySelector('#connection-note')"), 'Option A keeps one concise connection explanation without repetitive notes');
+  ok(await js("document.querySelector('.connection-heading #check-chatgpt')?.tagName==='BUTTON' && !!document.querySelector('#check-chatgpt #connection-badge') && !!document.querySelector('#check-chatgpt svg') && !document.querySelector('.provider-actions #check-chatgpt')"), 'Refresh is part of the top-right status pill, not a separate action');
+  ok(await js("document.querySelector('#check-chatgpt').getAttribute('aria-label').includes('Refresh') && document.querySelector('#check-chatgpt').title.includes('Refresh')"), 'Status pill announces its refresh action');
   ok(await js("document.querySelector('#connection-status').hidden"), 'Ready local connection does not repeat the selected account or Connected badge');
+  ok(await js("document.querySelector('#local-connection-address').hidden"), 'Localhost does not show remote setup address instructions');
   const beforePasswordSwitch = calls.filter(call => call.path === '/api/auth/profiles/active').length;
   await js("document.querySelector('#account-select').value='p2';document.querySelector('#account-select').dispatchEvent(new Event('change'))");
   ok(await js("document.querySelector('#disconnect-dialog').open && document.querySelector('#connection-password').type==='password'"), 'Switching a connection asks for the Agent password');
@@ -392,21 +404,37 @@ try {
   ok(calls.findLast(call => call.path === '/api/auth/disconnect').payload.profile_id === 'p2', 'Disconnect submits the exact confirmed account');
   ok(await js("document.querySelector('#connection-badge').textContent==='Not connected' && document.querySelector('#disconnect-chatgpt').hidden && !document.querySelector('#connect-chatgpt').hidden"), 'Successful local disconnect removes connected indicators and offers reconnect');
   ok(providerProfiles[0].connected && authenticated, 'Disconnect preserves the other account and Agent sign-in');
+  authorizationFailure = true;
+  authorizationDelay = 200;
+  const startsBeforeFailure = calls.filter(call => call.path === '/auth/start').length;
   await click('#connect-chatgpt');
-  const handoffsBeforeWrongPassword = calls.filter(call => call.path === '/fixture/authorize').length;
-  await confirmChange('wrong-synthetic-only');
-  await expectEventually("!document.querySelector('#connection-confirm-error').hidden && !document.querySelector('#confirm-disconnect').disabled", 'Authorization password failure did not stay in the dialog');
-  ok(calls.filter(call => call.path === '/fixture/authorize').length === handoffsBeforeWrongPassword, 'Wrong password never starts provider authorization');
-  await confirmChange();
+  ok(await js("!document.querySelector('#disconnect-dialog').open && document.querySelector('#connect-chatgpt').disabled && document.querySelector('#check-chatgpt').disabled"), 'Local authorization starts directly without a password dialog and locks overlapping actions');
+  await click('#connect-chatgpt');
+  await expectEventually("document.querySelector('#provider-error').textContent.includes('authorization start unavailable') && !document.querySelector('#connect-chatgpt').disabled", 'Authorization failure was not shown inline for retry');
+  ok(calls.filter(call => call.path === '/auth/start').length === startsBeforeFailure + 1, 'Double-clicking connect cannot create duplicate authorization starts');
+  authorizationFailure = false;
+  authorizationDelay = 0;
+  await click('#connect-chatgpt');
   await expectEventually("document.querySelector('#chat-app') && !document.querySelector('#chat-app').hidden && !document.querySelector('#check-chatgpt').disabled", 'Reconnection route handoff did not return');
   ok(calls.some(call => call.path === '/auth/start' && call.query === ''), 'Reconnect uses the existing ChatGPT authorization route');
   await click('#settings-button');
   await expectEventually("!document.querySelector('#check-chatgpt').disabled", 'Settings refresh unfinished');
-  connectionDelay = 250;
+  connectionDelay = 750;
+  const checksBeforeKeyboard = calls.filter(call => call.path === '/api/auth/status').length;
+  await cdp('Page.bringToFront');
+  await js("document.querySelector('#check-chatgpt').focus()");
+  await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r',unmodifiedText:'\r'});
+  await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+  await expectEventually("document.querySelector('#check-chatgpt').disabled", 'Keyboard Enter did not start refreshing the pill');
+  ok(await js("document.querySelector('#check-chatgpt').disabled && document.querySelector('#check-chatgpt').textContent==='Checking…' && document.querySelector('#check-chatgpt').getAttribute('aria-busy')==='true' && !!document.querySelector('#check-chatgpt svg') && document.querySelector('#disconnect-chatgpt').disabled"), 'Keyboard refresh shows a busy pill and prevents overlapping account mutations');
   await click('#check-chatgpt');
-  ok(await js("document.querySelector('#check-chatgpt').disabled && document.querySelector('#check-chatgpt').textContent==='Checking…' && document.querySelector('#disconnect-chatgpt').disabled"), 'Connection check prevents overlapping account mutations');
   await expectEventually("document.querySelector('#provider-feedback').textContent==='Connection status refreshed.' && !document.querySelector('#check-chatgpt').disabled", 'Connection check did not finish');
+  ok(calls.filter(call => call.path === '/api/auth/status').length === checksBeforeKeyboard + 1, 'Repeated activation while refreshing sends only one status request');
   connectionDelay = 0;
+  const statusCallsBeforeRestore = calls.filter(call => call.path === '/api/auth/status').length;
+  await js("window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}))");
+  await until(() => calls.filter(call => call.path === '/api/auth/status').length > statusCallsBeforeRestore, 'Restored page did not refresh its status');
+  await expectEventually("!document.querySelector('#check-chatgpt').disabled", 'Restored page did not recheck sign-in and unlock connection controls');
   modelsDelay = 400;
   const modelsBeforeCheck = calls.filter(call=>call.path==='/api/models').length;
   await click('#check-chatgpt');
@@ -453,7 +481,6 @@ try {
   await click('#check-chatgpt');
   await expectEventually("!document.querySelector('#check-chatgpt').disabled", 'Active profile check stuck');
   await click('#add-chatgpt-account');
-  await confirmChange();
   await expectEventually("document.querySelector('#account-select')?.value==='p3' && !document.querySelector('#check-chatgpt').disabled", 'Add-account route handoff failed');
   ok(calls.some(call => call.path === '/auth/start' && call.query === '?mode=add'), 'Add account uses the dedicated authorization mode');
   providerProfiles.push({id:'pending',label:'Incomplete',registration_pending:true,oauth_selected:true}, {id:'pending-two',label:'Other incomplete',registration_pending:true,oauth_selected:true});
@@ -468,7 +495,7 @@ try {
   await changeAccount('pending');
   await expectEventually("document.querySelector('#account-select')?.value==='pending' && !document.querySelector('#check-chatgpt').disabled", 'Pending account resume failed');
   ok(calls.some(call => call.path === '/auth/start' && call.query === '?mode=retry&profile_id=pending'), 'Incomplete account resumes its exact authorization without selecting it prematurely');
-  ok(calls.filter(call => call.path === '/auth/start').every(call => call.method === 'POST' && !call.query.includes('password')), 'Every authorization start confirms by POST without putting passwords in URLs');
+  ok(calls.filter(call => call.path === '/auth/start').every(call => call.method === 'POST' && !call.query.includes('password') && !call.payload.keys.includes('password')), 'Every local authorization start uses POST without submitting an Agent password');
   remoteRevoked = true;
   await click('#settings-button');
   await expectEventually("!document.querySelector('#check-chatgpt').disabled", 'Settings refresh unfinished');
@@ -476,7 +503,6 @@ try {
   await expectEventually("document.querySelector('#provider-feedback').textContent==='Disconnected from ChatGPT on this host.' && !document.querySelector('#check-chatgpt').disabled", 'Confirmed disconnect success missing');
   ok(await js("!document.querySelector('#provider-feedback').classList.contains('warning')"), 'Confirmed remote revocation shows success rather than a warning');
   await click('#connect-chatgpt');
-  await confirmChange();
   await expectEventually("document.querySelector('#account-select')?.value==='pending' && !document.querySelector('#check-chatgpt').disabled", 'Reconnect after confirmed disconnect failed');
   await click('#new-chat');
   ok(await visible('#welcome'), 'New conversation resets the conversation view');
@@ -569,7 +595,37 @@ try {
   await expectEventually("document.querySelector('#chat-app') && !document.querySelector('#chat-app').hidden && !document.querySelector('#check-chatgpt').disabled", 'Remote workspace did not load');
   await click('#settings-button');
   await expectEventually("!document.querySelector('#check-chatgpt').disabled", 'Remote status refresh unfinished');
-  ok(await js("document.querySelector('#connect-chatgpt').hidden && document.querySelector('#add-chatgpt-account').hidden && !document.querySelector('#disconnect-chatgpt').hidden && !document.querySelector('#account-select').hidden && document.querySelector('#connection-status').textContent.includes('local address')"), 'Remote Settings allows existing-account management and explains the separate local authorization handoff');
+  ok(await js("document.querySelector('#connect-chatgpt').hidden && document.querySelector('#add-chatgpt-account').hidden && !document.querySelector('#disconnect-chatgpt').hidden && !document.querySelector('#account-select').hidden && !document.querySelector('#remote-connection-help').hidden && !document.querySelector('#remote-connection-help').open && document.querySelector('#connection-status').hidden"), 'Ready remote connection keeps Disconnect visible and setup instructions collapsed without redundant ready copy');
+  await screenshot('agent-panel-remote-connected');
+  await js("document.querySelector('#remote-connection-help').open=true");
+  ok(await js("document.querySelectorAll('#remote-connection-setup ol > li').length===3 && document.querySelector('#remote-connection-setup').textContent.includes('same Agent account') && document.querySelector('#remote-connection-setup').textContent.includes('status pill')"), 'Remote setup provides the three approved steps and points to the refresh pill');
+  ok(await js("document.querySelector('#remote-connection-action').textContent.includes('Add account')"), 'Connected setup guidance names the actual available localhost action');
+  ok(await js("!document.querySelector('#local-connection-address').hidden && document.querySelector('#local-connection-url').textContent==='http://127.0.0.1:8182'"), 'Remote setup shows the configured callback origin, not the container port or remote host');
+  await js("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.copiedLocalURL=value;}}})");
+  await click('#copy-local-connection-url');
+  await expectEventually("window.copiedLocalURL==='http://127.0.0.1:8182' && document.querySelector('#provider-feedback').textContent==='Local address copied.'", 'Configured address was not copied');
+  await js("navigator.clipboard.writeText=async()=>{throw new Error('Test clipboard rejection')}");
+  await click('#copy-local-connection-url');
+  await expectEventually("document.querySelector('#provider-feedback').textContent.includes('Select and copy the local address manually.')", 'Clipboard failure must offer manual copying');
+  for (const [width, height] of [[1280,850],[390,640]]) {
+    await viewport(width,height);
+    ok(await js("document.documentElement.scrollWidth<=innerWidth && document.querySelector('#local-connection-address').getBoundingClientRect().right<=innerWidth"), `Configured local address fits ${width}x${height}`);
+    await screenshot('agent-configured-local-address-' + width);
+  }
+  await viewport(1280,850);
+  configuredLocalURL = '';
+  await click('#check-chatgpt');
+  await expectEventually("!document.querySelector('#check-chatgpt').disabled", 'Invalid config refresh stuck');
+  ok(await js("document.querySelector('#local-connection-address').hidden && document.querySelector('#local-connection-url').textContent==='' && !document.querySelector('#local-connection-config-error').hidden"), 'Invalid configuration clears the stale address and shows an actionable warning');
+  configuredLocalURL = 'http://127.0.0.1:9090';
+  await click('#check-chatgpt');
+  await expectEventually("document.querySelector('#local-connection-url').textContent==='http://127.0.0.1:9090' && !document.querySelector('#check-chatgpt').disabled", 'New configured address did not replace the old one');
+  connectionStatusFailure = true;
+  await click('#check-chatgpt');
+  await expectEventually("!document.querySelector('#check-chatgpt').disabled", 'Status failure refresh stuck');
+  ok(await js("document.querySelector('#local-connection-address').hidden && document.querySelector('#local-connection-url').textContent==='' && document.querySelector('#local-connection-config-error').hidden"), 'Status failure does not show a stale address or misreport a configuration error');
+  await screenshot('agent-panel-unavailable');
+  connectionStatusFailure = false;
   await click('#check-chatgpt');
   await expectEventually("!document.querySelector('#check-chatgpt').disabled", 'Remote status check stuck');
   ok(await js("!document.querySelector('#disconnect-dialog').open"), 'Remote status checks do not require password confirmation');
@@ -584,6 +640,17 @@ try {
   await confirmChange();
   await expectEventually("document.querySelector('#disconnect-chatgpt').hidden && !document.querySelector('#check-chatgpt').disabled", 'Remote password-confirmed disconnect failed');
   ok(!providerProfiles.find(p => p.id === 'p1').connected && authenticated, 'Remote disconnect changes only the selected connection and preserves Agent sign-in');
+  ok(await js("!document.querySelector('#local-connection-address').hidden && document.querySelector('#local-connection-url').textContent==='http://127.0.0.1:9090'"), 'Disconnected remote users retain the configured local setup address');
+  ok(await js("!document.querySelector('#remote-connection-setup').hidden && !document.querySelector('#remote-connection-setup').closest('details') && document.querySelector('#provider-actions').hidden"), 'Disconnected remote setup shows the checklist directly without an empty action row');
+  for (const [width,height] of [[1280,850],[390,640],[360,640]]) {
+    await viewport(width,height);
+    ok(await js("document.documentElement.scrollWidth<=innerWidth && document.documentElement.scrollHeight<=innerHeight && document.querySelector('#settings-panel').scrollWidth<=document.querySelector('#settings-panel').clientWidth"), `Remote setup remains inside the settings scroll pane at ${width}x${height}`);
+    if (width < 600) ok(await js("document.querySelector('#check-chatgpt').getBoundingClientRect().height>=44"), 'Phone refresh pill retains a 44px touch target');
+    await js("document.querySelector('#settings-panel').scrollTop=0");
+    await screenshot('agent-panel-remote-setup-' + width);
+    await js("document.querySelector('#settings-panel').scrollTop=document.querySelector('#settings-panel').scrollHeight");
+    ok(await js("document.querySelector('#logout-button').getBoundingClientRect().bottom<=innerHeight"), 'Settings below the setup checklist remain reachable by scrolling');
+  }
   ok(!remoteCalls.some(call => call.path === '/auth/start'), 'Remote management never starts an unsupported authorization flow');
   await screenshot('agent-settings-remote');
   await cdp('Page.navigate',{url:origin});

@@ -55,8 +55,8 @@ func (l *connectionPasswordLimiter) allow(userID string) bool {
 	return true
 }
 
-// Only production account-scoped routes call the inner connection handlers.
-// Passwords are consumed here and never forwarded to provider/storage handlers.
+// Production starts are authenticated/local-only; other connection mutations
+// require password confirmation. Passwords are never forwarded to providers.
 func (s *accountStore) scopedPasswordSIWCHandler(base *siwcService, start bool, handler func(*siwcService, http.ResponseWriter, *http.Request)) http.Handler {
 	return s.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
@@ -70,11 +70,11 @@ func (s *accountStore) scopedPasswordSIWCHandler(base *siwcService, start bool, 
 		}
 		user, _ := currentAuthUser(r.Context())
 		r.Body = http.MaxBytesReader(w, r.Body, 4096)
-		var body struct {
+		body := &struct {
 			ProfileID               string  `json:"profile_id,omitempty"`
 			Password                string  `json:"password"`
 			ExpectedActiveProfileID *string `json:"expected_active_profile_id,omitempty"`
-		}
+		}{}
 		mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		if start && mediaType == "application/x-www-form-urlencoded" {
 			if r.ParseForm() != nil || len(r.PostForm["password"]) != 1 {
@@ -94,10 +94,31 @@ func (s *accountStore) scopedPasswordSIWCHandler(base *siwcService, start bool, 
 		} else {
 			decoder := json.NewDecoder(r.Body)
 			decoder.DisallowUnknownFields()
-			if decoder.Decode(&body) != nil || decoder.Decode(new(any)) != io.EOF || (start && body.ProfileID != "") {
+			if decoder.Decode(&body) != nil || body == nil || decoder.Decode(new(any)) != io.EOF || (start && body.ProfileID != "") {
 				writeChatError(w, http.StatusBadRequest, "Enter a valid connection confirmation.")
 				return
 			}
+		}
+		// Starting OAuth is local-only and authenticated, but does not confirm a
+		// password. Keep it outside the password limiter and expensive bcrypt gate
+		// used for selecting and disconnecting saved connections.
+		if start {
+			if !isLoopbackHost(r.Host) {
+				writeChatError(w, http.StatusForbidden, "ChatGPT authorization requires a browser on the local Agent host because the callback uses loopback.")
+				return
+			}
+			if r.URL.Query().Get("mode") == "" && body.ExpectedActiveProfileID == nil {
+				writeChatError(w, http.StatusBadRequest, "Confirm the current ChatGPT account before reconnecting.")
+				return
+			}
+			if body.ExpectedActiveProfileID != nil {
+				r = r.WithContext(context.WithValue(r.Context(), expectedConnectionProfileKey{}, *body.ExpectedActiveProfileID))
+			}
+			r.Body = io.NopCloser(strings.NewReader(""))
+			r.Form = nil
+			r.PostForm = nil
+			handler(s.siwcForUser(base, user), w, r)
+			return
 		}
 		if !s.connectionPasswords.allow(user.ID) {
 			w.Header().Set("Retry-After", "60")
@@ -156,25 +177,10 @@ func (s *accountStore) scopedPasswordSIWCHandler(base *siwcService, start bool, 
 			writeChatError(w, http.StatusServiceUnavailable, "Password confirmation is unavailable.")
 			return
 		}
-		if start && !isLoopbackHost(r.Host) {
-			writeChatError(w, http.StatusForbidden, "ChatGPT authorization requires a browser on the local Agent host because the callback uses loopback.")
-			return
-		}
-		if start {
-			if r.URL.Query().Get("mode") == "" && body.ExpectedActiveProfileID == nil {
-				writeChatError(w, http.StatusBadRequest, "Confirm the current ChatGPT account before reconnecting.")
-				return
-			}
-			if body.ExpectedActiveProfileID != nil {
-				r = r.WithContext(context.WithValue(r.Context(), expectedConnectionProfileKey{}, *body.ExpectedActiveProfileID))
-			}
-			r.Body = io.NopCloser(strings.NewReader(""))
-		} else {
-			payload, _ := json.Marshal(struct {
-				ProfileID string `json:"profile_id"`
-			}{body.ProfileID})
-			r.Body = io.NopCloser(bytes.NewReader(payload))
-		}
+		payload, _ := json.Marshal(struct {
+			ProfileID string `json:"profile_id"`
+		}{body.ProfileID})
+		r.Body = io.NopCloser(bytes.NewReader(payload))
 		r.Form = nil
 		r.PostForm = nil
 		handler(s.siwcForUser(base, user), w, r)

@@ -146,11 +146,11 @@ func TestAuthStatusSeparatesSignInFromPlanUsagePermission(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
 	recorder := httptest.NewRecorder()
 	service.statusHandler(recorder, request)
-	var status map[string]bool
+	var status map[string]any
 	if err := json.NewDecoder(recorder.Body).Decode(&status); err != nil {
 		t.Fatalf("decode auth status: %v", err)
 	}
-	if !status["connected"] || !status["oauth_selected"] || status["plan_usage_enabled"] {
+	if status["connected"] != true || status["oauth_selected"] != true || status["plan_usage_enabled"] != false {
 		t.Fatalf("status = %#v; expected sign-in without ChatGPT plan usage", status)
 	}
 	provider := &hybridProvider{oauth: &responsesProvider{auth: service}}
@@ -815,11 +815,11 @@ func TestTerminalRefreshFailureClearsTokensAndOffersReauthorization(t *testing.T
 	statusRequest := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
 	statusRecorder := httptest.NewRecorder()
 	service.statusHandler(statusRecorder, statusRequest)
-	var status map[string]bool
+	var status map[string]any
 	if err := json.NewDecoder(statusRecorder.Body).Decode(&status); err != nil {
 		t.Fatalf("decode expired-session status: %v", err)
 	}
-	if status["connected"] || !status["oauth_selected"] || status["plan_usage_enabled"] {
+	if status["connected"] != false || status["oauth_selected"] != true || status["plan_usage_enabled"] != false {
 		t.Fatalf("expired OAuth state should offer reauthorization without API fallback: %#v", status)
 	}
 	service.config.authorizeURL = siwcAuthorizeURL

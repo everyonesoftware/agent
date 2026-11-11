@@ -879,7 +879,15 @@ func (s *siwcService) statusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeChatJSON(w, http.StatusOK, map[string]bool{"connected": connected, "oauth_selected": oauthSelected, "plan_usage_enabled": planUsageEnabled})
+	localURL := ""
+	if validSIWCRedirectURI(s.config.redirectURI) {
+		callback, _ := url.Parse(s.config.redirectURI)
+		localURL = callback.Scheme + "://" + callback.Host
+	}
+	writeChatJSON(w, http.StatusOK, map[string]any{
+		"connected": connected, "oauth_selected": oauthSelected,
+		"plan_usage_enabled": planUsageEnabled, "local_url": localURL,
+	})
 }
 
 func (s *siwcService) disconnectHandler(w http.ResponseWriter, r *http.Request) {
