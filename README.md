@@ -1,6 +1,6 @@
-# EveryoneAgent
+# Agent
 
-A private, self-hosted chatbot for a small household. Each person creates a local EveryoneAgent account, connects their own ChatGPT account, and gets separate saved conversations. User accounts, sessions, and conversation histories are stored in a local SQLite database; no hosted identity or database service is used.
+A private, self-hosted chatbot for a small household. Each person creates a local Agent account, connects their own ChatGPT account, and gets separate saved conversations. User accounts, sessions, and conversation histories are stored in a local SQLite database; no hosted identity or database service is used.
 
 ## Run locally
 
@@ -14,11 +14,11 @@ Copy-Item .env.example .env
 docker compose up -d
 ```
 
-If OpenAI enables plan usage for this app and the account is eligible, no API key or API credits are required for that path. The flow is experimental; live authorization and eligibility have not been verified. Public repository visibility alone does not guarantee OpenAI approval. After signing in to EveryoneAgent, select **Continue with ChatGPT** to connect the ChatGPT account for that EveryoneAgent user. ChatGPT authorization uses a loopback callback, so complete the connection from a browser on the Windows PC running Docker Desktop at `http://127.0.0.1:8080`. Every app user manages their own ChatGPT profiles and model selection; profiles are not shared between app users.
+If OpenAI enables plan usage for this app and the account is eligible, no API key or API credits are required for that path. The flow is experimental; live authorization and eligibility have not been verified. Public repository visibility alone does not guarantee OpenAI approval. After signing in to Agent, select **Continue with ChatGPT** to connect the ChatGPT account for that Agent user. ChatGPT authorization uses a loopback callback, so complete the connection from a browser on the Windows PC running Docker Desktop at `http://127.0.0.1:8080`. Every app user manages their own ChatGPT profiles and model selection; profiles are not shared between app users.
 
-Create an EveryoneAgent account in the app using a username and password of at least 12 characters. Passwords are hashed with bcrypt; browser sessions use random tokens whose hashes are stored in SQLite. Sign-in is required for chat, model discovery, ChatGPT account management, and conversation history. Each EveryoneAgent user has separate OAuth profile files under `/data/account-data/` and separate conversation rows in `/data/everyoneagent.sqlite`. ChatGPT refresh tokens are kept server-side and never returned to the browser. New database and credential files request owner-only permissions; existing host directory permissions are left unchanged. Data is not encrypted at rest, so protect and back up the data storage accordingly. Disconnecting clears the selected user's profile session tokens but retains the registration for safe reauthorization; revoke the app's usage access in ChatGPT settings to revoke remotely.
+Create an Agent account in the app using a username and password of at least 12 characters. Passwords are hashed with bcrypt; browser sessions use random tokens whose hashes are stored in SQLite. Sign-in is required for chat, model discovery, ChatGPT account management, and conversation history. Each Agent user has separate OAuth profile files under `/data/account-data/` and separate conversation rows in `/data/everyoneagent.sqlite`. ChatGPT refresh tokens are kept server-side and never returned to the browser. New database and credential files request owner-only permissions; existing host directory permissions are left unchanged. Data is not encrypted at rest, so protect and back up the data storage accordingly. Disconnecting clears the selected user's profile session tokens but retains the registration for safe reauthorization; revoke the app's usage access in ChatGPT settings to revoke remotely.
 
-ChatGPT sign-in uses the existing loopback callback. Complete **Continue with ChatGPT** from a browser on the Windows PC running Docker Desktop, and sign in to the ChatGPT account that belongs to the currently logged-in EveryoneAgent user. Each user must connect their own account; their plan allowance is not shared through EveryoneAgent with other app users, though ChatGPT may apply the same subscription limits across other apps using that account. The OAuth flow remains experimental and live authorization/eligibility have not been verified.
+ChatGPT sign-in uses the existing loopback callback. Complete **Continue with ChatGPT** from a browser on the Windows PC running Docker Desktop, and sign in to the ChatGPT account that belongs to the currently logged-in Agent user. Each user must connect their own account; their plan allowance is not shared through Agent with other app users, though ChatGPT may apply the same subscription limits across other apps using that account. The OAuth flow remains experimental and live authorization/eligibility have not been verified.
 
 An OpenAI-compatible API key or local model remains available as a fallback. `LLM_BASE_URL` defaults to the OpenAI API base URL, `LLM_MODEL` selects the fallback model, and `LLM_API_KEY` is sent as a bearer key when set. For a local model, set `LLM_BASE_URL` to that provider's OpenAI-compatible API base and leave `LLM_API_KEY` blank if it does not require one. API-key requests use separate API billing. The application sends chat requests through the server; the key is not sent to the browser. `.env` is excluded from Git and the Docker build context.
 
@@ -68,11 +68,17 @@ data deletion is required to use a bind mount with the same existing data.
 
 ## Interface and development checks
 
+The interface is branded **Agent**, with a compact **e1** mark on login and in the
+sidebar. Existing database, session cookie, model preference, executable, and Compose
+identifiers retain their original `everyoneagent` names for compatibility; no data
+migration is needed. New ChatGPT registrations request the Agent display name;
+previously registered connections retain their existing provider-side identity.
+
 The Focus interface uses a dark chat workspace with searchable conversation history
 in the left sidebar, the current user at the bottom left, and model selection in
 the message composer. Open the user menu to manage connected ChatGPT accounts or
 sign out. On phones, the header menu opens session history over the conversation.
-The Quiet entry login keeps local EveryoneAgent sign-in separate from connecting
+The Quiet entry login keeps local Agent sign-in separate from connecting
 a ChatGPT account afterward.
 
 Run backend tests and build with Go 1.25:

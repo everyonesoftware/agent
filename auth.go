@@ -98,7 +98,7 @@ func (s *accountStore) scopedLocalSIWCHandler(base *siwcService, handler func(*s
 	protected := s.scopedSIWCHandler(base, handler)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isLoopbackHost(r.Host) || requestIsCrossSite(r) {
-			http.Error(w, "Manage ChatGPT accounts from a browser on the EveryoneAgent host.", http.StatusForbidden)
+			http.Error(w, "Manage ChatGPT accounts from a browser on the Agent host.", http.StatusForbidden)
 			return
 		}
 		protected.ServeHTTP(w, r)
@@ -108,7 +108,7 @@ func (s *accountStore) scopedLocalSIWCHandler(base *siwcService, handler func(*s
 func (s *accountStore) scopedOAuthCallbackHandler(base *siwcService, handler func(*siwcService, http.ResponseWriter, *http.Request)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isLoopbackHost(r.Host) {
-			http.Error(w, "Sign-in callbacks are accepted only on the local EveryoneAgent host.", http.StatusForbidden)
+			http.Error(w, "Sign-in callbacks are accepted only on the local Agent host.", http.StatusForbidden)
 			return
 		}
 		s.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

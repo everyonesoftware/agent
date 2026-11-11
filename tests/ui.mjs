@@ -154,11 +154,14 @@ try {
   await viewport(1280, 850);
   await cdp('Page.navigate', { url: origin });
   await until(() => visible('#auth-gate'), 'Login missing');
+  ok(await js("document.title==='Agent' && document.querySelector('.auth-header .brand').textContent==='e1Agent' && document.querySelector('.auth-header .mark').textContent==='e1'"), 'Login uses the Agent name and e1 mark');
+  ok(await js("!document.body.textContent.includes('EveryoneAgent') && document.querySelector('#account-mode-label').textContent==='New to Agent?'"), 'Login copy uses the new display name');
   ok(await visible('#toggle-password'), 'Quiet entry has password visibility control');
   ok(await js("[document.body, document.documentElement].some(e=>getComputedStyle(e).backgroundColor === 'rgb(32, 35, 34)')"), 'Focus charcoal theme applied');
   await screenshot('agent-login-desktop');
   await click('#toggle-account-mode');
   ok(await js("document.querySelector('#password-input').autocomplete==='new-password' && !document.querySelector('#password-hint').hidden"), 'Account creation preserves password requirements');
+  ok(await js("document.querySelector('#auth-intro').textContent==='Create your personal Agent account.'"), 'Create-account mode uses Agent branding');
   await click('#toggle-account-mode'); await click('#toggle-password');
   ok(await js("document.querySelector('#password-input').type==='text'"), 'Password visibility toggles');
   await click('#toggle-password');
@@ -171,10 +174,12 @@ try {
   await js("document.querySelector('#username-input').value='ui-test';document.querySelector('#password-input').value='synthetic-test-only';document.querySelector('#account-form').requestSubmit()");
   await expectEventually("!document.querySelector('#chat-app').hidden && document.querySelectorAll('#conversation-list button').length>=3", 'Signed-in history missing');
   ok(calls.some(call => call.path === '/api/auth/register'), 'Create-account form uses the existing registration API');
+  ok(await js("document.querySelector('.sidebar .brand').textContent==='e1Agent' && document.querySelector('#message-input').placeholder==='Message Agent'"), 'Chat sidebar and composer use the approved rebrand');
   ok(await js("document.querySelector('#current-username').textContent==='Browser Test'"), 'Bottom-left profile shows authenticated user');
   ok(!(await js("!!document.querySelector('#conversation-list img')")), 'Conversation titles are text, not injected HTML');
   await session('A quieter week');
   await expectEventually("document.querySelector('#messages').textContent.includes('Leave two evenings open.')", 'Saved conversation did not load');
+  ok(await js("document.querySelector('.message.assistant .sender').textContent==='Agent' && document.querySelector('.message.user .sender').textContent==='You'"), 'Saved messages display Agent without changing the user label');
   ok(await js("document.querySelector('#conversation-title').textContent==='A quieter week' && !!document.querySelector('#conversation-list [aria-current=\"true\"]')"), 'Saved-session selection updates title and current row');
   await js("const search=document.querySelector('#conversation-search');search.value='dinner';search.dispatchEvent(new Event('input'))");
   ok(await js("Array.from(document.querySelectorAll('#conversation-list button')).filter(b=>b.getClientRects().length).length===1"), 'Session search filters the sidebar');

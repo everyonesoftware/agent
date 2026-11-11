@@ -27,7 +27,7 @@ func (s *siwcService) profilesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !isLoopbackHost(r.Host) || requestIsCrossSite(r) {
-		http.Error(w, "Manage ChatGPT accounts from a browser on the EveryoneAgent host.", http.StatusForbidden)
+		http.Error(w, "Manage ChatGPT accounts from a browser on the Agent host.", http.StatusForbidden)
 		return
 	}
 	profiles, err := s.store.ListProfiles()
@@ -62,7 +62,7 @@ func (s *siwcService) selectProfileHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if !isLoopbackHost(r.Host) || requestIsCrossSite(r) {
-		http.Error(w, "Manage ChatGPT accounts from a browser on the EveryoneAgent host.", http.StatusForbidden)
+		http.Error(w, "Manage ChatGPT accounts from a browser on the Agent host.", http.StatusForbidden)
 		return
 	}
 	var body struct {

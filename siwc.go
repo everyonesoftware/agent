@@ -33,7 +33,7 @@ const (
 	siwcIssuer       = "https://auth.openai.com"
 	siwcResource     = "https://api.openai.com/v1"
 	siwcClientID     = "dynamic_agent_client"
-	siwcAgentName    = "EveryoneAgent"
+	siwcAgentName    = "Agent"
 	siwcScope        = "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct"
 )
 
@@ -700,7 +700,7 @@ func (s *siwcService) startHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !isLoopbackHost(r.Host) || requestIsCrossSite(r) {
-		http.Error(w, "Start ChatGPT sign-in from a browser on the EveryoneAgent host.", http.StatusForbidden)
+		http.Error(w, "Start ChatGPT sign-in from a browser on the Agent host.", http.StatusForbidden)
 		return
 	}
 	if !validSIWCRedirectURI(s.config.redirectURI) {
@@ -878,7 +878,7 @@ func (s *siwcService) disconnectHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if !isLoopbackHost(r.Host) || requestIsCrossSite(r) {
-		http.Error(w, "Manage the ChatGPT connection from a browser on the EveryoneAgent host.", http.StatusForbidden)
+		http.Error(w, "Manage the ChatGPT connection from a browser on the Agent host.", http.StatusForbidden)
 		return
 	}
 	s.tokenMu.Lock()
@@ -1157,7 +1157,7 @@ func (s *siwcService) callbackHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !isLoopbackHost(r.Host) {
-		http.Error(w, "Sign-in callbacks are accepted only on the local EveryoneAgent host.", http.StatusForbidden)
+		http.Error(w, "Sign-in callbacks are accepted only on the local Agent host.", http.StatusForbidden)
 		return
 	}
 	state := r.URL.Query().Get("state")
@@ -1169,11 +1169,11 @@ func (s *siwcService) callbackHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Unlock()
 	if !validState {
-		http.Error(w, "This sign-in request is invalid or has expired. Start again from EveryoneAgent.", http.StatusBadRequest)
+		http.Error(w, "This sign-in request is invalid or has expired. Start again from Agent.", http.StatusBadRequest)
 		return
 	}
 	if r.URL.Query().Get("error") != "" {
-		http.Error(w, "ChatGPT sign-in was not completed. Return to EveryoneAgent and try again.", http.StatusBadRequest)
+		http.Error(w, "ChatGPT sign-in was not completed. Return to Agent and try again.", http.StatusBadRequest)
 		return
 	}
 	code := r.URL.Query().Get("code")
@@ -1190,7 +1190,7 @@ func (s *siwcService) callbackHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		clientID = callbackClientID
 	} else if callbackClientID != "" && callbackClientID != pending.clientID {
-		http.Error(w, "ChatGPT returned a different application registration. Start again from EveryoneAgent.", http.StatusBadRequest)
+		http.Error(w, "ChatGPT returned a different application registration. Start again from Agent.", http.StatusBadRequest)
 		return
 	}
 	if pending.newRegistration {
@@ -1212,7 +1212,7 @@ func (s *siwcService) callbackHandler(w http.ResponseWriter, r *http.Request) {
 	identity, err := s.verifier.Verify(r.Context(), tokens.IDToken, clientID, pending.nonce)
 	if err != nil {
 		log.Print("ChatGPT sign-in failed kind=id_token_verification")
-		http.Error(w, "ChatGPT sign-in could not be verified. Return to EveryoneAgent and try again.", http.StatusBadGateway)
+		http.Error(w, "ChatGPT sign-in could not be verified. Return to Agent and try again.", http.StatusBadGateway)
 		return
 	}
 	if pending.expectedSubject != "" && identity.subject != pending.expectedSubject {
@@ -1264,14 +1264,14 @@ func (s *siwcService) callbackHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'")
-	connectionNotice := "ChatGPT sign-in completed, but plan usage is not enabled for this account. Return to EveryoneAgent and choose Continue with ChatGPT to review the permission."
+	connectionNotice := "ChatGPT sign-in completed, but plan usage is not enabled for this account. Return to Agent and choose Continue with ChatGPT to review the permission."
 	if hasPlanUsageScope(scopes) {
-		connectionNotice = "EveryoneAgent is authorized to use the ChatGPT plan for this household."
+		connectionNotice = "Agent is authorized to use the ChatGPT plan for this household."
 	}
 	if pending.newRegistration && pending.previousActiveID != "" {
-		connectionNotice = "The ChatGPT account was added. The active household account was not changed; choose the new account from the account selector on the EveryoneAgent host to use it."
+		connectionNotice = "The ChatGPT account was added. The active household account was not changed; choose the new account from the account selector on the Agent host to use it."
 	}
-	_, _ = fmt.Fprintf(w, "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>ChatGPT connected</title><body><main><h1>ChatGPT connected</h1><p>%s</p><p>%s</p><p><a href=\"/\">Return to EveryoneAgent</a></p></main></body></html>", html.EscapeString(connectionNotice), html.EscapeString(identity.email))
+	_, _ = fmt.Fprintf(w, "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>ChatGPT connected</title><body><main><h1>ChatGPT connected</h1><p>%s</p><p>%s</p><p><a href=\"/\">Return to Agent</a></p></main></body></html>", html.EscapeString(connectionNotice), html.EscapeString(identity.email))
 }
 
 func (s *siwcService) exchangeCode(ctx context.Context, code, clientID, verifier string) (siwcTokenResponse, error) {

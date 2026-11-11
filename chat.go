@@ -33,7 +33,7 @@ func chatHandler(provider modelProvider) http.HandlerFunc {
 func chatHandlerWithStore(provider modelProvider, accounts *accountStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !provider.configured() {
-			writeChatError(w, http.StatusServiceUnavailable, "Connect ChatGPT from a browser on the EveryoneAgent host, or configure LLM_MODEL and provider settings.")
+			writeChatError(w, http.StatusServiceUnavailable, "Connect ChatGPT from a browser on the Agent host, or configure LLM_MODEL and provider settings.")
 			return
 		}
 

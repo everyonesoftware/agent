@@ -6,7 +6,7 @@ const homePage = `<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>EveryoneAgent</title>
+  <title>Agent</title>
   <style>
     :root { color-scheme: dark; font: 14px/1.6 'Segoe UI', Arial, sans-serif; color: #e1e6e2; background: #202322; --muted: #a0aaa3; --line: #333936; --accent: #b4d6a3; --field: #252a27; }
     * { box-sizing: border-box; }
@@ -21,7 +21,7 @@ const homePage = `<!doctype html>
     button:disabled { opacity: .5; cursor: wait; }
     a { color: var(--accent); }
     .brand { display: flex; align-items: center; gap: 9px; color: #e1e6e2; font-size: 15px; font-weight: 600; letter-spacing: -.4px; }
-    .mark { display: grid; place-items: center; width: 26px; height: 26px; flex-shrink: 0; border-radius: 6px; color: #1c281a; background: var(--accent); font: 20px Georgia, serif; }
+    .mark { display: grid; place-items: center; width: 26px; height: 26px; flex-shrink: 0; border-radius: 6px; color: #1c281a; background: var(--accent); font: 17px Georgia, serif; letter-spacing: -1.2px; padding-right: 1px; }
     .app { position: relative; display: grid; grid-template-columns: 232px minmax(0, 1fr); width: 100%; height: 100vh; height: 100dvh; margin: 0; border: 0; background: #202322; }
     .sidebar { display: flex; flex-direction: column; gap: 18px; min-height: 0; padding: 25px 14px 12px; border-right: 1px solid var(--line); background: #181b1a; }
     .sidebar .brand { padding: 0 6px 8px; }
@@ -114,7 +114,7 @@ const homePage = `<!doctype html>
 </head>
 <body>
   <main class="auth-gate" id="auth-gate">
-    <header class="auth-header"><div class="brand"><span class="mark" aria-hidden="true">e</span>EveryoneAgent</div><small>Your personal conversation space</small></header>
+    <header class="auth-header"><div class="brand"><span class="mark" aria-hidden="true">e1</span>Agent</div><small>Your personal conversation space</small></header>
     <div class="auth-center"><div class="auth-content">
     <h1 id="auth-title">Welcome back.</h1>
     <p id="auth-intro">Sign in to pick up the conversation.</p>
@@ -127,14 +127,14 @@ const homePage = `<!doctype html>
       <p class="auth-error" id="auth-error" role="alert"></p>
       <button id="account-submit" type="submit">Sign in</button>
     </form>
-    <p class="auth-switch"><span id="account-mode-label">New to EveryoneAgent?</span> <button type="button" id="toggle-account-mode">Create an account</button></p>
+    <p class="auth-switch"><span id="account-mode-label">New to Agent?</span> <button type="button" id="toggle-account-mode">Create an account</button></p>
     </div></div>
-    <footer class="auth-footer"><span>EveryoneAgent · Your own space</span><span>Connect your ChatGPT account after signing in.</span></footer>
+    <footer class="auth-footer"><span>Agent · Your own space</span><span>Connect your ChatGPT account after signing in.</span></footer>
   </main>
   <main class="app" id="chat-app" hidden>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Close session navigation" tabindex="-1" hidden></button>
     <aside class="sidebar" id="session-sidebar" aria-label="Session navigation">
-      <div class="brand"><span class="mark" aria-hidden="true">e</span>EveryoneAgent</div>
+      <div class="brand"><span class="mark" aria-hidden="true">e1</span>Agent</div>
       <button class="reset new-chat" id="new-chat" type="button">＋ New conversation</button>
       <label class="search-label"><span class="visually-hidden">Search conversations</span><input type="search" id="conversation-search" placeholder="Search conversations" autocomplete="off"></label>
       <nav class="history" id="conversation-list" aria-label="Previous sessions"><p class="history-state">Loading conversations…</p></nav>
@@ -167,7 +167,7 @@ const homePage = `<!doctype html>
       <p class="notice" id="notice" role="status">Messages and replies are saved to your account after each successful request.</p>
       <form class="composer" id="chat-form" autocomplete="off">
         <label class="visually-hidden" for="message-input">Message</label>
-        <textarea id="message-input" name="message" rows="1" maxlength="8192" placeholder="Message EveryoneAgent" required></textarea>
+        <textarea id="message-input" name="message" rows="1" maxlength="8192" placeholder="Message Agent" required></textarea>
         <label class="visually-hidden" for="model-select">Model</label>
         <select class="model-select" id="model-select" disabled><option value="">Loading models…</option></select>
         <button class="send" id="send-button" type="submit">Send</button>
@@ -273,8 +273,8 @@ const homePage = `<!doctype html>
         if (authBusy) return;
         registering = !registering;
         document.getElementById('auth-title').textContent = registering ? 'Make yourself at home.' : 'Welcome back.';
-        document.getElementById('auth-intro').textContent = registering ? 'Create your personal EveryoneAgent account.' : 'Sign in to pick up the conversation.';
-        document.getElementById('account-mode-label').textContent = registering ? 'Already have an account?' : 'New to EveryoneAgent?';
+        document.getElementById('auth-intro').textContent = registering ? 'Create your personal Agent account.' : 'Sign in to pick up the conversation.';
+        document.getElementById('account-mode-label').textContent = registering ? 'Already have an account?' : 'New to Agent?';
         document.getElementById('password-hint').hidden = !registering;
         accountSubmit.textContent = registering ? 'Create account' : 'Sign in';
         accountModeButton.textContent = registering ? 'Sign in' : 'Create an account';
@@ -454,7 +454,7 @@ const homePage = `<!doctype html>
         bubble.className = 'message ' + role;
         const sender = document.createElement('div');
         sender.className = 'sender';
-        sender.textContent = role === 'user' ? 'You' : 'EveryoneAgent';
+        sender.textContent = role === 'user' ? 'You' : 'Agent';
         const text = document.createElement('div');
         text.className = 'message-text';
         text.textContent = content;
@@ -531,7 +531,7 @@ const homePage = `<!doctype html>
         connectionStatus.textContent = !statusAvailable
           ? 'ChatGPT connection status is unavailable.'
           : (connected && planUsageEnabled
-            ? accountPrefix + 'Connected. This EveryoneAgent account uses its ChatGPT plan allowance.'
+            ? accountPrefix + 'Connected. This Agent account uses its ChatGPT plan allowance.'
             : (connected
               ? accountPrefix + 'ChatGPT sign-in is connected, but plan usage is not enabled. Continue with ChatGPT to review the permission.'
               : (localHost
@@ -608,7 +608,7 @@ const homePage = `<!doctype html>
           await refreshConnectionState();
           connectionStatus.textContent = result.remote_revocation_confirmed
             ? 'Disconnected from ChatGPT on this host.'
-            : 'Tokens were cleared here, but remote revocation was not confirmed. Revoke EveryoneAgent in ChatGPT settings.';
+            : 'Tokens were cleared here, but remote revocation was not confirmed. Revoke this app in ChatGPT settings.';
         } catch (_) {
           const error = document.getElementById('provider-error');
           error.textContent = 'The ChatGPT connection could not be removed. Please try again.';

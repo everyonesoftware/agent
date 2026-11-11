@@ -5,6 +5,34 @@ import (
 	"testing"
 )
 
+func TestAgentBranding(t *testing.T) {
+	for _, required := range []string{
+		`<title>Agent</title>`, `placeholder="Message Agent"`,
+		`New to Agent?`, `Create your personal Agent account.`,
+		`sender.textContent = role === 'user' ? 'You' : 'Agent'`,
+	} {
+		if !strings.Contains(homePage, required) {
+			t.Errorf("Agent branding is missing %s", required)
+		}
+	}
+	if strings.Contains(homePage, "EveryoneAgent") {
+		t.Error("page still contains the old display name")
+	}
+	if count := strings.Count(homePage, `<span class="mark" aria-hidden="true">e1</span>Agent`); count != 2 {
+		t.Errorf("login and sidebar must both use the e1 Agent lockup; got %d", count)
+	}
+	if siwcAgentName != "Agent" {
+		t.Errorf("new ChatGPT registrations should display Agent, got %q", siwcAgentName)
+	}
+	// A visual rebrand must not invalidate sessions or saved model preferences.
+	if authCookieName != "everyoneagent_session" {
+		t.Error("existing session cookie name must be preserved")
+	}
+	if !strings.Contains(homePage, "'everyoneagent.model.' + user.id") {
+		t.Error("existing per-user model preference key must be preserved")
+	}
+}
+
 func TestHomePageUsesFocusWorkspace(t *testing.T) {
 	for _, required := range []string{
 		`content="dark"`, `id="session-sidebar"`, `id="conversation-list"`,
