@@ -196,9 +196,17 @@ try {
   await js("document.querySelector('#password-form').requestSubmit()");
   await expectEventually("document.querySelector('#password-status').textContent.includes('Password updated')", 'Password success missing');
   ok(await js("Array.from(document.querySelectorAll('#password-form input')).every(e=>e.value==='')"), 'Successful password change clears sensitive inputs');
-  for (const [width,height] of [[1280,850],[390,640]]) {
+  for (const [width,height] of [[1920,920],[1280,850],[390,640]]) {
     await viewport(width,height);
     ok(await js('document.documentElement.scrollWidth<=innerWidth && document.documentElement.scrollHeight<=innerHeight'), `Settings fits ${width}x${height}`);
+    ok(await js(`(() => {
+      const panel = document.querySelector('#settings-panel');
+      const bounds = panel.getBoundingClientRect();
+      const content = document.querySelector('.settings-content').getBoundingClientRect();
+      const left = content.left - bounds.left;
+      const right = bounds.left + panel.clientWidth - content.right;
+      return Math.abs(left - right) <= 1 && content.width <= 600 && panel.scrollWidth <= panel.clientWidth;
+    })()`), `Settings content is horizontally centered in the main panel at ${width}x${height}`);
     ok(await visible('#logout-button'), 'Settings sign-out remains reachable');
     await screenshot('agent-settings-' + width);
   }

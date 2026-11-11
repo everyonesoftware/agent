@@ -55,7 +55,7 @@ const homePage = `<!doctype html>
     .connection-status { margin: 0 0 12px; padding: 0; border: 0; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
     .menu-error { margin: 8px 0; color: #efada5; font-size: 12px; }
     .settings-panel { position: relative; flex: 1; min-height: 0; overflow-y: auto; padding: 30px; }
-    .settings-content { max-width: 600px; }
+    .settings-content { max-width: 600px; margin: 0 auto; }
     .settings-content > p, .settings-card > p { color: var(--muted); font-size: 12px; }
     .settings-card { margin-top: 24px; padding: 22px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); }
     .settings-card h2 { margin: 0 0 6px; font-size: 16px; font-weight: 500; }
