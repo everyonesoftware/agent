@@ -26,6 +26,7 @@ let listFailure = false;
 let loadFailure = false;
 let chatFailure = false;
 let logoutFailure = false;
+let passwordFailure = false;
 let chatDelay = 0;
 let loadDelay = 0;
 let activeProfile = 'p1';
@@ -57,6 +58,10 @@ const server = createServer(async (req, res) => {
   }
   if (url.pathname === '/api/auth/me') { json(authenticated ? 200 : 401, authenticated ? { id: 'demo-user', username: 'Browser Test' } : { error: 'Sign in to continue.' }); return; }
   if (!authenticated) { json(401, { error: 'Sign in to continue.' }); return; }
+  if (url.pathname === '/api/auth/password') {
+    for await (const _ of req) {}
+    json(passwordFailure ? 401 : 200, passwordFailure ? { error: 'Current password is incorrect.' } : { password_changed: true }); return;
+  }
   if (url.pathname === '/api/auth/logout') {
     if (logoutFailure) { json(500, { error: 'Test sign-out failure.' }); return; }
     authenticated = false; json(200, {}); return;
@@ -126,7 +131,7 @@ async function js(expression) {
 const click = selector => js(`document.querySelector(${JSON.stringify(selector)}).click()`);
 const visible = selector => js(`(() => { const e=document.querySelector(${JSON.stringify(selector)}); return !!e && e.getClientRects().length>0; })()`);
 const session = title => js(`Array.from(document.querySelectorAll('#conversation-list button')).find(b=>b.textContent.includes(${JSON.stringify(title)}))?.click()`);
-const expectEventually = (expression, message) => until(() => js(expression), message);
+const expectEventually = (expression, message) => until(() => js(`(() => { try { return (${expression}); } catch { return false; } })()`), message);
 async function viewport(width, height) {
   await cdp('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 600 });
 }
@@ -176,6 +181,42 @@ try {
   ok(calls.some(call => call.path === '/api/auth/register'), 'Create-account form uses the existing registration API');
   ok(await js("document.querySelector('.sidebar .brand').textContent==='e1Agent' && document.querySelector('#message-input').placeholder==='Message Agent'"), 'Chat sidebar and composer use the approved rebrand');
   ok(await js("document.querySelector('#current-username').textContent==='Browser Test'"), 'Bottom-left profile shows authenticated user');
+  ok(await visible('#settings-button'), 'Gear button is available beside the profile');
+  ok(await js("document.querySelector('#settings-button').getBoundingClientRect().left >= document.querySelector('#account-menu-toggle').getBoundingClientRect().right"), 'Gear sits to the right of the logged-in user');
+  await click('#settings-button');
+  ok(await visible('#settings-panel') && !(await visible('#messages')) && !(await visible('#chat-form')), 'Settings replaces the main conversation panel');
+  ok(await visible('#logout-button') && !(await js("!!document.querySelector('#account-menu #logout-button')")), 'Sign out lives only in Settings');
+  await js("document.querySelector('#current-password').value='synthetic-test-only';document.querySelector('#new-password').value='synthetic-new-only';document.querySelector('#confirm-password').value='different-test-only';document.querySelector('#password-form').requestSubmit()");
+  ok(await js("document.querySelector('#password-status').textContent.includes('match')"), 'Password confirmation mismatch is shown');
+  ok(!calls.some(call => call.path === '/api/auth/password'), 'Mismatched passwords are not submitted');
+  passwordFailure = true;
+  await js("document.querySelector('#confirm-password').value='synthetic-new-only';document.querySelector('#password-form').requestSubmit()");
+  await expectEventually("document.querySelector('#password-status').textContent.includes('Current password is incorrect.') && !document.querySelector('#password-submit').disabled", 'Password failure not recoverable');
+  passwordFailure = false;
+  await js("document.querySelector('#password-form').requestSubmit()");
+  await expectEventually("document.querySelector('#password-status').textContent.includes('Password updated')", 'Password success missing');
+  ok(await js("Array.from(document.querySelectorAll('#password-form input')).every(e=>e.value==='')"), 'Successful password change clears sensitive inputs');
+  for (const [width,height] of [[1280,850],[390,640]]) {
+    await viewport(width,height);
+    ok(await js('document.documentElement.scrollWidth<=innerWidth && document.documentElement.scrollHeight<=innerHeight'), `Settings fits ${width}x${height}`);
+    ok(await visible('#logout-button'), 'Settings sign-out remains reachable');
+    await screenshot('agent-settings-' + width);
+  }
+  await viewport(1280,850);
+  await click('#back-to-chat');
+  ok(await visible('#messages') && !(await visible('#settings-panel')), 'Back to conversation restores chat');
+  await js("document.querySelector('#message-input').value='Unsent draft'");
+  await click('#settings-button'); await click('#back-to-chat');
+  ok(await js("document.querySelector('#message-input').value==='Unsent draft'"), 'Settings preserves the unsent conversation draft');
+  await click('#settings-button'); await session('A quieter week');
+  await expectEventually("!document.querySelector('#messages').hidden && document.querySelector('#messages').textContent.includes('Leave two evenings open.')", 'Session selection did not leave Settings');
+  await click('#settings-button'); await click('#new-chat');
+  ok(!(await visible('#settings-panel')) && await visible('#welcome'), 'New conversation leaves Settings');
+  await viewport(390,640); await click('#sidebar-toggle'); await click('#settings-button');
+  ok(await visible('#settings-panel') && !(await visible('#session-sidebar')), 'Phone gear opens Settings and closes sidebar');
+  await js("document.querySelector('#settings-panel').scrollTop=document.querySelector('#settings-panel').scrollHeight");
+  ok(await js("document.querySelector('#logout-button').getBoundingClientRect().bottom<=innerHeight && document.querySelector('#logout-button').getBoundingClientRect().top>=60"), 'Phone settings scroll exposes the sign-out button');
+  await click('#back-to-chat'); await viewport(1280,850);
   ok(!(await js("!!document.querySelector('#conversation-list img')")), 'Conversation titles are text, not injected HTML');
   await session('A quieter week');
   await expectEventually("document.querySelector('#messages').textContent.includes('Leave two evenings open.')", 'Saved conversation did not load');
@@ -269,7 +310,7 @@ try {
   ok(!(await visible('#session-sidebar')), 'Choosing a session closes the phone menu');
   await screenshot('agent-chat-phone');
   await viewport(1280,850); logoutFailure = true;
-  await click('#account-menu-toggle'); await click('#logout-button');
+  await click('#settings-button'); await click('#logout-button');
   await expectEventually("!document.querySelector('#chat-app').hidden && !document.querySelector('#logout-button').disabled", 'Failed logout lost workspace');
   ok(authenticated, 'Failed sign-out preserves authenticated session');
   logoutFailure = false; await click('#logout-button');

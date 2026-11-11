@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
@@ -167,7 +169,25 @@ func (s *accountStore) login(username, password string) (authUser, string, error
 	if err != nil {
 		return authUser{}, "", err
 	}
-	if _, err = s.db.Exec(`INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)`, hashSession(token), user.ID, time.Now().Add(30*24*time.Hour).Unix()); err != nil {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return authUser{}, "", err
+	}
+	defer tx.Rollback()
+	// Compare and insert under the same SQLite writer lock: a password change
+	// committed after bcrypt verification must not create a surviving session.
+	result, err := tx.Exec(`INSERT INTO sessions(token_hash,user_id,expires_at) SELECT ?,id,? FROM users WHERE id=? AND password_hash=?`, hashSession(token), time.Now().Add(30*24*time.Hour).Unix(), user.ID, hash)
+	if err != nil {
+		return authUser{}, "", err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return authUser{}, "", err
+	}
+	if count != 1 {
+		return authUser{}, "", errors.New("invalid username or password")
+	}
+	if err = tx.Commit(); err != nil {
 		return authUser{}, "", err
 	}
 	return user, token, nil
@@ -269,6 +289,91 @@ func (s *accountStore) accountHandler(w http.ResponseWriter, r *http.Request, re
 		status = http.StatusCreated
 	}
 	writeChatJSON(w, status, map[string]string{"id": user.ID, "username": user.Username})
+}
+
+func (s *accountStore) passwordChangeHandler(w http.ResponseWriter, r *http.Request) {
+	if requestIsCrossSite(r) {
+		writeChatError(w, http.StatusForbidden, "Cross-site account requests are not allowed.")
+		return
+	}
+	user, ok := currentAuthUser(r.Context())
+	if !ok {
+		writeChatError(w, http.StatusUnauthorized, "Sign in to continue.")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	var body struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&body) != nil || decoder.Decode(new(any)) != io.EOF || body.CurrentPassword == "" || utf8.RuneCountInString(body.NewPassword) < 12 || len(body.NewPassword) > 72 {
+		writeChatError(w, http.StatusBadRequest, "Enter your current password and a new password of at least 12 characters and at most 72 bytes.")
+		return
+	}
+	var hash []byte
+	if s.db.QueryRow(`SELECT password_hash FROM users WHERE id=?`, user.ID).Scan(&hash) != nil || bcrypt.CompareHashAndPassword(hash, []byte(body.CurrentPassword)) != nil {
+		writeChatError(w, http.StatusUnauthorized, "Invalid current password.")
+		return
+	}
+	newHash, err := bcrypt.GenerateFromPassword([]byte(body.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		writeChatError(w, http.StatusInternalServerError, "Password could not be changed.")
+		return
+	}
+	cookie, err := r.Cookie(authCookieName)
+	if err != nil {
+		writeChatError(w, http.StatusUnauthorized, "Sign in to continue.")
+		return
+	}
+	token, err := s.replacePassword(user.ID, hash, newHash, cookie.Value)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeChatError(w, http.StatusUnauthorized, "Sign in again before changing your password.")
+		return
+	}
+	if err != nil {
+		writeChatError(w, http.StatusInternalServerError, "Password could not be changed.")
+		return
+	}
+	setSessionCookie(w, token, r)
+	writeChatJSON(w, http.StatusOK, map[string]bool{"password_changed": true})
+}
+
+// The conditional UPDATE is the first transaction statement, so SQLite acquires
+// its writer lock before comparing the verified hash and the active session.
+// Concurrent password changes cannot reuse an earlier password verification.
+func (s *accountStore) replacePassword(userID string, verifiedHash, newHash []byte, currentToken string) (string, error) {
+	token, err := randomURLToken(32)
+	if err != nil {
+		return "", err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(`UPDATE users SET password_hash=? WHERE id=? AND password_hash=? AND EXISTS (SELECT 1 FROM sessions WHERE token_hash=? AND user_id=users.id AND expires_at>?)`, newHash, userID, verifiedHash, hashSession(currentToken), time.Now().Unix())
+	if err != nil {
+		return "", err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return "", err
+	}
+	if count != 1 {
+		return "", sql.ErrNoRows
+	}
+	if _, err = tx.Exec(`DELETE FROM sessions WHERE user_id=?`, userID); err != nil {
+		return "", err
+	}
+	if err = insertSession(tx, userID, token); err != nil {
+		return "", err
+	}
+	if err = tx.Commit(); err != nil {
+		return "", err
+	}
+	return token, nil
 }
 
 func (s *accountStore) logoutHandler(w http.ResponseWriter, r *http.Request) {

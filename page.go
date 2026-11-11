@@ -40,7 +40,11 @@ const homePage = `<!doctype html>
     .history-state { color: var(--muted); font-size: 12px; padding: 6px 9px; }
     .history-state.error { color: #efada5; }
     .account-area { position: relative; border-top: 1px solid var(--line); padding-top: 10px; }
-    .account-toggle { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 6px; text-align: left; font-size: 12px; }
+    .account-row { display: flex; align-items: center; gap: 4px; }
+    .account-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 8px 6px; text-align: left; font-size: 12px; }
+    .account-toggle > span:last-child { min-width: 0; }
+    .settings-button { display: grid; place-items: center; flex: 0 0 36px; height: 36px; color: var(--muted); }
+    .settings-button:hover, .settings-button[aria-pressed="true"] { color: var(--accent); background: var(--field); }
     .avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #2c322e; color: var(--muted); }
     .account-toggle small { display: block; color: var(--muted); font-size: 10px; }
     #current-username { display: block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
@@ -50,7 +54,17 @@ const homePage = `<!doctype html>
     .provider-actions { display: flex; gap: 7px; flex-wrap: wrap; }
     .connection-status { margin: 0 0 12px; padding: 0; border: 0; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
     .menu-error { margin: 8px 0; color: #efada5; font-size: 12px; }
-    #logout-button { margin-top: 12px; width: 100%; text-align: left; }
+    .settings-panel { position: relative; flex: 1; min-height: 0; overflow-y: auto; padding: 30px; }
+    .settings-content { max-width: 600px; }
+    .settings-content > p, .settings-card > p { color: var(--muted); font-size: 12px; }
+    .settings-card { margin-top: 24px; padding: 22px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); }
+    .settings-card h2 { margin: 0 0 6px; font-size: 16px; font-weight: 500; }
+    .settings-card label { display: block; margin: 16px 0 6px; font-size: 12px; }
+    .settings-card input { display: block; width: 100%; padding: 10px 12px; color: inherit; background: #202322; border: 1px solid var(--line); border-radius: 5px; }
+    .settings-card .send { margin: 16px 0 0; }
+    #password-status { margin: 12px 0 0; font-size: 12px; color: var(--accent); }
+    #password-status.error { color: #efada5; }
+    #settings-title { margin: 0; font-size: 13px; font-weight: 500; }
     .workspace { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
     .workspace-header { min-height: 65px; padding: 12px 30px; border-bottom: 1px solid var(--line); display: flex; justify-content: flex-start; gap: 12px; }
     #conversation-title { margin: 0; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -100,6 +114,9 @@ const homePage = `<!doctype html>
       .app.sidebar-open .sidebar-backdrop { display: block; position: absolute; inset: 0; z-index: 19; width: 100%; border: 0; border-radius: 0; background: #0008; }
       .workspace-header { min-height: 60px; padding: 8px 12px; }
       .messages { padding: 24px 21px; }
+      .settings-panel { padding: 22px 18px; }
+      .settings-card { padding: 18px; }
+      .settings-button { flex-basis: 44px; height: 44px; }
       .composer-wrap { padding: 8px 14px 12px; }
       .session, .account-toggle, .new-chat { min-height: 44px; }
       .account-menu button, .account-menu select { min-height: 44px; }
@@ -139,7 +156,8 @@ const homePage = `<!doctype html>
       <label class="search-label"><span class="visually-hidden">Search conversations</span><input type="search" id="conversation-search" placeholder="Search conversations" autocomplete="off"></label>
       <nav class="history" id="conversation-list" aria-label="Previous sessions"><p class="history-state">Loading conversations…</p></nav>
       <div class="account-area">
-      <button class="account-toggle" id="account-menu-toggle" type="button" aria-expanded="false" aria-controls="account-menu"><span class="avatar" id="user-avatar" aria-hidden="true">?</span><span><strong id="current-username"></strong><small>Your account</small></span></button>
+      <div class="account-row"><button class="account-toggle" id="account-menu-toggle" type="button" aria-expanded="false" aria-controls="account-menu"><span class="avatar" id="user-avatar" aria-hidden="true">?</span><span><strong id="current-username"></strong><small>Your account</small></span></button>
+      <button class="settings-button" id="settings-button" type="button" aria-label="Settings" title="Settings" aria-controls="settings-panel" aria-pressed="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 3-.6 2.2-1.5.9-2.2-.6-3 5.2 1.6 1.6v1.8l-1.6 1.6 3 5.2 2.2-.6 1.5.9L9 23h6l.6-2.2 1.5-.9 2.2.6 3-5.2-1.6-1.6v-1.8l1.6-1.6-3-5.2-2.2.6-1.5-.9L15 3Z" transform="translate(1 0) scale(.92)"/><circle cx="12" cy="12" r="3.2"/></svg></button></div>
       <section class="account-menu" id="account-menu" aria-label="Account settings" hidden>
         <h2>ChatGPT accounts</h2>
         <p class="connection-status" id="connection-status" role="status">Checking ChatGPT connection…</p>
@@ -151,12 +169,38 @@ const homePage = `<!doctype html>
         <button class="reset" id="disconnect-chatgpt" type="button" hidden>Disconnect</button>
         </div>
         <p id="provider-error" class="menu-error" role="alert" hidden></p>
-        <button class="reset" id="logout-button" type="button">Sign out</button>
-        <p id="logout-error" class="menu-error" role="alert" hidden></p>
+
       </section></div>
     </aside>
     <div class="workspace">
-    <header class="workspace-header"><button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Open session navigation" aria-controls="session-sidebar" aria-expanded="false">☰</button><h1 id="conversation-title">New conversation</h1></header>
+    <header class="workspace-header"><button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Open session navigation" aria-controls="session-sidebar" aria-expanded="false">☰</button><h1 id="conversation-title">New conversation</h1><h1 id="settings-title" hidden>Settings</h1></header>
+    <section class="settings-panel" id="settings-panel" aria-labelledby="settings-title" hidden>
+      <div class="settings-content">
+        <button class="reset" id="back-to-chat" type="button">← Back to conversation</button>
+        <p>Manage your account and security.</p>
+        <section class="settings-card" aria-labelledby="password-title">
+          <h2 id="password-title">Reset password</h2>
+          <p>Choose a new password for your Agent account. Your other sessions will be signed out.</p>
+          <form id="password-form">
+            <label for="current-password">Current password</label>
+            <input id="current-password" name="current_password" type="password" autocomplete="current-password" maxlength="72" required>
+            <label for="new-password">New password</label>
+            <input id="new-password" name="new_password" type="password" autocomplete="new-password" aria-describedby="new-password-hint" required>
+            <p id="new-password-hint" class="hint" style="text-align:left">Use at least 12 characters (up to 72 bytes).</p>
+            <label for="confirm-password">Confirm new password</label>
+            <input id="confirm-password" name="confirm_password" type="password" autocomplete="new-password" required>
+            <button class="send" id="password-submit" type="submit">Update password</button>
+            <p id="password-status" role="status" aria-live="polite"></p>
+          </form>
+        </section>
+        <section class="settings-card" aria-labelledby="signout-title">
+          <h2 id="signout-title">Sign out</h2>
+          <p>Sign out of Agent on this browser. Your saved conversations will still be here when you return.</p>
+          <button class="reset" id="logout-button" type="button">Sign out</button>
+          <p id="logout-error" class="menu-error" role="alert" hidden></p>
+        </section>
+      </div>
+    </section>
     <section class="messages" id="messages" aria-live="polite" aria-relevant="additions text" aria-label="Conversation">
       <div class="welcome" id="welcome">
         <h1>What can I help with?</h1>
@@ -220,6 +264,62 @@ const homePage = `<!doctype html>
       const accountMenu = document.getElementById('account-menu');
       const accountToggle = document.getElementById('account-menu-toggle');
       const mobile = window.matchMedia('(max-width: 700px)');
+      const settingsPanel = document.getElementById('settings-panel');
+      const settingsButton = document.getElementById('settings-button');
+      const passwordForm = document.getElementById('password-form');
+      const passwordStatus = document.getElementById('password-status');
+      const currentPassword = document.getElementById('current-password');
+      const newPassword = document.getElementById('new-password');
+      const confirmPassword = document.getElementById('confirm-password');
+      let passwordBusy = false;
+
+      function showSettings(open) {
+        settingsPanel.hidden = !open;
+        document.getElementById('settings-title').hidden = !open;
+        conversationTitle.hidden = open;
+        messageList.hidden = open;
+        document.querySelector('.composer-wrap').hidden = open;
+        settingsButton.setAttribute('aria-pressed', String(open));
+        closeAccount(false);
+        setSidebar(false, false);
+        if (!passwordBusy) { passwordForm.reset(); passwordStatus.textContent = ''; }
+        if (open) document.getElementById('back-to-chat').focus();
+        else input.focus();
+      }
+      settingsButton.addEventListener('click', function () { showSettings(true); });
+      document.getElementById('back-to-chat').addEventListener('click', function () { showSettings(false); });
+      passwordForm.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        if (passwordBusy) return;
+        passwordStatus.classList.add('error');
+        if (newPassword.value !== confirmPassword.value) { passwordStatus.textContent = 'New passwords do not match.'; confirmPassword.focus(); return; }
+        if (Array.from(newPassword.value).length < 12 || new TextEncoder().encode(newPassword.value).length > 72) { passwordStatus.textContent = 'Use at least 12 characters and no more than 72 bytes.'; newPassword.focus(); return; }
+        passwordBusy = true;
+        passwordStatus.textContent = '';
+        const button = document.getElementById('password-submit');
+        const controls = Array.from(passwordForm.elements);
+        controls.forEach(control => { control.disabled = true; });
+        passwordForm.setAttribute('aria-busy', 'true');
+        button.textContent = 'Updating…';
+        try {
+          const response = await fetch('/api/auth/password', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ current_password: currentPassword.value, new_password: newPassword.value })
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'Password could not be updated. Please try again.');
+          passwordForm.reset();
+          passwordStatus.classList.remove('error');
+          passwordStatus.textContent = 'Password updated. Your other sessions have been signed out.';
+        } catch (error) { passwordStatus.textContent = error.message || 'Password could not be updated. Please try again.'; }
+        finally {
+          passwordBusy = false;
+          controls.forEach(control => { control.disabled = false; });
+          passwordForm.setAttribute('aria-busy', 'false');
+          button.textContent = 'Update password';
+          if (settingsPanel.hidden) { passwordForm.reset(); passwordStatus.textContent = ''; }
+        }
+      });
 
       function closeAccount(restoreFocus) {
         accountMenu.hidden = true;
@@ -418,6 +518,7 @@ const homePage = `<!doctype html>
 
       async function loadConversation(item) {
         if (busy || loadingConversation) return;
+        showSettings(false);
         loadingConversation = true;
         const version = ++conversationVersion;
         setInteractionState();
@@ -671,7 +772,7 @@ const homePage = `<!doctype html>
         } finally {
           busy = false;
           setInteractionState();
-          input.focus();
+          if (settingsPanel.hidden) input.focus();
         }
       });
 
@@ -684,6 +785,7 @@ const homePage = `<!doctype html>
 
       document.getElementById('new-chat').addEventListener('click', function () {
         if (busy || loadingConversation) return;
+        showSettings(false);
         conversationVersion++;
         conversation.length = 0;
         conversationId = '';
