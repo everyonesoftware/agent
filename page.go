@@ -22,8 +22,10 @@ const homePage = `<!doctype html>
     a { color: var(--accent); }
     .brand { display: flex; align-items: center; gap: 9px; color: #e1e6e2; font-size: 15px; font-weight: 600; letter-spacing: -.4px; }
     .mark { display: grid; place-items: center; width: 26px; height: 26px; flex-shrink: 0; border-radius: 6px; color: #1c281a; background: var(--accent); font: 17px Georgia, serif; letter-spacing: -1.2px; padding-right: 1px; }
-    .app { position: relative; display: grid; grid-template-columns: 232px minmax(0, 1fr); width: 100%; height: 100vh; height: 100dvh; margin: 0; border: 0; background: #202322; }
-    .sidebar { display: flex; flex-direction: column; gap: 18px; min-height: 0; padding: 25px 14px 12px; border-right: 1px solid var(--line); background: #181b1a; }
+    .app { position: relative; display: grid; grid-template-columns: clamp(180px, var(--sidebar-width, 232px), min(480px, 45vw)) minmax(0, 1fr); width: 100%; height: 100vh; height: 100dvh; margin: 0; border: 0; background: #202322; }
+    .sidebar { position: relative; min-width: 0; display: flex; flex-direction: column; gap: 18px; min-height: 0; padding: 25px 14px 12px; border-right: 1px solid var(--line); background: #181b1a; }
+    .sidebar-resize { position: absolute; top: 0; right: -4px; bottom: 0; width: 8px; z-index: 5; cursor: col-resize; touch-action: none; }
+    .sidebar-resize:hover, .sidebar-resize:focus-visible { background: #b4d6a355; }
     .sidebar .brand { padding: 0 6px 8px; }
     .reset, .connect { padding: 9px 12px; color: #e1e6e2; background: var(--field); border: 1px solid var(--line); font-size: 12px; font-weight: 400; }
     .reset:hover:not(:disabled), .connect:hover:not(:disabled) { background: #2c3930; }
@@ -135,8 +137,10 @@ const homePage = `<!doctype html>
     .composer-wrap { width: 100%; max-width: 856px; margin: 0 auto; padding: 10px 28px 18px; border: 0; }
     .notice { min-height: 18px; color: var(--muted); font-size: 11px; margin: 0 0 8px; }
     .notice.error { color: #efada5; }
-    .composer { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); box-shadow: none; }
-    textarea { width: 100%; flex: 1 0 100%; min-width: 0; min-height: 52px; max-height: min(150px, 22dvh); padding: 3px; border: 0; resize: vertical; outline: none; color: inherit; background: transparent; }
+    .composer { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); box-shadow: none; }
+    textarea { width: 100%; flex: 1 0 100%; min-width: 0; min-height: 52px; max-height: min(400px, 45dvh); padding: 3px 22px 3px 3px; border: 0; resize: none; outline: none; color: inherit; background: transparent; }
+    .composer-resize { position: absolute; top: 3px; right: 3px; display: grid; place-items: center; width: 24px; height: 24px; padding: 3px; color: var(--muted); cursor: nesw-resize; touch-action: none; }
+    .composer-resize:hover { color: var(--accent); }
     textarea::placeholder { color: var(--muted); }
     .model-select { min-width: 0; max-width: min(70%, 300px); padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--field); color: #c5cec7; font-size: 11px; }
     .send { margin-left: auto; min-width: 54px; padding: 7px 12px; border-radius: 5px; background: var(--accent); color: #1c281a; font-size: 12px; font-weight: 600; }
@@ -162,6 +166,7 @@ const homePage = `<!doctype html>
 
     @media (max-width: 700px) {
       .app { display: block; }
+      .sidebar-resize { display: none; }
       .workspace { height: 100%; }
       .sidebar { display: none; position: absolute; inset: 0 auto 0 0; width: 268px; max-width: calc(100% - 56px); z-index: 20; }
       .app.sidebar-open .sidebar { display: flex; }
@@ -204,6 +209,7 @@ const homePage = `<!doctype html>
   <main class="app" id="chat-app" hidden>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Close session navigation" tabindex="-1" hidden></button>
     <aside class="sidebar" id="session-sidebar" aria-label="Session navigation">
+      <div class="sidebar-resize" id="sidebar-resize" role="separator" tabindex="0" aria-label="Resize sidebar" aria-orientation="vertical" aria-controls="session-sidebar" aria-valuemin="180" aria-valuemax="480" aria-valuenow="232"></div>
       <div class="brand"><span class="mark" aria-hidden="true">e1</span>Agent</div>
       <button class="reset new-chat" id="new-chat" type="button">＋ New conversation</button>
       <label class="search-label"><span class="visually-hidden">Search conversations</span><input type="search" id="conversation-search" placeholder="Search conversations" autocomplete="off"></label>
@@ -294,6 +300,7 @@ const homePage = `<!doctype html>
       <form class="composer" id="chat-form" autocomplete="off">
         <label class="visually-hidden" for="message-input">Message</label>
         <textarea id="message-input" name="message" rows="1" maxlength="8192" placeholder="Message Agent" required></textarea>
+        <button class="composer-resize" id="composer-resize" type="button" aria-label="Resize message box" title="Drag upward to expand; use Up and Down arrow keys" aria-controls="message-input"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12 12 4M5 4h7v7"/></svg></button>
         <label class="visually-hidden" for="model-select">Model</label>
         <select class="model-select" id="model-select" disabled><option value="">Loading models…</option></select>
         <button class="send" id="send-button" type="submit">Send</button>
@@ -388,7 +395,12 @@ const homePage = `<!doctype html>
       const confirmPassword = document.getElementById('confirm-password');
       let passwordBusy = false;
 
-      function showSettings(open) {
+      function showSettings(open, updateURL = true) {
+        if (updateURL && (window.location.hash === '#settings') !== open) {
+          const url = new URL(window.location.href);
+          url.hash = open ? 'settings' : '';
+          window.history.pushState(null, '', url);
+        }
         settingsPanel.hidden = !open;
         document.getElementById('settings-title').hidden = !open;
         conversationTitle.hidden = open;
@@ -404,6 +416,11 @@ const homePage = `<!doctype html>
       settingsButton.addEventListener('click', function () { showSettings(true); });
       document.getElementById('manage-connections').addEventListener('click', function () { showSettings(true); });
       document.getElementById('back-to-chat').addEventListener('click', function () { showSettings(false); });
+      function restorePage() {
+        if (!chatApp.hidden) showSettings(window.location.hash === '#settings', false);
+      }
+      window.addEventListener('popstate', restorePage);
+      window.addEventListener('hashchange', restorePage);
       document.getElementById('security-toggle').addEventListener('click', function () {
         if (passwordBusy) return;
         const open = passwordForm.hidden;
@@ -465,6 +482,65 @@ const homePage = `<!doctype html>
       backdrop.addEventListener('click', function () { setSidebar(false, true); });
       mobile.addEventListener('change', function () { setSidebar(false, false); });
       setSidebar(false, false);
+      const sidebarResize = document.getElementById('sidebar-resize');
+      function setSidebarWidth(width) {
+        const max = Math.min(480, window.innerWidth * .45);
+        width = Math.round(Math.max(180, Math.min(max, width)));
+        chatApp.style.setProperty('--sidebar-width', width + 'px');
+        sidebarResize.setAttribute('aria-valuenow', String(width));
+        sidebarResize.setAttribute('aria-valuemax', String(Math.floor(max)));
+      }
+      function resizeWithPointer(handle, start) {
+        handle.addEventListener('pointerdown', function (event) {
+          if (event.button !== 0) return;
+          const move = start(event);
+          if (!move) return;
+          event.preventDefault();
+          handle.setPointerCapture(event.pointerId);
+          function moving(next) { if (next.pointerId === event.pointerId) move(next); }
+          function finish(next) {
+            if (next.pointerId !== event.pointerId) return;
+            window.removeEventListener('pointermove', moving);
+            handle.removeEventListener('lostpointercapture', finish);
+            window.removeEventListener('pointerup', finish);
+            window.removeEventListener('pointercancel', finish);
+            if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+          }
+          window.addEventListener('pointermove', moving);
+          handle.addEventListener('lostpointercapture', finish);
+          window.addEventListener('pointerup', finish);
+          window.addEventListener('pointercancel', finish);
+        });
+      }
+      resizeWithPointer(sidebarResize, function (event) {
+        if (mobile.matches) return;
+        const width = sidebar.getBoundingClientRect().width, x = event.clientX;
+        return next => { if (!mobile.matches) setSidebarWidth(width + next.clientX - x); };
+      });
+      const composerResize = document.getElementById('composer-resize');
+      function setComposerHeight(height) {
+        input.style.height = Math.max(52, Math.min(400, window.innerHeight * .45, height)) + 'px';
+      }
+      resizeWithPointer(composerResize, function (event) {
+        const height = input.getBoundingClientRect().height, y = event.clientY;
+        return next => setComposerHeight(height + y - next.clientY);
+      });
+      composerResize.addEventListener('keydown', function (event) {
+        if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+        event.preventDefault();
+        setComposerHeight(input.getBoundingClientRect().height + (event.key === 'ArrowUp' ? 16 : -16));
+      });
+      sidebarResize.addEventListener('keydown', function (event) {
+        if (mobile.matches) return;
+        const width = sidebar.getBoundingClientRect().width;
+        const values = { ArrowLeft: width - 16, ArrowRight: width + 16, Home: 180, End: 480 };
+        if (!(event.key in values)) return;
+        event.preventDefault();
+        setSidebarWidth(values[event.key]);
+      });
+      window.addEventListener('resize', function () {
+        if (!chatApp.hidden && !mobile.matches) setSidebarWidth(sidebar.getBoundingClientRect().width);
+      });
       accountToggle.addEventListener('click', function () {
         const open = accountMenu.hidden;
         accountMenu.hidden = !open;
@@ -622,6 +698,7 @@ const homePage = `<!doctype html>
           document.getElementById('user-avatar').textContent = Array.from(user.username || '?')[0].toLocaleUpperCase();
           authGate.hidden = true;
           chatApp.hidden = false;
+          restorePage();
           connectionStatus.textContent = 'Signed in as ' + user.username + '.';
           await refreshConnectionState();
           await refreshConversations();

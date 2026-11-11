@@ -95,6 +95,13 @@ sign out. On phones, the header menu opens session history over the conversation
 The Quiet entry login keeps local Agent sign-in separate from connecting
 a ChatGPT account afterward.
 
+Settings uses `#settings` in the browser URL, including refresh and browser
+Back/Forward navigation. On desktop, drag the sidebar's right edge to change its
+width, or focus the divider and use Left/Right arrow keys. The message box has a
+top-right resize arrow: drag upward to expand or downward to shrink; when focused,
+Up/Down arrow keys also resize it. Both controls enforce bounds to keep the
+workspace usable; phone session navigation retains its existing drawer layout.
+
 Run backend tests and build with Go 1.25:
 
 ```sh

@@ -200,6 +200,13 @@ async function screenshot(name) {
   const { data } = await cdp('Page.captureScreenshot', { format: 'png' });
   await writeFile(join(process.env.UI_SCREENSHOTS, name + '.png'), Buffer.from(data, 'base64'));
 }
+async function drag(selector, dx, dy) {
+  const { x, y } = await js(`(() => { const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2}; })()`);
+  await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+  await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 });
+  await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x+dx, y: y+dy, buttons: 1 });
+  await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x: x+dx, y: y+dy, button: 'left', clickCount: 1 });
+}
 function ok(condition, message) { assert.ok(condition, message); console.log('PASS ' + message); }
 try {
   const portText = await until(async () => { try { return await readFile(join(profile, 'DevToolsActivePort'), 'utf8'); } catch { return ''; } }, 'Browser did not start');
@@ -244,9 +251,41 @@ try {
   ok(await js("document.querySelector('#current-username').textContent==='Browser Test'"), 'Bottom-left profile shows authenticated user');
   ok(await visible('#app-version') && await js("document.querySelector('#app-version').textContent==='Version 42' && document.querySelector('#app-version').getBoundingClientRect().top >= document.querySelector('.account-row').getBoundingClientRect().bottom"), 'Build version is visible underneath the logged-in user');
   ok(await visible('#settings-button'), 'Gear button is available beside the profile');
+  ok(await visible('#sidebar-resize'), 'Desktop sidebar has a resize handle');
+  await drag('#sidebar-resize', 100, 0);
+  ok(await js("Math.abs(document.querySelector('#session-sidebar').getBoundingClientRect().width-332)<2"), 'Dragging the sidebar edge makes it wider');
+  await drag('#sidebar-resize', -200, 0);
+  ok(await js("document.querySelector('#session-sidebar').getBoundingClientRect().width===180"), 'Sidebar shrinking stops at a usable minimum');
+  await js("document.querySelector('#sidebar-resize').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}))");
+  ok(await js("document.querySelector('#session-sidebar').getBoundingClientRect().width===196"), 'Sidebar supports keyboard resizing');
+  await drag('#sidebar-resize', 36, 0);
+  await drag('#sidebar-resize', 500, 0);
+  ok(await js("document.querySelector('#session-sidebar').getBoundingClientRect().width===480"), 'Sidebar growth leaves room for the conversation');
+  await drag('#sidebar-resize', -248, 0);
+  ok(await visible('#composer-resize'), 'Composer has a custom resize handle');
+  ok(await js(`(() => { const r=document.querySelector('#composer-resize').getBoundingClientRect(), t=document.querySelector('#message-input').getBoundingClientRect(); return r.top<=t.top+8 && r.right>=t.right-8 && getComputedStyle(document.querySelector('#message-input')).resize==='none'; })()`), 'Resize grip is at the top-right and replaces the native bottom-right grip');
+  const composerHeight = await js("document.querySelector('#message-input').getBoundingClientRect().height");
+  await js("document.querySelector('#message-input').value='Keep this draft'");
+  await drag('#composer-resize', 0, -100);
+  ok(await js("document.querySelector('#message-input').getBoundingClientRect().height") > composerHeight+90, 'Dragging the top-right grip upward expands the text box');
+  await drag('#composer-resize', 0, 100);
+  ok(await js("document.querySelector('#message-input').getBoundingClientRect().height") === composerHeight, 'Dragging the grip downward shrinks the text box');
+  ok(await js("document.querySelector('#message-input').value==='Keep this draft'"), 'Resizing preserves the message draft');
+  await js("document.querySelector('#composer-resize').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowUp',bubbles:true}))");
+  ok(await js("document.querySelector('#message-input').getBoundingClientRect().height") === composerHeight+16, 'Message box supports keyboard resizing');
+  await screenshot('agent-resize-controls-desktop');
+  await js("document.querySelector('#composer-resize').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}))");
+  await js("document.querySelector('#message-input').value=''");
   ok(await js("document.querySelector('#settings-button').getBoundingClientRect().left >= document.querySelector('#account-menu-toggle').getBoundingClientRect().right"), 'Gear sits to the right of the logged-in user');
   await click('#settings-button');
   ok(await visible('#settings-panel') && !(await visible('#messages')) && !(await visible('#chat-form')), 'Settings replaces the main conversation panel');
+  ok(await js("location.hash==='#settings'"), 'Opening Settings updates the browser URL');
+  await js('history.back()');
+  await expectEventually("location.hash==='' && document.querySelector('#settings-panel').hidden", 'Browser Back did not restore chat');
+  await js('history.forward()');
+  await expectEventually("location.hash==='#settings' && !document.querySelector('#settings-panel').hidden", 'Browser Forward did not restore Settings');
+  await cdp('Page.reload');
+  await expectEventually("!document.querySelector('#chat-app')?.hidden && document.querySelector('#settings-button')?.getAttribute('aria-pressed')==='true'", 'Settings URL did not survive reload');
   ok(await visible('#logout-button') && !(await js("!!document.querySelector('#account-menu #logout-button')")), 'Sign out lives only in Settings');
   ok(await js("!!document.querySelector('#settings-panel #account-select') && !!document.querySelector('#settings-panel #connect-chatgpt') && !!document.querySelector('#settings-panel #disconnect-chatgpt')"), 'ChatGPT connection management lives in Settings');
   await expectEventually("document.querySelector('#connection-badge')?.textContent==='Connected'", 'Connected subscription badge missing');
@@ -302,6 +341,7 @@ try {
   await viewport(1280,850);
   await click('#back-to-chat');
   ok(await visible('#messages') && !(await visible('#settings-panel')), 'Back to conversation restores chat');
+  ok(await js("location.hash===''"), 'Returning to chat clears the Settings URL');
   await js("document.querySelector('#message-input').value='Unsent draft'");
   await click('#settings-button'); await click('#back-to-chat');
   ok(await js("document.querySelector('#message-input').value==='Unsent draft'"), 'Settings preserves the unsent conversation draft');
@@ -310,6 +350,7 @@ try {
   await click('#settings-button'); await click('#new-chat');
   ok(!(await visible('#settings-panel')) && await visible('#welcome'), 'New conversation leaves Settings');
   await viewport(390,640); await click('#sidebar-toggle'); await click('#settings-button');
+  ok(!(await visible('#sidebar-resize')), 'Sidebar resizing stays hidden on phones');
   ok(await visible('#settings-panel') && !(await visible('#session-sidebar')), 'Phone gear opens Settings and closes sidebar');
   await js("document.querySelector('#settings-panel').scrollTop=document.querySelector('#settings-panel').scrollHeight");
   ok(await js("document.querySelector('#logout-button').getBoundingClientRect().bottom<=innerHeight && document.querySelector('#logout-button').getBoundingClientRect().top>=60"), 'Phone settings scroll exposes the sign-out button');
