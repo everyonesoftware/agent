@@ -41,6 +41,7 @@ const homePage = `<!doctype html>
     .history-state.error { color: #efada5; }
     .account-area { position: relative; border-top: 1px solid var(--line); padding-top: 10px; }
     .account-row { display: flex; align-items: center; gap: 4px; }
+    .app-version { display: block; padding: 2px 6px 0; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
     .account-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 8px 6px; text-align: left; font-size: 12px; }
     .account-toggle > span:last-child { min-width: 0; }
     .settings-button { display: grid; place-items: center; flex: 0 0 36px; height: 36px; color: var(--muted); }
@@ -183,6 +184,7 @@ const homePage = `<!doctype html>
       <div class="account-area">
       <div class="account-row"><button class="account-toggle" id="account-menu-toggle" type="button" aria-expanded="false" aria-controls="account-menu"><span class="avatar" id="user-avatar" aria-hidden="true">?</span><span><strong id="current-username"></strong><small>Your account</small></span></button>
       <button class="settings-button" id="settings-button" type="button" aria-label="Settings" title="Settings" aria-controls="settings-panel" aria-pressed="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 3-.6 2.2-1.5.9-2.2-.6-3 5.2 1.6 1.6v1.8l-1.6 1.6 3 5.2 2.2-.6 1.5.9L9 23h6l.6-2.2 1.5-.9 2.2.6 3-5.2-1.6-1.6v-1.8l1.6-1.6-3-5.2-2.2.6-1.5-.9L15 3Z" transform="translate(1 0) scale(.92)"/><circle cx="12" cy="12" r="3.2"/></svg></button></div>
+      <small class="app-version" id="app-version">Version {{APP_VERSION}}</small>
       <section class="account-menu" id="account-menu" aria-label="Account settings" hidden>
         <h2>Your account</h2>
         <button class="reset" id="manage-connections" type="button">Manage connections &amp; settings</button>

@@ -33,6 +33,23 @@ func TestHomePageOffersAChatComposer(t *testing.T) {
 	}
 }
 
+func TestHomePageShowsBuildVersion(t *testing.T) {
+	t.Setenv("APP_DATA_DIR", t.TempDir())
+	original := version
+	t.Cleanup(func() { version = original })
+	for _, build := range []struct{ value, escaped string }{
+		{"42", "42"}, {"dev", "dev"}, {`<build>&"`, "&lt;build&gt;&amp;&#34;"},
+	} {
+		version = build.value
+		rec := httptest.NewRecorder()
+		newServer().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		want := `<small class="app-version" id="app-version">Version ` + build.escaped + `</small>`
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("home page missing escaped build version %q", want)
+		}
+	}
+}
+
 func TestVersionEndpointReturnsBuildVersion(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/version", nil)
 	rec := httptest.NewRecorder()

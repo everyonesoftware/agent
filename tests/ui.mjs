@@ -18,7 +18,7 @@ const browserPath = process.env.UI_BROWSER || [
 ].find(existsSync);
 assert.ok(browserPath, 'Set UI_BROWSER to an installed Chromium executable');
 const htmlSource = await readFile(join(root, 'page.go'), 'utf8');
-const html = htmlSource.slice(htmlSource.indexOf('`') + 1, htmlSource.lastIndexOf('`'));
+const html = htmlSource.slice(htmlSource.indexOf('`') + 1, htmlSource.lastIndexOf('`')).replace('{{APP_VERSION}}', '42');
 const profile = await mkdtemp(join(process.env.TMPDIR || tmpdir(), 'agent-ui-'));
 let authenticated = false;
 let authFailure = true;
@@ -233,6 +233,7 @@ try {
   ok(calls.some(call => call.path === '/api/auth/register'), 'Create-account form uses the existing registration API');
   ok(await js("document.querySelector('.sidebar .brand').textContent==='e1Agent' && document.querySelector('#message-input').placeholder==='Message Agent'"), 'Chat sidebar and composer use the approved rebrand');
   ok(await js("document.querySelector('#current-username').textContent==='Browser Test'"), 'Bottom-left profile shows authenticated user');
+  ok(await visible('#app-version') && await js("document.querySelector('#app-version').textContent==='Version 42' && document.querySelector('#app-version').getBoundingClientRect().top >= document.querySelector('.account-row').getBoundingClientRect().bottom"), 'Build version is visible underneath the logged-in user');
   ok(await visible('#settings-button'), 'Gear button is available beside the profile');
   ok(await js("document.querySelector('#settings-button').getBoundingClientRect().left >= document.querySelector('#account-menu-toggle').getBoundingClientRect().right"), 'Gear sits to the right of the logged-in user');
   await click('#settings-button');
@@ -531,6 +532,7 @@ try {
   }
   await click('#sidebar-toggle');
   ok(await visible('#session-sidebar'), 'Phone menu opens session history');
+  ok(await visible('#app-version') && await js("document.querySelector('#app-version').getBoundingClientRect().bottom <= innerHeight && document.querySelector('#app-version').getBoundingClientRect().top >= document.querySelector('.account-row').getBoundingClientRect().bottom"), 'Phone sidebar keeps the build version below the user and inside the viewport');
   ok(await js("document.querySelector('#sidebar-toggle').getAttribute('aria-expanded')==='true'"), 'Phone toggle announces expanded state');
   await screenshot('agent-chat-phone-menu');
   await click('#sidebar-backdrop');

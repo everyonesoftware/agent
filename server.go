@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"html"
 	"log"
 	"net/http"
 	"os"
@@ -67,7 +68,7 @@ func newServer() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		_, _ = fmt.Fprint(w, homePage)
+		_, _ = fmt.Fprint(w, strings.Replace(homePage, "{{APP_VERSION}}", html.EscapeString(version), 1))
 	})
 	return mux
 }
