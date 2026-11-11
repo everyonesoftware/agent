@@ -348,9 +348,6 @@ func (s *fileCredentialStore) writeStateLocked(state credentialProfileState) err
 	if err := os.MkdirAll(s.dir, 0700); err != nil {
 		return errors.New("credential directory is unavailable")
 	}
-	if err := os.Chmod(s.dir, 0700); err != nil {
-		return errors.New("credential directory permissions could not be secured")
-	}
 	data, err := json.Marshal(state)
 	if err != nil {
 		return errors.New("profile state could not be encoded")
@@ -361,10 +358,7 @@ func (s *fileCredentialStore) writeStateLocked(state credentialProfileState) err
 	}
 	tempName := temp.Name()
 	defer os.Remove(tempName)
-	if err := temp.Chmod(0600); err != nil {
-		_ = temp.Close()
-		return errors.New("profile file permissions could not be secured")
-	}
+	// CreateTemp already requests mode 0600; do not chmod the host mount.
 	if _, err := temp.Write(data); err != nil {
 		_ = temp.Close()
 		return errors.New("profile state could not be written")
@@ -476,9 +470,6 @@ func (s *fileCredentialStore) HostID() (string, error) {
 	defer s.mu.Unlock()
 	if err := os.MkdirAll(s.dir, 0700); err != nil {
 		return "", errors.New("credential directory is unavailable")
-	}
-	if err := os.Chmod(s.dir, 0700); err != nil {
-		return "", errors.New("credential directory permissions could not be secured")
 	}
 	path := filepath.Join(s.dir, "host-id")
 	if data, err := os.ReadFile(path); err == nil {

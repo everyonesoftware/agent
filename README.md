@@ -16,7 +16,7 @@ docker compose up -d
 
 If OpenAI enables plan usage for this app and the account is eligible, no API key or API credits are required for that path. The flow is experimental; live authorization and eligibility have not been verified. Public repository visibility alone does not guarantee OpenAI approval. After signing in to EveryoneAgent, select **Continue with ChatGPT** to connect the ChatGPT account for that EveryoneAgent user. ChatGPT authorization uses a loopback callback, so complete the connection from a browser on the Windows PC running Docker Desktop at `http://127.0.0.1:8080`. Every app user manages their own ChatGPT profiles and model selection; profiles are not shared between app users.
 
-Create an EveryoneAgent account in the app using a username and password of at least 12 characters. Passwords are hashed with bcrypt; browser sessions use random tokens whose hashes are stored in SQLite. Sign-in is required for chat, model discovery, ChatGPT account management, and conversation history. Each EveryoneAgent user has separate OAuth profile files under `/data/account-data/` and separate conversation rows in `/data/everyoneagent.sqlite`. ChatGPT refresh tokens are kept server-side and never returned to the browser. The SQLite file and credential directories are restricted to the container owner; they are not encrypted at rest, so protect and back up the Docker volume accordingly. Disconnecting clears the selected user's profile session tokens but retains the registration for safe reauthorization; revoke the app's usage access in ChatGPT settings to revoke remotely.
+Create an EveryoneAgent account in the app using a username and password of at least 12 characters. Passwords are hashed with bcrypt; browser sessions use random tokens whose hashes are stored in SQLite. Sign-in is required for chat, model discovery, ChatGPT account management, and conversation history. Each EveryoneAgent user has separate OAuth profile files under `/data/account-data/` and separate conversation rows in `/data/everyoneagent.sqlite`. ChatGPT refresh tokens are kept server-side and never returned to the browser. New database and credential files request owner-only permissions; existing host directory permissions are left unchanged. Data is not encrypted at rest, so protect and back up the data storage accordingly. Disconnecting clears the selected user's profile session tokens but retains the registration for safe reauthorization; revoke the app's usage access in ChatGPT settings to revoke remotely.
 
 ChatGPT sign-in uses the existing loopback callback. Complete **Continue with ChatGPT** from a browser on the Windows PC running Docker Desktop, and sign in to the ChatGPT account that belongs to the currently logged-in EveryoneAgent user. Each user must connect their own account; their plan allowance is not shared through EveryoneAgent with other app users, though ChatGPT may apply the same subscription limits across other apps using that account. The OAuth flow remains experimental and live authorization/eligibility have not been verified.
 
@@ -29,6 +29,42 @@ Open http://127.0.0.1:8080. The container is published only on the host loopback
 Stop with `docker compose down`.
 
 Compose probes the public `/healthz` endpoint using `/everyoneagent healthz` every 30 seconds. The command uses the container's `PORT` (default `8080`), requests the loopback endpoint with a three-second timeout, and exits successfully only for HTTP 200 without following redirects. It does not initialize storage or contact a model provider. This is a web-server liveness check, not a database or ChatGPT readiness check. Docker marks the container unhealthy after three consecutive failures; the restart policy does not restart a container solely because it is unhealthy.
+
+## Host-accessible data storage
+
+The image runs as UID/GID `65532:65532`. You can use a host folder instead of
+the default named volume without an extra permissions setting:
+
+```yaml
+services:
+  everyoneagent:
+    environment:
+      SIWC_DATA_DIR: /data
+    volumes:
+      - ./data:/data
+```
+
+Merge these settings into your existing service; keep its other environment,
+networking, and health-check settings. If using the repository's Compose file,
+replace its named-volume mapping with the bind mount.
+
+The app leaves existing directories and database file permissions unchanged,
+requests mode `0700` for new directories and `0600` for new database/credential
+files, and does not run `chmod` on your mount. OAuth credential files with
+group/world-readable Unix permissions are still rejected; credential validation
+and actual filesystem read/write errors are not bypassed.
+
+**Protect the host folder with host ACLs/permissions.** It contains password
+hashes, sessions, conversation history, and plaintext OAuth credentials; do not
+share it with untrusted users. The container's UID must still have read/write
+access. A read-only mount or missing host access still prevents writes.
+
+To migrate a bind-mounted deployment, stop the app before copying the entire
+`data` folder to avoid an inconsistent SQLite backup. Copy your Compose
+configuration and privately managed environment settings too, restore the host
+folder's access controls, then start the new deployment. Preserve separately
+mounted Tailscale state separately when applicable. No database migration or
+data deletion is required to use a bind mount with the same existing data.
 
 ## Current status
 

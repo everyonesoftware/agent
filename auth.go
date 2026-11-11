@@ -38,7 +38,13 @@ func newAccountStore(path string) (*accountStore, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, err
 	}
-	if err := os.Chmod(filepath.Dir(path), 0700); err != nil {
+	// Respect existing host directory/file permissions. Create a new database
+	// privately before SQLite opens it, without truncating an existing database.
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
+	if err != nil {
+		return nil, err
+	}
+	if err := file.Close(); err != nil {
 		return nil, err
 	}
 	db, err := sql.Open("sqlite", path+"?_foreign_keys=on&_journal_mode=DELETE&_busy_timeout=5000")
@@ -53,10 +59,6 @@ CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, user_id TEXT NOT 
 CREATE INDEX IF NOT EXISTS conversations_user_updated ON conversations(user_id, updated_at DESC);
 CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('user','assistant')), content TEXT NOT NULL, created_at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS messages_conversation ON messages(user_id, conversation_id, id);`); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if err := os.Chmod(path, 0600); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
