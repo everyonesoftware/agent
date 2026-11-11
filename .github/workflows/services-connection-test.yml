@@ -1,0 +1,69 @@
+name: services-connection-test
+
+on:
+  workflow_dispatch:
+    inputs:
+      connection_id:
+        description: Services publisher connection identifier
+        required: true
+        type: string
+      challenge:
+        description: One-time Services connection challenge
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  connection-test:
+    name: Verify private Services callback
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Require configuration
+        env:
+          TAILSCALE_CLIENT_ID: ${{ vars.TAILSCALE_CLIENT_ID }}
+          TAILSCALE_AUDIENCE: ${{ vars.TAILSCALE_AUDIENCE }}
+          TAILSCALE_TAGS: ${{ vars.TAILSCALE_TAGS }}
+          SERVICES_PUBLISH_URL: ${{ vars.SERVICES_PUBLISH_URL }}
+          SERVICES_PUBLISH_TOKEN: ${{ secrets.SERVICES_PUBLISH_TOKEN }}
+          SERVICES_CONNECTION_ID: ${{ inputs.connection_id }}
+          SERVICES_CONNECTION_CHALLENGE: ${{ inputs.challenge }}
+        run: |
+          node --input-type=module <<'NODE'
+          const required = ['TAILSCALE_CLIENT_ID', 'TAILSCALE_AUDIENCE', 'TAILSCALE_TAGS', 'SERVICES_PUBLISH_URL', 'SERVICES_PUBLISH_TOKEN', 'SERVICES_CONNECTION_ID', 'SERVICES_CONNECTION_CHALLENGE'];
+          if (required.some(key => !process.env[key]?.trim()) || !/^[A-Za-z0-9_-]{16,512}$/.test(process.env.SERVICES_CONNECTION_CHALLENGE)) {
+            console.error('::error::Missing or invalid Services connection test configuration');
+            process.exit(1);
+          }
+          // Validated base64url cannot inject workflow commands or newlines.
+          console.log('::add-mask::' + process.env.SERVICES_CONNECTION_CHALLENGE);
+          NODE
+
+      - name: Join private tailnet with workload identity federation
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ vars.TAILSCALE_CLIENT_ID }}
+          audience: ${{ vars.TAILSCALE_AUDIENCE }}
+          tags: ${{ vars.TAILSCALE_TAGS }}
+          log-mode: quiet
+
+      - name: Send connection proof
+        env:
+          SERVICES_PUBLISH_URL: ${{ vars.SERVICES_PUBLISH_URL }}
+          SERVICES_PUBLISH_TOKEN: ${{ secrets.SERVICES_PUBLISH_TOKEN }}
+          SERVICES_CONNECTION_ID: ${{ inputs.connection_id }}
+          SERVICES_CONNECTION_CHALLENGE: ${{ inputs.challenge }}
+        run: node scripts/publisher-connection-test.mjs
