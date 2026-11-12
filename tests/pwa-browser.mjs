@@ -132,10 +132,11 @@ try {
   await screenshot('agent-offline');
   await start(binaries[0]);
   await cdp('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
-  await cdp('Page.navigate', { url: origin + '/#settings' });
-  // The offline response retains the root URL: a hash change is SPA navigation,
-  // not a reconnect request. Reload like the disconnected page's retry link.
-  await cdp('Page.reload');
+  // Follow the actual offline retry link. Scheduling a #settings navigation and
+  // immediately reloading races Chromium's same-document navigation commit.
+  await js("document.querySelector('a[href=\"/\"]').click()");
+  await eventual("document.querySelector('#chat-app') && !document.querySelector('#chat-app').hidden", 'Reconnect did not restore the signed-in app');
+  await js("document.querySelector('#settings-button').click()");
   await eventual("document.querySelector('#settings-panel') && !document.querySelector('#settings-panel').hidden", 'Reconnect settings missing');
   pass('Only public disconnected page is cached; API GET/POST fail offline and reconnect restores account');
   await js("document.querySelector('#message-input').value='Draft remains while postponing' ");
