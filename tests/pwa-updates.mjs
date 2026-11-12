@@ -43,7 +43,7 @@ test('installable metadata and Settings update controls are embedded in the real
 test('Web app updates is the first settings card', () => {
   const settings = page.slice(page.indexOf('<section class="settings-panel"'), page.indexOf('<div class="chat-layout"'));
   const cards = [...settings.matchAll(/<section class="settings-card"[^>]*aria-labelledby="([^"]+)"/g)].map(match => match[1]);
-  assert.deepEqual(cards, ['pwa-title', 'connection-title', 'password-title', 'signout-title']);
+  assert.deepEqual(cards, ['pwa-title', 'connection-title', 'research-settings-title', 'password-title', 'signout-title']);
 });
 test('checks compare build IDs even when the version is unchanged, and Later never reloads', async () => {
   const f=fixture(); await settle(); assert.equal(f.registrations,1);
@@ -139,14 +139,15 @@ test('new unsaved changes or active requests during activation are rechecked bef
 test('real page safety bridge reads live chat, request, password and dialog state without persistence', () => {
   const match=page.match(/      \/\/ BEGIN update reload safety([\s\S]*?)      \/\/ END update reload safety/);
   assert.ok(match,'page must expose its actual closure state');
-  const context={window:{},document:Object.assign(new Events(),{querySelectorAll:selector=>{context.passwordSelector=selector;return context.passwords;},querySelector:()=>context.dialog}),input:{value:''},passwords:[],dialog:null,
-    busy:false,loadingConversation:false,passwordBusy:false,authBusy:false,connectionBusy:false,connectionSubmitting:false,usageBusy:false,usageSubmitting:false};
+  const context={window:{},document:Object.assign(new Events(),{querySelectorAll:selector=>{context.passwordSelector=selector;return context.passwords;},querySelector:()=>context.dialog}),input:{value:''},searchKey:{value:''},passwords:[],dialog:null,
+    busy:false,loadingConversation:false,passwordBusy:false,authBusy:false,connectionBusy:false,connectionSubmitting:false,usageBusy:false,usageSubmitting:false,searchBusy:false};
   vm.runInNewContext(match[1],context);
   const safety=()=>context.window.agentUpdateSafety();
   assert.equal(safety().pending,false); assert.equal(safety().unsaved,false);
   assert.match(context.passwordSelector,/autocomplete/, 'revealed password fields must remain guarded');
-  for(const name of ['busy','loadingConversation','passwordBusy','authBusy','connectionBusy','connectionSubmitting','usageBusy','usageSubmitting']) {context[name]=true; assert.equal(safety().pending,true,name); context[name]=false;}
+  for(const name of ['busy','loadingConversation','passwordBusy','authBusy','connectionBusy','connectionSubmitting','usageBusy','usageSubmitting','searchBusy']) {context[name]=true; assert.equal(safety().pending,true,name); context[name]=false;}
   context.input.value='private draft'; assert.equal(safety().unsaved,true); context.input.value='';
+  context.searchKey.value='synthetic-brave-key'; assert.equal(safety().unsaved,true); assert.ok(!JSON.stringify(safety()).includes(context.searchKey.value)); context.searchKey.value='';
   context.passwords=[{value:'private password'}]; assert.equal(safety().unsaved,true); context.passwords=[];
   context.dialog={open:true}; assert.equal(safety().unsaved,true);
   const revision=safety().revision; context.document.emit('input'); assert.notEqual(safety().revision,revision);

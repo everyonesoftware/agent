@@ -94,6 +94,108 @@ executable when it is not found automatically; optionally set `UI_SCREENSHOTS`
 to an existing directory to save browser evidence. No production credentials or
 account storage are used.
 
+## Public-web research with task-scoped consent
+
+Ordinary chat has no tools. To research a task, enable **Research public web**
+in the composer and submit the prompt. Agent shows an inline consent card before
+making a model or web request for that task. The card identifies the search
+provider, displays the task prompt, and explains which information leaves the
+server. Choose **Allow for this task**, **Answer without browsing**, or **Cancel**.
+Cancelling preserves the draft; declining uses ordinary no-tool chat. There is
+no blanket or remembered approval in this first milestone.
+
+Research sends only the final user prompt, trusted runtime instructions, and
+research tool exchanges to the model; it does not include earlier conversation
+messages. Search queries may include information from that displayed prompt.
+Retrieved page text and search results also go to the selected model provider.
+Do not put private information in a research prompt unless you intend to permit
+that disclosure. The research permission never grants local-file access, signed-in
+browser access, memory/skill writes, terminal execution, messaging, or publishing.
+Unknown tools and targets outside the implemented public-web boundary are rejected,
+not silently given additional permission.
+
+Public-page retrieval works without a search credential. General web search uses
+the official Brave Search API after you configure your own key in
+**Settings → Web research**. Select **Verify & save key** to send one explicit
+`Agent connection test` query to Brave; this may count toward provider usage and
+does not send your chat history. The key is saved only after verification succeeds.
+No environment variable or shared-key fallback is used for Brave Search, and no
+search subscription is created automatically. Without your own saved key, the
+consent card reports **page retrieval only** and the model has no search tool.
+
+Each Agent user has separate search settings. The browser receives only status,
+the key's final characters, revision metadata, and verification timestamps—not
+the saved credential. Keys are excluded from model messages, conversation history,
+Run Inspector captures, URLs, and browser storage. They are stored server-side in
+the local SQLite database **without encryption at rest**, under the same storage
+protections as the rest of Agent's account data; protect the data directory and
+its backups. Connection status reflects the last explicit check, not continuous
+provider monitoring. Opening Settings does not send a search request.
+
+Use **Replace key** to enter a new credential; a failed verification leaves the
+previous saved key unchanged. **Test connection** checks the saved key without
+returning it to the browser. **Remove** requires confirmation and removes the key
+only from your Agent account, not from Brave. Removing or successfully replacing
+a key invalidates that user's pending research approvals and stops active research
+using the old configuration. Other users, public-page retrieval, and ChatGPT
+connections are unaffected; already-sent requests cannot be recalled. Revision
+checks prevent stale tabs or delayed verification from overwriting newer settings
+or resurrecting a removed key. Saving a key never approves a research task.
+
+The authenticated Settings API is `GET /api/research/settings` and JSON
+`POST /api/research/settings/{verify|check|remove}`. Each mutation requires the
+captured `expected_revision`; verification additionally accepts `api_key` in the
+bounded request body. Raw keys are never returned. Stale revisions return 409
+without silently retrying a mutation. The production-router/browser integration
+uses real local account storage and isolated Brave/model HTTP fixtures:
+
+```sh
+AGENT_SETTINGS_BROWSER=1 go test -run '^TestResearchSettingsBrowser$' -count=1 -v .
+```
+
+This browser check requires Node and Chromium. Its package-private upstream
+factory is a test seam, not a configurable proxy or permission to bypass public
+URL checks in a deployed Agent server.
+
+While a research request is running, **Public web only**, **Stop**, and
+**Permissions** remain visible. Permissions exposes the current scope and a
+**Revoke** action. Stop/revoke is enforced server-side and cancels in-flight
+work; aborting a browser fetch alone is not treated as revocation. Cancellation
+cannot undo model/search/page requests already sent. Tool calls, elapsed time,
+network input, and captured output are bounded. Retrieval uses unauthenticated
+HTTP(S) GET requests with no browser cookies, no JavaScript execution, and
+public-address validation at connection and redirect boundaries. Private,
+loopback, link-local, and metadata addresses are not permitted.
+
+Approvals belong to the signed-in Agent user and an immutable task request.
+They expire, are consumed only once, and cannot authorize a different prompt,
+model selection, conversation, or run. Completion closes the permission. Pending
+and active permissions are held in server memory, so a server restart invalidates
+them rather than restoring authorization. Research permissions are separate from
+the existing persistent conversation and Run Inspector records.
+
+Authenticated, no-store routes are `GET /api/research`,
+`POST /api/research/tasks`, `GET /api/research/tasks/{id}`, and
+`POST /api/research/tasks/{id}/{approve|stop|revoke}`. Creation takes the ordinary
+chat payload and performs no model or web I/O. Approval actions accept `{}`;
+`POST /api/chat` additionally accepts `research_task_id` for the approved immutable
+request. Foreign task IDs look missing. Rejected, expired, changed, or already-used
+approvals do not authorize tool execution.
+
+The production-server browser regression uses isolated SQLite account storage
+and a local model HTTP fixture, with no real credentials, inference, or public-web
+requests:
+
+```sh
+go build -o agent-research-test .
+node tests/research-browser.mjs ./agent-research-test
+```
+
+Passing fixture tests establishes protocol and consent behavior, not that a live
+ChatGPT account is eligible for function calling or that a Brave credential works.
+Provider capability/authorization errors are surfaced rather than silently
+switching to a different account or billing path.
+
 ## Run Inspector and trusted runtime context
 
 Each chat turn prepends a server-owned system message with the current server date,
@@ -101,7 +203,9 @@ timezone and UTC offset, in both the OpenAI-compatible and ChatGPT Responses pat
 The clock is read on every turn; the server timezone (`TZ`/Go `time.Local`) is not
 assumed to be the browser's timezone. Timezone data is embedded for minimal container
 images. The baseline explicitly distinguishes missing model knowledge from future
-events and states that this chat has no live-verification tools. It is context,
+events and states that ordinary chat has no live-verification tools. Approved
+research runs instead describe their actual public-web tools and permission scope.
+It is context,
 not a guarantee that the model will follow every instruction.
 
 The inspector records backend lifecycle events, the effective provider/model,

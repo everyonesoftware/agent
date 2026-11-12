@@ -53,6 +53,9 @@ jobs:
       - name: Test browser UI
         run: node tests/ui.mjs
 
+      - name: Verify private Brave settings and research integration
+        run: AGENT_SETTINGS_BROWSER=1 go test -run '^TestResearchSettingsBrowser$' -count=1 -v .
+
       - name: Build two production versions for PWA verification
         run: |
           go build -ldflags="-X main.version=pwa-test-a" -o "$RUNNER_TEMP/agent-pwa-a" .
@@ -60,6 +63,9 @@ jobs:
 
       - name: Verify Run Inspector against the production server
         run: node tests/run-inspector-browser.mjs "$RUNNER_TEMP/agent-pwa-a"
+
+      - name: Verify task-scoped research consent against the production server
+        run: node tests/research-browser.mjs "$RUNNER_TEMP/agent-pwa-a"
 
       - name: Verify installability, offline privacy, and explicit updates
         run: node tests/pwa-browser.mjs "$RUNNER_TEMP/agent-pwa-a" "$RUNNER_TEMP/agent-pwa-b"

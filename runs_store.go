@@ -44,29 +44,34 @@ type RunUsage struct {
 	TotalTokens  int `json:"total_tokens"`
 }
 type Run struct {
-	ID                string     `json:"id"`
-	ConversationID    string     `json:"conversation_id,omitempty"`
-	State             string     `json:"state"`
-	StartedAt         time.Time  `json:"started_at"`
-	FinishedAt        *time.Time `json:"finished_at,omitempty"`
-	DurationMS        int64      `json:"duration_ms"`
-	Provider          string     `json:"provider"`
-	Model             string     `json:"model"`
-	Context           RunContext `json:"context"`
-	Events            []RunEvent `json:"events"`
-	Request           any        `json:"request,omitempty"`
-	Response          any        `json:"response,omitempty"`
-	RequestTruncated  bool       `json:"request_truncated"`
-	ResponseTruncated bool       `json:"response_truncated"`
-	Error             string     `json:"error,omitempty"`
-	Usage             *RunUsage  `json:"usage,omitempty"`
-	HTTPStatus        int        `json:"http_status,omitempty"`
-	Retries           int        `json:"retries"`
+	Research             *RunResearch           `json:"research,omitempty"`
+	ModelCalls           []RunResearchModelCall `json:"model_calls,omitempty"`
+	ToolCalls            []RunResearchToolCall  `json:"tool_calls,omitempty"`
+	CaptureOmittedFields int                    `json:"capture_omitted_fields,omitempty"`
+	ID                   string                 `json:"id"`
+	ConversationID       string                 `json:"conversation_id,omitempty"`
+	State                string                 `json:"state"`
+	StartedAt            time.Time              `json:"started_at"`
+	FinishedAt           *time.Time             `json:"finished_at,omitempty"`
+	DurationMS           int64                  `json:"duration_ms"`
+	Provider             string                 `json:"provider"`
+	Model                string                 `json:"model"`
+	Context              RunContext             `json:"context"`
+	Events               []RunEvent             `json:"events"`
+	Request              any                    `json:"request,omitempty"`
+	Response             any                    `json:"response,omitempty"`
+	RequestTruncated     bool                   `json:"request_truncated"`
+	ResponseTruncated    bool                   `json:"response_truncated"`
+	Error                string                 `json:"error,omitempty"`
+	Usage                *RunUsage              `json:"usage,omitempty"`
+	HTTPStatus           int                    `json:"http_status,omitempty"`
+	Retries              int                    `json:"retries"`
 }
 type runCapture struct {
-	store  *accountStore
-	userID string
-	run    Run
+	researchBudget int
+	store          *accountStore
+	userID         string
+	run            Run
 }
 type runContextKey struct{}
 
@@ -128,6 +133,16 @@ func migrateRuns(db *sql.DB) error {
 		run.FinishedAt = &now
 		run.DurationMS = now.Sub(run.StartedAt).Milliseconds()
 		run.Error = "The server stopped before this run finished."
+		for i := range run.ModelCalls {
+			if run.ModelCalls[i].State == "running" {
+				run.ModelCalls[i].State = "interrupted"
+			}
+		}
+		for i := range run.ToolCalls {
+			if run.ToolCalls[i].State == "running" {
+				run.ToolCalls[i].State = "interrupted"
+			}
+		}
 		for i := range run.Events {
 			if run.Events[i].State == "running" {
 				run.Events[i].State = "failed"
@@ -184,6 +199,9 @@ func (s *accountStore) createRun(user authUser, id, conversationID string, messa
 }
 func (c *runCapture) persist() {
 	b, err := json.Marshal(c.run)
+	if err == nil && c.run.Research != nil && len(b) > 128<<10 {
+		b = c.boundResearchSnapshot()
+	}
 	if err == nil {
 		_, _ = c.store.db.Exec(`UPDATE runs SET conversation_id=?,state=?,data=? WHERE id=? AND user_id=?`, c.run.ConversationID, c.run.State, b, c.run.ID, c.userID)
 	}
@@ -259,6 +277,16 @@ func (c *runCapture) finish(reply string, err error) {
 		c.run.State = "failed"
 		c.run.Error = "The request could not be completed."
 		detail = "Request failed"
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			c.run.State = "cancelled"
+			c.run.Error = "The request was cancelled or its time limit expired."
+			detail = "Request cancelled"
+			for i := range c.run.Events {
+				if c.run.Events[i].State == "running" {
+					c.run.Events[i].State = "cancelled"
+				}
+			}
+		}
 	} else {
 		text, truncated := boundedTraceText(reply)
 		c.run.ResponseTruncated = truncated

@@ -65,6 +65,10 @@ CREATE INDEX IF NOT EXISTS messages_conversation ON messages(user_id, conversati
 		_ = db.Close()
 		return nil, err
 	}
+	if err = migrateResearchSettings(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err = migrateRuns(db); err != nil {
 		db.Close()
 		return nil, err

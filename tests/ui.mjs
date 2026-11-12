@@ -103,6 +103,9 @@ const server = createServer(async (req, res) => {
   }
   if (url.pathname === '/api/auth/me') { json(authenticated ? 200 : 401, authenticated ? { id: 'demo-user', username: 'Browser Test' } : { error: 'Sign in to continue.' }); return; }
   if (!authenticated) { json(401, { error: 'Sign in to continue.' }); return; }
+  if (url.pathname === '/api/research/settings') {
+    json(200, {settings:{configured:false,provider:'Brave Search',key_suffix:'',revision:'',verified_at:'',last_checked_at:'',status:'not_configured'}}); return;
+  }
   if (url.pathname === '/api/auth/password') {
     for await (const _ of req) {}
     json(passwordFailure ? 401 : 200, passwordFailure ? { error: 'Current password is incorrect.' } : { password_changed: true }); return;
@@ -1128,3 +1131,7 @@ try {
   await new Promise(resolve => child.exitCode !== null ? resolve() : child.once('exit', resolve));
   await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
 }
+
+// Keep task-scoped consent/control coverage in the established UI test command.
+await import('./research-ui.mjs');
+await import('./research-settings-ui.mjs');

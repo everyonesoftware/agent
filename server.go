@@ -11,6 +11,11 @@ import (
 )
 
 func newServer() http.Handler {
+	return newServerWithResearchWebFactory(nil)
+}
+
+// Package-private fixture injection; production never accepts an upstream override.
+func newServerWithResearchWebFactory(factory func(string) *researchWeb) http.Handler {
 	siwc := newSIWCServiceFromEnv()
 	apiProvider := newModelProviderFromEnv()
 	mux := http.NewServeMux()
@@ -30,7 +35,10 @@ func newServer() http.Handler {
 		mux.HandleFunc("POST /api/auth/logout", accounts.logoutHandler)
 		mux.Handle("GET /api/auth/me", accounts.middleware(http.HandlerFunc(accounts.meHandler)))
 		mux.Handle("POST /api/auth/password", accounts.middleware(http.HandlerFunc(accounts.passwordChangeHandler)))
-		mux.Handle("POST /api/chat", accounts.middleware(chatHandlerWithStore(provider, accounts)))
+		research := newAccountResearchService(accounts)
+		research.settings.webFactory = factory
+		research.register(mux, accounts)
+		mux.Handle("POST /api/chat", accounts.middleware(chatHandlerWithResearch(provider, accounts, research)))
 		mux.Handle("GET /api/runs/{id}", accounts.middleware(http.HandlerFunc(accounts.runHandler)))
 		mux.Handle("GET /api/models", accounts.middleware(modelsHandler(provider)))
 		mux.Handle("GET /api/conversations", accounts.middleware(http.HandlerFunc(accounts.listConversations)))

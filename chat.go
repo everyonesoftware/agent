@@ -23,6 +23,7 @@ type chatMessage struct {
 }
 
 type chatRequest struct {
+	ResearchTaskID  string        `json:"research_task_id,omitempty"`
 	RunID           string        `json:"run_id,omitempty"`
 	OmittedMessages int           `json:"omitted_messages,omitempty"`
 	Messages        []chatMessage `json:"messages"`
@@ -35,6 +36,9 @@ func chatHandler(provider modelProvider) http.HandlerFunc {
 }
 
 func chatHandlerWithStore(provider modelProvider, accounts *accountStore) http.HandlerFunc {
+	return chatHandlerWithResearch(provider, accounts, nil)
+}
+func chatHandlerWithResearch(provider modelProvider, accounts *accountStore, research *researchService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !provider.configured() {
 			writeChatError(w, http.StatusServiceUnavailable, "Connect ChatGPT from a browser on the Agent host, or configure LLM_MODEL and provider settings.")
@@ -87,14 +91,33 @@ func chatHandlerWithStore(provider modelProvider, accounts *accountStore) http.H
 				}
 			}
 		}
+		ctx := r.Context()
+		var task *researchTask
+		var researchErr error
+		if request.ResearchTaskID != "" {
+			if research == nil || accounts == nil || requestIsCrossSite(r) {
+				writeChatError(w, 403, "Research permission is required.")
+				return
+			}
+			var err error
+			ctx, task, err = research.consume(ctx, user, request)
+			if err != nil {
+				writeChatError(w, 403, "Research permission is missing, expired, already used, or does not match this request.")
+				return
+			}
+			defer func() { research.finish(task, researchErr) }()
+		}
 		now := time.Now()
 		messages := append([]chatMessage{{Role: "system", Content: instructionsAt(now)}}, request.Messages...)
-		ctx := r.Context()
+		if task != nil {
+			messages = []chatMessage{{Role: "system", Content: researchInstructions(now, task.SearchAvailable)}, request.Messages[len(request.Messages)-1]}
+		}
 		var capture *runCapture
 		if accounts != nil {
 			var captureErr error
 			capture, captureErr = accounts.createRun(user, request.RunID, request.ConversationID, messages, now, request.OmittedMessages)
 			if errors.Is(captureErr, errRunExists) {
+				researchErr = captureErr
 				writeChatError(w, 409, "Run ID already exists.")
 				return
 			}
@@ -103,11 +126,36 @@ func chatHandlerWithStore(provider modelProvider, accounts *accountStore) http.H
 				w.Header().Set("X-Agent-Run-ID", capture.run.ID)
 			}
 		}
-		reply, err := provider.complete(ctx, messages, request.Model)
+		if task != nil {
+			if c := captureFrom(ctx); c != nil {
+				c.researchBudget = 16 << 10
+				c.run.Research = &RunResearch{TaskID: task.ID, Scope: "public_web", ConsentBasis: "explicit_task_approval", HistoryPolicy: "final_user_message_only", ExpiresAt: task.ExpiresAt}
+				c.run.Events = append(c.run.Events, RunEvent{"consent", "Explicit task approval: public web only; earlier chat history excluded", now, "completed"})
+				c.run.Context.Tools = researchTools(task.SearchAvailable, false)
+				c.run.Context.OmittedMessages += len(request.Messages) - 1
+				c.persist()
+			}
+		}
+		var reply string
+		var err error
+		if task != nil {
+			reply, err = research.run(ctx, task, provider, messages, request.Model)
+			researchErr = err
+		} else {
+			reply, err = provider.complete(ctx, messages, request.Model)
+		}
 		if capture != nil && err != nil {
 			capture.finish("", err)
 		}
 		if err != nil {
+			if task != nil && errors.Is(err, errResearchDenied) {
+				writeChatJSON(w, 403, map[string]string{"error": "Research stopped because a tool request exceeded this task's approved public-web scope or had invalid arguments. Review the task before starting new research; no additional access was granted.", "action": "review_research"})
+				return
+			}
+			if task != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+				writeChatError(w, 409, "Research was stopped or its time limit expired.")
+				return
+			}
 			if errors.Is(err, errModelNotConfigured) {
 				writeChatError(w, http.StatusServiceUnavailable, "Connect your ChatGPT account or configure LLM_MODEL and provider settings.")
 				return
@@ -128,10 +176,26 @@ func chatHandlerWithStore(provider modelProvider, accounts *accountStore) http.H
 				writeChatError(w, http.StatusUnauthorized, "Sign in to continue.")
 				return
 			}
-			conversationID, saveErr := accounts.saveRunExchange(user, request.ConversationID, []chatMessage{request.Messages[len(request.Messages)-1], {Role: "assistant", Content: reply}}, runID)
+			var conversationID string
+			var saveErr error
+			save := func() error {
+				var err error
+				conversationID, err = accounts.saveRunExchange(user, request.ConversationID, []chatMessage{request.Messages[len(request.Messages)-1], {Role: "assistant", Content: reply}}, runID)
+				return err
+			}
+			if task != nil {
+				saveErr = research.commit(ctx, task, save)
+				researchErr = saveErr
+			} else {
+				saveErr = save()
+			}
 			if saveErr != nil {
 				if capture != nil {
 					capture.finish(reply, saveErr)
+				}
+				if task != nil && (errors.Is(saveErr, context.Canceled) || errors.Is(saveErr, context.DeadlineExceeded)) {
+					writeChatError(w, 409, "Research was stopped or its time limit expired.")
+					return
 				}
 				writeChatError(w, http.StatusInternalServerError, "The reply was generated, but the conversation could not be saved.")
 				return

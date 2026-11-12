@@ -128,6 +128,18 @@ const homePage = `<!doctype html>
 
     #provider-feedback { margin: 14px 0 0; color: var(--accent); font-size: 12px; }
     #provider-feedback.warning { color: #dfc38e; }
+    #research-settings-card { overflow-wrap: anywhere; }
+    #research-settings-card button, #research-key-remove-dialog button { min-height: 44px; }
+    .research-key-field { position: relative; display: flex; min-width: 0; }
+    .research-key-field input { min-width: 0; min-height: 44px; padding-right: 66px; }
+    #research-key-show { position: absolute; right: 2px; top: 0; padding: 0 10px; color: var(--muted); }
+    .research-settings-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 16px; }
+    #research-settings-card .send { margin: 0; }
+    .research-settings-notice { margin-top: 16px; padding: 12px; border: 1px solid #3c493e; border-radius: 5px; background: #232d26; color: var(--muted); font-size: 12px; }
+    .research-saved { margin-top: 18px; padding: 12px; border: 1px solid var(--line); border-radius: 5px; background: #202322; }
+    #research-key-suffix { font: 13px Consolas, monospace; }
+    #research-key-error:empty, #research-key-feedback:empty { display: none; }
+    #research-settings-card .connection-help summary { min-height: 44px; }
     .security-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0; text-align: left; }
     .security-toggle h2 { margin: 0; }
     .security-copy { margin: 7px 0 0; }
@@ -173,6 +185,23 @@ const homePage = `<!doctype html>
     .message-text blockquote { margin: 16px 0; padding: 0 16px; border-left: 2px solid #56645a; color: var(--muted); white-space: pre-wrap; }
     .message-text > :first-child { margin-top: 0; }
     .message-text > :last-child { margin-bottom: 0; }
+    .research-opt-in { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); min-height: 32px; }
+    .research-opt-in input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+    .research-card { display: flex; flex-direction: column; padding: 14px; margin-bottom: 10px; border: 1px solid #596b50; border-radius: 8px; background: #272e28; max-height: min(55dvh, 430px); overflow: hidden; overflow-wrap: anywhere; }
+    .research-consent-copy { overflow: auto; min-height: 0; }
+    .research-card > .research-actions { flex-shrink: 0; padding-top: 8px; }
+    .research-card h2 { font-size: 15px; margin: 0 0 8px; }
+    .research-card p { margin: 8px 0; font-size: 12px; line-height: 1.5; }
+    .research-card pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 12px; }
+    .research-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .research-actions button { min-height: 44px; white-space: normal; }
+    #research-approve { background: #35442e; color: #d1e7c5; }
+    #research-scope { margin-bottom: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: #252c26; max-height: 28dvh; overflow: auto; }
+    .research-badge { align-self: center; color: #c1d7b6; font-size: 12px; margin-right: auto; }
+    #research-permission-details p, #research-control-feedback { font-size: 12px; margin: 8px 0; overflow-wrap: anywhere; }
+    #research-control-feedback:empty { display: none; }
+    #research-consent:not([hidden]) ~ .hint { display: none; }
+    .research-card[hidden], #research-scope[hidden] { display: none; }
     .composer-wrap { width: 100%; max-width: 796px; margin: 0 auto; padding: 10px 28px 18px; border: 0; }
     .notice { min-height: 18px; color: var(--muted); font-size: 11px; margin: 0 0 8px; }
     .notice.error { color: #efada5; }
@@ -401,6 +430,22 @@ const homePage = `<!doctype html>
 
 
         </section>
+        <section class="settings-card" id="research-settings-card" aria-labelledby="research-settings-title">
+          <div class="connection-heading"><h2 id="research-settings-title">Web research</h2><span class="connection-badge off" id="research-settings-badge" role="status">Not loaded</span></div>
+          <p>Search public web sources with your own Brave Search key. Public-page retrieval and your ChatGPT connection work independently.</p>
+          <p class="connection-detail">Provider: Brave Search · Saved for your Agent account only</p>
+          <div id="research-key-saved" class="research-saved" hidden><strong id="research-key-suffix"></strong><p id="research-key-checked" class="connection-detail"></p><div class="research-settings-actions"><button class="reset" id="research-key-replace" type="button">Replace key</button><button class="reset" id="research-key-check" type="button">Test connection</button><button class="reset danger" id="research-key-remove" type="button">Remove key</button></div></div>
+          <form id="research-key-form" hidden autocomplete="off">
+            <label for="research-api-key">Brave Search API key</label>
+            <div class="research-key-field"><input id="research-api-key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="research-key-disclosure research-key-error"><button id="research-key-show" type="button" aria-pressed="false">Show</button></div>
+            <p id="research-key-disclosure" class="research-settings-notice">Verify &amp; save sends one verification test query to Brave Search. This may count toward your Brave usage. Test connection also sends one test query.</p>
+            <div class="research-settings-actions"><button class="send" id="research-key-verify" type="submit">Verify &amp; save</button><button class="reset" id="research-key-cancel" type="button">Cancel</button></div>
+          </form>
+          <p id="research-key-error" class="menu-error" role="alert"></p><p id="research-key-feedback" class="connection-detail" role="status" aria-live="polite"></p><button class="reset" id="research-settings-retry" type="button" hidden>Retry settings</button>
+          <p id="research-key-consent" class="connection-detail">Saving a key does not approve research. Each task still needs your permission.</p>
+          <details class="connection-help"><summary>About your search key</summary><p>Get a Search API key from your Brave Search account. Agent stores it on this server for your user; it is never sent in model messages. Only its suffix is shown after saving.</p><p>Updating or removing your key stops your active research permissions; other users are unaffected.</p></details>
+        </section>
+        <dialog id="research-key-remove-dialog" class="connection-dialog" aria-labelledby="research-key-remove-title"><h2 id="research-key-remove-title">Remove your Brave Search key?</h2><p>This removes the key from your Agent account and stops your active research permissions. It does not revoke the key at Brave. Public-page retrieval and your ChatGPT connection are unaffected.</p><div class="dialog-actions"><button id="research-key-keep" class="reset" type="button">Keep key</button><button id="research-key-remove-confirm" class="reset danger" type="button">Remove Brave key</button></div></dialog>
         <section class="settings-card" aria-labelledby="password-title">
           <button class="security-toggle" id="security-toggle" type="button" aria-expanded="false" aria-controls="password-form"><h2 id="password-title">Reset password</h2><span id="security-chevron" aria-hidden="true">＋</span></button>
           <p class="security-copy">Change your Agent password, not your ChatGPT password.</p>
@@ -435,12 +480,29 @@ const homePage = `<!doctype html>
     </section>
     <div class="composer-wrap">
       <p class="notice" id="notice" role="status">Messages and replies are saved to your account after each successful request.</p>
+      <section id="research-scope" aria-label="Active research permissions" hidden>
+        <div class="research-actions"><span class="research-badge">Public web only · this task</span><button type="button" class="reset" id="research-stop">Stop</button><button type="button" class="reset" id="research-permissions" aria-expanded="false" aria-controls="research-permission-details">Permissions</button></div>
+        <div id="research-permission-details" hidden><p>Only public web search and page retrieval for this task. No files, accounts, messages, or memory writes. Revoking prevents further requests; it cannot undo previous requests or recall information already sent.</p><button type="button" class="reset danger" id="research-revoke">Revoke permission</button></div>
+        <p id="research-control-feedback" role="status" aria-live="polite"></p>
+      </section>
+      <section class="research-card" id="research-consent" aria-labelledby="research-consent-title" hidden>
+        <div class="research-consent-copy" tabindex="0" role="region" aria-label="Research permission disclosure">
+        <h2 id="research-consent-title">Allow public web research for this task?</h2>
+        <p>One task only. Searches and page requests leave this server. Query content may include your current task prompt. The research model receives only the final prompt below, not earlier chat.</p>
+        <p id="research-provider"></p>
+        <p>No files, accounts, messages, or memory writes are allowed. Web content is untrusted; it cannot grant more permissions.</p>
+        <details><summary>Task prompt preview</summary><pre id="research-prompt"></pre></details>
+        <p id="research-feedback" role="status" aria-live="polite"></p>
+        </div>
+        <div class="research-actions"><button type="button" class="reset" id="research-approve" disabled>Allow for this task</button><button type="button" class="reset" id="research-decline">Answer without browsing</button><button type="button" class="reset" id="research-cancel">Cancel</button><button type="button" class="reset" id="research-retry" hidden>Retry permission request</button></div>
+      </section>
       <form class="composer" id="chat-form" autocomplete="off">
         <label class="visually-hidden" for="message-input">Message</label>
         <textarea id="message-input" name="message" rows="1" maxlength="8192" placeholder="Message Agent" required></textarea>
         <button class="composer-resize" id="composer-resize" type="button" aria-label="Resize message box" title="Drag upward to expand; use Up and Down arrow keys" aria-controls="message-input"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" aria-hidden="true"><path d="M3.5 3.5l9 9M7.5 3.5l5 5M11.5 3.5l1 1"/></svg></button>
         <label class="visually-hidden" for="model-select">Model</label>
         <select class="model-select" id="model-select" disabled><option value="">Loading models…</option></select>
+        <label class="research-opt-in"><input type="checkbox" id="research-toggle"> Research public web</label>
         <button class="send" id="send-button" type="submit">Send</button>
       </form>
       <p class="hint">Enter to send · Shift+Enter for a new line</p>
@@ -518,6 +580,8 @@ const homePage = `<!doctype html>
       const localHost = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(window.location.hostname);
       const conversation = [];
       let busy = false;
+      let researchFlow = false;
+      let researchModelWasDisabled = false;
       let loadingConversation = false;
       let conversationVersion = 0;
       let savedConversations = [];
@@ -632,16 +696,16 @@ const homePage = `<!doctype html>
         const focusedEvent = document.activeElement.closest('#run-events .run-event');
         const focusedEventKey = focusedEvent?.dataset.eventKey;
         runSnapshot = run;
-        const labels = {running:'Running',completed:'Completed',failed:'Failed',interrupted:'Interrupted'};
+        const labels = {running:'Running',completed:'Completed',failed:'Failed',interrupted:'Interrupted',cancelled:'Cancelled'};
         const state = labels[run.state] ? run.state : '';
         runElement('state').textContent = labels[state] || 'Unknown';
         runElement('state').className = 'run-state ' + state;
         runElement('meta').textContent = [run.id, run.model || 'Model not selected', runDuration(run.duration_ms), 'Read-only'].join(' · ');
         const events = runElement('events'); events.replaceChildren();
         for (const event of Array.isArray(run.events) ? run.events : []) {
-          const titles = {context:'Context prepared',provider:'Model request started',completed:'Response received',failed:'Request failed',interrupted:'Run interrupted'};
+          const titles = {context:'Context prepared',consent:'Research permission approved',tool:'Public-web tool call',provider:'Model request started',completed:'Response received',failed:'Request failed',interrupted:'Run interrupted',cancelled:'Research cancelled'};
           const title = Object.hasOwn(titles, event.name) ? titles[event.name] : event.name;
-          const kind = ['completed','running','failed'].includes(event.state) ? event.state : '';
+          const kind = ['cancelled','rejected','interrupted'].includes(event.state) ? 'failed' : ['completed','running','failed'].includes(event.state) ? event.state : '';
           const row = runNode('div', undefined, 'run-event ' + kind);
           row.dataset.eventKey = String(event.name) + '|' + String(event.at);
           const mark = runNode('span', kind === 'failed' ? '!' : kind === 'running' ? '…' : '✓', 'run-event-mark');
@@ -657,12 +721,13 @@ const homePage = `<!doctype html>
         }
         const context = run.context || {};
         const toolCount = Array.isArray(context.tools) ? context.tools.length : 0;
+        const toolNames = toolCount ? context.tools.map(tool => typeof tool === 'string' ? tool : tool?.function?.name || tool?.name || 'Unnamed tool') : [];
         runElement('tools').textContent = toolCount === 0 ? '0 tools available · No web search performed' : toolCount + ' tools available';
         runValues(runElement('context-values'), [
           ['Current date', context.current_date || 'Not recorded'],
           ['Timezone', [context.timezone, context.utc_offset].filter(Boolean).join(' · ') || 'Not recorded'],
           ['Context source', 'Server clock'], ['Instructions', context.instructions_version || 'Not recorded'],
-          ['Tools', toolCount === 0 ? 'None available' : context.tools.join(', ')], ['Skills / memory', 'None loaded'],
+          ['Tools', toolCount === 0 ? 'None available' : toolNames.join(', ')], ['Skills / memory', 'None loaded'],
           ['Excluded before inference', typeof context.omitted_messages === 'number' ? String(context.omitted_messages) : 'Not recorded'],
           ['Excluded from capture', typeof context.capture_omitted_messages === 'number' ? String(context.capture_omitted_messages) : 'Not recorded'],
         ]);
@@ -682,11 +747,17 @@ const homePage = `<!doctype html>
         ]);
         runElement('error').hidden = !run.error;
         runElement('error').textContent = run.error || '';
-        const truncated = run.request_truncated || run.response_truncated || context.truncated;
+        const modelCalls = Array.isArray(run.model_calls) ? run.model_calls : [];
+        const toolCalls = Array.isArray(run.tool_calls) ? run.tool_calls : [];
+        const truncated = run.request_truncated || run.response_truncated || context.truncated || run.capture_omitted_fields > 0 || modelCalls.some(call => call.request_truncated || call.response_truncated) || toolCalls.some(call => call.truncated);
         runElement('truncation').hidden = !truncated;
         runElement('truncation').textContent = 'Capture size limit reached. Some trace content was omitted; this is not a complete payload.';
+        const researchPayloads = run.research ? {
+          request: {permission:run.research,model_calls:modelCalls.map(call => ({index:call.index,provider:call.provider,model:call.model,state:call.state,http_status:call.http_status,request:call.request,request_truncated:call.request_truncated})),tool_calls:toolCalls.map(call => ({id:call.id,name:call.name,state:call.state,consent_basis:call.consent_basis,arguments:call.arguments,truncated:call.truncated}))},
+          response: {response:run.response,model_calls:modelCalls.map(call => ({index:call.index,state:call.state,response:call.response,response_truncated:call.response_truncated,usage:call.usage})),tool_calls:toolCalls.map(call => ({id:call.id,name:call.name,state:call.state,result:call.result,truncated:call.truncated}))},
+        } : null;
         for (const field of ['request','response']) {
-          const details = runElement(field), data = run[field];
+          const details = runElement(field), data = researchPayloads ? researchPayloads[field] : run[field];
           details.querySelector('pre').textContent = data === undefined || data === null
             ? (state === 'running' ? 'Not captured yet.' : 'Not captured.')
             : typeof data === 'string' ? data : JSON.stringify(data, null, 2);
@@ -801,8 +872,8 @@ const homePage = `<!doctype html>
       let updateDraftRevision = 0;
       document.addEventListener('input', () => { ++updateDraftRevision; });
       window.agentUpdateSafety = () => ({
-        pending: busy || loadingConversation || passwordBusy || authBusy || connectionBusy || connectionSubmitting || usageBusy || usageSubmitting,
-        unsaved: Boolean(input.value || Array.from(document.querySelectorAll('input[type="password"], input[autocomplete="current-password"], input[autocomplete="new-password"]')).some(field => field.value) || document.querySelector('dialog[open]')),
+        pending: busy || loadingConversation || passwordBusy || authBusy || connectionBusy || connectionSubmitting || usageBusy || usageSubmitting || searchBusy,
+        unsaved: Boolean(searchKey.value || input.value || Array.from(document.querySelectorAll('input[type="password"], input[autocomplete="current-password"], input[autocomplete="new-password"]')).some(field => field.value) || document.querySelector('dialog[open]')),
         revision: updateDraftRevision,
       });
       // END update reload safety
@@ -982,9 +1053,148 @@ const homePage = `<!doctype html>
       });
       document.addEventListener('visibilitychange', () => { if (document.hidden) stopUsage(); else syncUsage(); });
 
+      // Search credentials never leave this input except in the explicit verify POST.
+      const searchEl = id => document.getElementById(id);
+      const searchKey = searchEl('research-api-key'), searchDialog = searchEl('research-key-remove-dialog');
+      let searchData = null, searchBusy = false, searchEpoch = 0, searchEditing = false;
+      let searchExpectedRevision = '', searchRemoveRevision = '', searchUnknown = false;
+      function clearSearchDraft() {
+        searchKey.value = ''; searchKey.type = 'password';
+        searchEl('research-key-show').textContent = 'Show';
+        searchEl('research-key-show').setAttribute('aria-pressed', 'false');
+        searchEditing = false; ++updateDraftRevision;
+      }
+      function renderSearchSettings() {
+        const known = Boolean(searchData) && !searchUnknown;
+        const badge = searchEl('research-settings-badge');
+        badge.textContent = searchBusy ? 'Checking…' : !known ? 'Status unknown' : !searchData.configured ? 'Not configured' : ({connected:'Last test passed',invalid:'Last test: invalid key',unavailable:'Last test unavailable'}[searchData.status] || 'Not verified');
+        badge.className = 'connection-badge ' + (known && searchData.status === 'connected' ? '' : 'off');
+        searchEl('research-key-saved').hidden = !known || !searchData.configured;
+        searchEl('research-key-form').hidden = !known || (searchData.configured && !searchEditing);
+        searchEl('research-key-suffix').textContent = known && searchData.configured ? '•••• ' + searchData.key_suffix : '';
+        searchEl('research-key-checked').textContent = known && searchData.configured ? 'Last verification: ' + (searchData.last_checked_at || searchData.verified_at || 'not recorded') + '. This is not a live availability guarantee.' : '';
+        searchEl('research-settings-retry').hidden = known || searchBusy;
+        searchEl('research-settings-card').setAttribute('aria-busy', String(searchBusy));
+        for (const node of searchEl('research-settings-card').querySelectorAll('button, input')) node.disabled = searchBusy || (!known && node.id !== 'research-settings-retry');
+        searchEl('research-key-remove-confirm').disabled = searchBusy;
+        searchEl('research-key-keep').disabled = searchBusy;
+      }
+      async function searchFetch(action, expectedRevision) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 12000);
+        try {
+          const response = await fetch('/api/research/settings' + (action ? '/' + action : ''), {
+            method: action ? 'POST' : 'GET', cache:'no-store', signal:controller.signal,
+            ...(action ? {headers:{'Content-Type':'application/json'}, body:JSON.stringify(action === 'verify' ? {api_key:searchKey.value,expected_revision:expectedRevision} : {expected_revision:expectedRevision})} : {})
+          });
+          const result = await response.json();
+          return {response,result};
+        } finally { clearTimeout(timeout); }
+      }
+      function acceptSearchSettings(data) {
+        if (!data || typeof data.configured !== 'boolean' || typeof data.revision !== 'string' || typeof data.key_suffix !== 'string') throw new Error('Invalid metadata');
+        searchData = data; searchUnknown = false;
+      }
+      async function readSearchSettings() {
+        if (searchBusy || settingsPanel.hidden) return;
+        const epoch = ++searchEpoch;
+        searchBusy = true; searchUnknown = true; searchEl('research-key-error').textContent = ''; renderSearchSettings();
+        try {
+          const {response,result} = await searchFetch('');
+          if (epoch !== searchEpoch) return;
+          if (!response.ok) throw new Error('Read failed');
+          acceptSearchSettings(result.settings);
+          if (!searchEditing) searchExpectedRevision = searchData.revision;
+        } catch (_) {
+          if (epoch === searchEpoch) { searchUnknown = true; searchEl('research-key-error').textContent = 'Could not load your search settings. Retry to review the current saved key.'; }
+        } finally {
+          searchBusy = false;
+          if (epoch === searchEpoch) renderSearchSettings();
+          else if (!settingsPanel.hidden) void readSearchSettings();
+        }
+      }
+      async function mutateSearchSettings(action, expectedRevision) {
+        if (searchBusy || searchUnknown || !searchData) return;
+        if (action === 'verify' && !searchKey.value.trim()) { searchEl('research-key-error').textContent = 'Enter a Brave Search API key.'; searchKey.focus(); return; }
+        const epoch = searchEpoch;
+        searchBusy = true; searchEl('research-key-error').textContent = ''; searchEl('research-key-feedback').textContent = ''; renderSearchSettings();
+        let message = '', success = false;
+        try {
+          const {response,result} = await searchFetch(action, expectedRevision);
+          if (response.ok) {
+            acceptSearchSettings(result.settings); success = true;
+            if (action !== 'check') clearSearchDraft();
+          } else if (response.status === 409) {
+            clearSearchDraft();
+            const current = await searchFetch('');
+            if (!current.response.ok) throw new Error('Reconcile failed');
+            acceptSearchSettings(current.result.settings);
+            message = 'Your saved key changed elsewhere. Review the current key, then choose your action again.';
+          } else if (response.status === 422 || result.code === 'invalid_key' || response.status === 429 || response.status === 503) {
+            if (!result.settings) throw new Error('Mutation outcome was not acknowledged');
+            acceptSearchSettings(result.settings);
+            message = result.code === 'invalid_key' || response.status === 422 ? 'Brave rejected this key. Check it and try again. Your previously saved key has not been replaced.' : response.status === 429 ? 'Brave rate limit reached. Wait before trying again. Your saved key has not been replaced.' : 'Brave is unavailable. Try again later. Your saved key has not been replaced.';
+          } else throw new Error('Ambiguous mutation');
+        } catch (_) {
+          // Aborting a fetch does not roll back a committed server mutation. Never replay it.
+          clearSearchDraft(); searchUnknown = true;
+          try {
+            const current = await searchFetch('');
+            if (!current.response.ok) throw new Error('Reconcile failed');
+            acceptSearchSettings(current.result.settings);
+            message = 'The operation was not acknowledged. Current saved settings have been refreshed; review them before trying again.';
+          } catch (_) { message = 'Outcome unknown: the server may have saved this change. Retry settings to review it before making another change.'; }
+        } finally {
+          searchBusy = false;
+          if (searchDialog.open) searchDialog.close();
+          if (epoch === searchEpoch && !settingsPanel.hidden) {
+            if (!searchEditing && searchData) searchExpectedRevision = searchData.revision;
+            searchEl('research-key-error').textContent = message;
+            searchEl('research-key-feedback').textContent = success ? (action === 'verify' ? 'Brave key verified and saved. Research still needs task permission.' : action === 'remove' ? 'Brave key removed here, not revoked at Brave.' : 'One connection test completed. See the last verification status above.') : '';
+            renderSearchSettings();
+            if (success && action === 'verify') searchEl('research-key-replace').focus();
+            if (success && action === 'remove') searchKey.focus();
+          } else if (!settingsPanel.hidden) void readSearchSettings();
+        }
+      }
+      searchEl('research-key-form').addEventListener('submit', event => { event.preventDefault(); void mutateSearchSettings('verify', searchExpectedRevision); });
+      searchEl('research-key-show').addEventListener('click', () => {
+        const show = searchKey.type === 'password'; searchKey.type = show ? 'text' : 'password';
+        searchEl('research-key-show').textContent = show ? 'Hide' : 'Show';
+        searchEl('research-key-show').setAttribute('aria-pressed', String(show));
+      });
+      searchEl('research-key-replace').addEventListener('click', () => {
+        if (searchBusy || searchUnknown) return;
+        clearSearchDraft(); searchEditing = true; searchExpectedRevision = searchData.revision;
+        searchEl('research-key-error').textContent = ''; searchEl('research-key-feedback').textContent = '';
+        renderSearchSettings(); searchKey.focus();
+      });
+      searchEl('research-key-cancel').addEventListener('click', () => {
+        if (searchBusy) return;
+        clearSearchDraft(); searchEl('research-key-error').textContent = ''; renderSearchSettings();
+        if (searchData?.configured) searchEl('research-key-replace').focus(); else searchKey.focus();
+      });
+      searchEl('research-key-check').addEventListener('click', () => { void mutateSearchSettings('check', searchData?.revision); });
+      searchEl('research-settings-retry').addEventListener('click', () => { void readSearchSettings(); });
+      searchEl('research-key-remove').addEventListener('click', () => {
+        if (searchBusy || searchUnknown) return;
+        searchRemoveRevision = searchData.revision; searchDialog.showModal(); searchEl('research-key-keep').focus();
+      });
+      searchEl('research-key-keep').addEventListener('click', () => { if (!searchBusy) searchDialog.close(); });
+      searchDialog.addEventListener('cancel', event => { if (searchBusy) event.preventDefault(); });
+      searchDialog.addEventListener('close', () => { if (!settingsPanel.hidden) searchEl('research-key-remove').focus(); });
+      searchEl('research-key-remove-confirm').addEventListener('click', () => { void mutateSearchSettings('remove', searchRemoveRevision); });
+      function leaveSearchSettings() {
+        ++searchEpoch; clearSearchDraft(); searchUnknown = true;
+        if (searchDialog.open) searchDialog.close();
+        searchEl('research-key-feedback').textContent = ''; renderSearchSettings();
+      }
+      window.addEventListener('pagehide', clearSearchDraft);
+
       function showSettings(open, updateURL = true) {
+        if (researchFlow) return;
         if (open) closeRunInspector(false);
-        if (!open) stopUsage();
+        if (!open) { stopUsage(); leaveSearchSettings(); }
         if (updateURL && (window.location.hash === '#settings') !== open) {
           const url = new URL(window.location.href);
           url.hash = open ? 'settings' : '';
@@ -1001,7 +1211,7 @@ const homePage = `<!doctype html>
         closeAccount(false);
         setSidebar(false, false);
         if (!passwordBusy) { passwordForm.reset(); passwordStatus.textContent = ''; }
-        if (open) { document.getElementById('back-to-chat').focus(); if (!connectionBusy) refreshConnectionState(); }
+        if (open) { void readSearchSettings(); document.getElementById('back-to-chat').focus(); if (!connectionBusy) refreshConnectionState(); }
         else input.focus();
       }
       settingsButton.addEventListener('click', function () { showSettings(true); });
@@ -1218,6 +1428,10 @@ const homePage = `<!doctype html>
         document.getElementById('new-chat').disabled = locked;
         for (const button of conversationList.querySelectorAll('.session')) button.disabled = locked;
         form.setAttribute('aria-busy', String(locked));
+        researchToggle.disabled = locked;
+        settingsButton.disabled = researchFlow;
+        document.getElementById('logout-button').disabled = researchFlow;
+        if (researchFlow) modelSelect.disabled = true;
       }
 
       function historyGroup(seconds) {
@@ -1301,6 +1515,9 @@ const homePage = `<!doctype html>
       }
 
       document.getElementById('logout-button').addEventListener('click', async function () {
+        if (researchFlow) return;
+        if (searchBusy) return;
+        leaveSearchSettings();
         const button = this;
         const error = document.getElementById('logout-error');
         error.hidden = true; button.disabled = true;
@@ -1315,6 +1532,7 @@ const homePage = `<!doctype html>
 
       async function loadConversation(item) {
         if (busy || loadingConversation) return;
+        researchToggle.checked = false;
         showSettings(false);
         loadingConversation = true;
         const version = ++conversationVersion;
@@ -1838,18 +2056,201 @@ const homePage = `<!doctype html>
         }
       });
 
+      const researchToggle = document.getElementById('research-toggle');
+      const researchConsent = document.getElementById('research-consent');
+      const researchApprove = document.getElementById('research-approve');
+      const researchRetry = document.getElementById('research-retry');
+      const researchFeedback = document.getElementById('research-feedback');
+      let researchPending = null;
+      let activeResearch = null;
+      const researchScope = document.getElementById('research-scope');
+      const researchStop = document.getElementById('research-stop');
+      const researchRevoke = document.getElementById('research-revoke');
+      const researchPermissions = document.getElementById('research-permissions');
+      const researchDetails = document.getElementById('research-permission-details');
+      const researchControlFeedback = document.getElementById('research-control-feedback');
+      researchPermissions.addEventListener('click', function () {
+        researchDetails.hidden = !researchDetails.hidden;
+        researchPermissions.setAttribute('aria-expanded', String(!researchDetails.hidden));
+      });
+      async function endResearch(action) {
+        const state = activeResearch;
+        if (!state || state.controlBusy) return;
+        state.controlBusy = true;
+        researchStop.disabled = researchRevoke.disabled = true;
+        researchControlFeedback.textContent = action === 'revoke' ? 'Requesting revocation…' : 'Requesting stop…';
+        try {
+          const result = await researchAPI('/api/research/tasks/' + encodeURIComponent(state.id) + '/' + action, {});
+          if (activeResearch !== state) return;
+          if (result.task?.status !== (action === 'revoke' ? 'revoked' : 'cancelled')) throw new Error('Server did not confirm the request. Try again.');
+          state.terminal = action === 'revoke' ? 'Research permission revoked.' : 'Research stopped.';
+          state.controller.abort();
+        } catch (error) {
+          if (activeResearch !== state) return;
+          researchControlFeedback.textContent = error.message + ' Research may still be running; retry Stop or Revoke.';
+        } finally {
+          state.controlBusy = false;
+          if (activeResearch === state) researchStop.disabled = researchRevoke.disabled = false;
+        }
+      }
+      function requestEndResearch(action) {
+        const state = activeResearch;
+        if (state && !state.controlBusy) state.controlPromise = endResearch(action);
+      }
+      researchStop.addEventListener('click', function () { requestEndResearch('stop'); });
+      researchRevoke.addEventListener('click', function () { requestEndResearch('revoke'); });
+      async function researchAPI(path, payload) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 10000);
+        try {
+          const response = await fetch(path, { method: payload === undefined ? 'GET' : 'POST', cache: 'no-store', signal: controller.signal,
+            headers: { 'Content-Type': 'application/json' }, body: payload === undefined ? undefined : JSON.stringify(payload) });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'Research permission request failed. Please try again.');
+          return result;
+        } catch (error) {
+          if (controller.signal.aborted) throw new Error('Research permission request timed out. Please retry.');
+          throw error;
+        } finally { clearTimeout(timer); }
+      }
+      async function finishResearchConsent(state, choice) {
+        if (researchPending !== state || state.cancelling || state.replacing) return;
+        if (choice === null || choice === 'declined') {
+          state.approvalVersion++;
+          state.cancelling = true;
+          researchApprove.disabled = true;
+          try {
+            if (state.task) {
+              const result = await researchAPI('/api/research/tasks/' + encodeURIComponent(state.task.id) + '/revoke', {});
+              if (!['revoked','cancelled','expired','failed','completed'].includes(result.task?.status)) throw new Error('Permission revocation was not confirmed.');
+            }
+          } catch (error) {
+            if (researchPending === state) researchFeedback.textContent = error.message + ' No model request was sent. Retry Cancel or Answer without browsing to close this permission.';
+            state.cancelling = false;
+            return;
+          }
+          state.cancelling = false;
+          if (researchPending !== state) return;
+        }
+        researchPending = null;
+        researchConsent.hidden = true;
+        form.hidden = false;
+        state.resolve(choice);
+      }
+      async function prepareResearchConsent(state) {
+        if (researchPending !== state || state.preparing || state.cancelling || state.approving) return;
+        state.preparing = true;
+        state.replacing = !!state.task;
+        state.approvalVersion++;
+        document.getElementById('research-cancel').disabled = document.getElementById('research-decline').disabled = state.replacing;
+        researchApprove.disabled = true;
+        researchRetry.hidden = true;
+        researchFeedback.textContent = 'Preparing a task-scoped permission request. No browsing has started.';
+        document.getElementById('research-provider').textContent = 'Checking the configured search provider…';
+        try {
+          if (state.task) {
+            const task = state.task;
+            const result = await researchAPI('/api/research/tasks/' + encodeURIComponent(task.id) + '/revoke', {});
+            if (researchPending !== state || state.task !== task) return;
+            if (!['revoked','cancelled','expired','failed','completed'].includes(result.task?.status)) throw new Error('Permission revocation was not confirmed.');
+            // Replace an immutable identity only after its grant is terminal.
+            state.task = null;
+          }
+          const config = await researchAPI('/api/research');
+          if (researchPending !== state) return;
+          if (!config.available) throw new Error(config.message || 'Public web research is unavailable.');
+          const result = await researchAPI('/api/research/tasks', state.request);
+          if (researchPending !== state) return;
+          state.task = result.task;
+          if (!state.task?.id || state.task.status !== 'pending' || state.task.scope !== 'public_web') throw new Error('Task permission could not be prepared.');
+          document.getElementById('research-provider').textContent = state.task.search_available
+            ? 'Search provider: ' + state.task.search_provider + '. Public pages only.'
+            : 'Public-page retrieval only. Global web search is not configured.';
+          researchFeedback.textContent = 'Permission applies to this request only and expires shortly. Nothing runs until you allow it.';
+          researchApprove.disabled = false;
+        } catch (error) {
+          if (researchPending !== state) return;
+          researchFeedback.textContent = error.message;
+          researchRetry.hidden = false;
+        } finally {
+          state.preparing = state.replacing = false;
+          if (researchPending === state) document.getElementById('research-cancel').disabled = document.getElementById('research-decline').disabled = false;
+        }
+      }
+      function requestResearchConsent(request) {
+        return new Promise(function (resolve) {
+          const state = { request: request, resolve: resolve, task: null, approving: false, approvalVersion: 0 };
+          researchPending = state;
+          form.hidden = true;
+          document.getElementById('research-prompt').parentElement.open = true;
+          document.querySelector('.research-consent-copy').scrollTop = 0;
+          document.getElementById('research-prompt').textContent = request.messages[request.messages.length - 1].content;
+          researchConsent.hidden = false;
+          document.getElementById('research-cancel').focus();
+          void prepareResearchConsent(state);
+        });
+      }
+      researchApprove.addEventListener('click', async function () {
+        const state = researchPending;
+        if (!state?.task || state.approving || state.preparing || state.cancelling || researchApprove.disabled) return;
+        const task = state.task;
+        const approvalVersion = state.approvalVersion;
+        state.approving = true;
+        researchApprove.disabled = true;
+        researchFeedback.textContent = 'Confirming permission…';
+        try {
+          const result = await researchAPI('/api/research/tasks/' + encodeURIComponent(task.id) + '/approve', {});
+          if (researchPending !== state || state.task !== task || state.approvalVersion !== approvalVersion) return;
+          if (result.task?.status !== 'approved') throw new Error('Permission was not approved. Review and retry.');
+          finishResearchConsent(state, task.id);
+        } catch (error) {
+          if (researchPending !== state || state.task !== task || state.approvalVersion !== approvalVersion) return;
+          researchFeedback.textContent = error.message + ' No model request was sent. Retry to review a new permission request.';
+          // A failed acknowledgment does not prove the server rejected approval.
+          researchRetry.hidden = false;
+          researchRetry.focus();
+        } finally { state.approving = false; }
+      });
+      researchRetry.addEventListener('click', function () {
+        if (researchPending && !researchPending.approving) void prepareResearchConsent(researchPending);
+      });
+      document.getElementById('research-decline').addEventListener('click', function () {
+        if (researchPending) finishResearchConsent(researchPending, 'declined');
+      });
+      document.getElementById('research-cancel').addEventListener('click', function () {
+        if (researchPending) finishResearchConsent(researchPending, null);
+      });
+      researchConsent.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') { event.preventDefault(); document.getElementById('research-cancel').click(); }
+      });
+
       form.addEventListener('submit', async function (event) {
         event.preventDefault();
         const content = input.value.trim();
         if (!content || busy || loadingConversation) return;
         const version = conversationVersion;
+        const runID = newRunID();
+        const requestMessages = conversation.slice(-39).concat([{ role: 'user', content: content }]);
+        const request = Object.freeze({ messages: Object.freeze(requestMessages.map(message => Object.freeze(Object.assign({}, message)))), model: modelSelect.value, conversation_id: conversationId, run_id: runID, omitted_messages: omittedConversationMessages + Math.max(0, conversation.length - 39) });
+        let researchTaskID = '';
+        const optedIn = researchToggle.checked;
+        researchToggle.checked = false;
+        if (optedIn) {
+          researchModelWasDisabled = modelSelect.disabled;
+          researchFlow = true;
+          busy = true;
+          setInteractionState();
+          input.disabled = true;
+          const choice = await requestResearchConsent(request);
+          input.disabled = false;
+          if (!choice) { researchFlow = false; modelSelect.disabled = researchModelWasDisabled; busy = false; setInteractionState(); input.focus(); return; }
+          if (choice !== 'declined') researchTaskID = choice;
+        }
 
         const welcome = document.getElementById('welcome');
         if (welcome) welcome.remove();
         addMessage('user', content);
-        const requestMessages = conversation.slice(-39).concat([{ role: 'user', content: content }]);
         const thinking = addMessage('assistant', 'Thinking…');
-        const runID = newRunID();
         pendingRuns.add(runID);
         attachRun(thinking, runID);
         input.value = '';
@@ -1857,14 +2258,27 @@ const homePage = `<!doctype html>
         setInteractionState();
         setConversationNotice('Waiting for the model…');
         notice.classList.remove('error');
+        const researchExecution = researchTaskID ? { id: researchTaskID, controller: new AbortController(), terminal: '', controlBusy: false } : null;
+        if (researchExecution) {
+          activeResearch = researchExecution;
+          researchScope.dataset.taskId = researchExecution.id;
+          researchScope.hidden = false;
+          researchDetails.hidden = true;
+          researchPermissions.setAttribute('aria-expanded', 'false');
+          researchStop.disabled = researchRevoke.disabled = false;
+          researchControlFeedback.textContent = '';
+        }
 
         try {
           const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: requestMessages, model: modelSelect.value, conversation_id: conversationId, run_id: runID, omitted_messages: omittedConversationMessages + Math.max(0, conversation.length - 39) })
+            signal: researchExecution?.controller.signal,
+            body: JSON.stringify(researchTaskID ? Object.assign({}, request, { research_task_id: researchTaskID }) : request)
           });
           const result = await response.json();
+          if (researchExecution?.controlPromise) await researchExecution.controlPromise;
+          if (researchExecution?.terminal) throw new Error(researchExecution.terminal);
           if (version !== conversationVersion) return;
           if (!response.ok) {
             const requestError = new Error(result.error || 'The request failed.');
@@ -1880,14 +2294,26 @@ const homePage = `<!doctype html>
           setConversationNotice('Reply received. This conversation has not been saved.', Boolean(conversationId));
           await refreshConversations();
         } catch (error) {
+          if (researchExecution?.controlPromise) await researchExecution.controlPromise;
           if (version !== conversationVersion) return;
           thinking.remove();
-          attachRun(addMessage('assistant', 'I could not complete that request.'), runID);
-          showError(error.message || 'Check the model provider settings and try again.', error.action);
-          if (error.action === 'reauthorize') await refreshConnectionState();
+          if (researchExecution?.terminal) {
+            attachRun(addMessage('assistant', researchExecution.terminal), runID);
+            setConversationNotice(researchExecution.terminal + ' Previous outbound requests cannot be undone.');
+          } else {
+            attachRun(addMessage('assistant', 'I could not complete that request.'), runID);
+            showError(error.message || 'Check the model provider settings and try again.', error.action);
+            if (error.action === 'reauthorize') await refreshConnectionState();
+          }
         } finally {
+          if (researchExecution) {
+            activeResearch = null;
+            researchScope.hidden = true;
+            delete researchScope.dataset.taskId;
+          }
           pendingRuns.delete(runID);
           if (inspectedRun === runID) { clearTimeout(runTimer); if (runController) { stopRunPolling(); } void readRun(); }
+          if (optedIn) { researchFlow = false; modelSelect.disabled = researchModelWasDisabled; }
           busy = false;
           setInteractionState();
           if (settingsPanel.hidden && runPanel.hidden) input.focus();
@@ -1903,6 +2329,7 @@ const homePage = `<!doctype html>
 
       document.getElementById('new-chat').addEventListener('click', function () {
         if (busy || loadingConversation) return;
+        researchToggle.checked = false;
         showSettings(false);
         conversationVersion++;
         closeRunInspector(false);
