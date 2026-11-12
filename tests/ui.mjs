@@ -1134,4 +1134,5 @@ try {
 
 // Keep task-scoped consent/control coverage in the established UI test command.
 await import('./research-ui.mjs');
+await import('./research-settings-browser-selection.mjs');
 await import('./research-settings-ui.mjs');
