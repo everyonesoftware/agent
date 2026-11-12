@@ -18,7 +18,9 @@ const browserPath = process.env.UI_BROWSER || [
 ].find(existsSync);
 assert.ok(browserPath, 'Set UI_BROWSER to an installed Chromium executable');
 const htmlSource = await readFile(join(root, 'page.go'), 'utf8');
-const html = htmlSource.slice(htmlSource.indexOf('`') + 1, htmlSource.lastIndexOf('`')).replace('{{APP_VERSION}}', '42');
+const html = htmlSource.slice(htmlSource.indexOf('`') + 1, htmlSource.lastIndexOf('`')).replaceAll('{{APP_VERSION}}', '42').replaceAll('{{APP_BUILD_ID}}', 'ui-fixture');
+const pwaSource = await readFile(join(root, 'pwa_updates.go'), 'utf8');
+const pwaScript = pwaSource.slice(pwaSource.indexOf('`') + 1, pwaSource.lastIndexOf('`'));
 const profile = await mkdtemp(join(process.env.TMPDIR || tmpdir(), 'agent-ui-'));
 let authenticated = false;
 let authFailure = true;
@@ -67,6 +69,12 @@ const server = createServer(async (req, res) => {
   calls.push(call);
   const json = (status, body) => { call.status = status; res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
   if (url.pathname === '/') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(html); return; }
+  if (url.pathname === '/pwa-updates.js') { res.writeHead(200, { 'Content-Type': 'text/javascript' }); res.end(pwaScript); return; }
+  // This interaction fixture deliberately has no installed worker; real deployment
+  // and offline behavior are exercised by pwa-browser.mjs, not emulated here.
+  if (url.pathname === '/sw.js') { res.writeHead(404); res.end(); return; }
+  if (url.pathname === '/manifest.webmanifest') { json(200, {name:'Agent',start_url:'/',display:'standalone'}); return; }
+  if (url.pathname === '/version.json') { json(200, {version:'42',buildId:'ui-fixture'}); return; }
   if (url.pathname === '/favicon.ico') { res.writeHead(204); res.end(); return; }
   if (['/api/auth/login', '/api/auth/register'].includes(url.pathname)) {
     // Drain but never record credentials, even though test values are synthetic.

@@ -14,6 +14,7 @@ func newServer() http.Handler {
 	siwc := newSIWCServiceFromEnv()
 	apiProvider := newModelProviderFromEnv()
 	mux := http.NewServeMux()
+	registerPWARoutes(mux)
 	dataDir := strings.TrimSpace(os.Getenv("APP_DATA_DIR"))
 	if dataDir == "" {
 		dataDir = strings.TrimSpace(os.Getenv("SIWC_DATA_DIR"))
@@ -67,9 +68,13 @@ func newServer() http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		_, _ = fmt.Fprint(w, strings.Replace(homePage, "{{APP_VERSION}}", html.EscapeString(version), 1))
+		if r.Method == http.MethodHead {
+			return
+		}
+		_, _ = fmt.Fprint(w, strings.NewReplacer("{{APP_VERSION}}", html.EscapeString(version), "{{APP_BUILD_ID}}", appBuildID()).Replace(homePage))
 	})
 	return mux
 }

@@ -44,6 +44,56 @@ Stop with `docker compose down`.
 
 Compose probes the public `/healthz` endpoint using `/agent healthz` every 30 seconds. The image also retains `/everyoneagent` as a compatibility alias for existing health checks. The command uses the container's `PORT` (default `8080`), requests the loopback endpoint with a three-second timeout, and exits successfully only for HTTP 200 without following redirects. It does not initialize storage or contact a model provider. This is a web-server liveness check, not a database or ChatGPT readiness check. Docker marks the container unhealthy after three consecutive failures; the restart policy does not restart a container solely because it is unhealthy.
 
+## Install Agent as a web app
+
+Agent is a single-page application (SPA): chat and Settings switch views without
+loading another document, and Settings participates in browser Back/Forward
+navigation. PWA installation adds an optional standalone window; it does not
+replace that single-page navigation.
+
+Agent can run in a standalone app window using the browser's **Install app** or
+**Add to Home Screen** action. Use HTTPS (including a trusted Tailscale Serve
+address), or localhost on the host computer. A plain HTTP address on another
+device does not enable service workers. Installation does not change the existing
+local account, server storage, network access, or loopback-only ChatGPT
+authorization requirements.
+
+In **Settings → Web app updates**, select **Check for updates** to compare the
+running page with the deployed server. An available update offers an explicit
+update/reload action or **Later**. Agent does not automatically reload an active
+session; finish active requests first, and review the unsaved-work confirmation
+before applying. The browser may download a new worker in the background, but it
+does not replace an active worker until approved (or all old app windows close).
+This updates browser code from the already-deployed server; it does not pull an
+image, restart Docker, or update the server deployment.
+
+Offline support is intentionally limited to a public disconnected page with a
+keyboard-accessible retry link. The service worker caches only `/offline.html`,
+never the app shell, conversations, account details, API responses, credentials,
+or mutations. Requests are not queued or replayed. Reconnect to use chat and
+account management. API/auth/version/health navigations never receive the
+disconnected-page fallback. Cache cleanup only removes Agent's own old offline
+caches, leaving other applications' caches intact.
+
+The public `/version.json` endpoint exposes string `version` and `buildId` fields.
+The build ID is a SHA-256 content fingerprint covering the release version,
+embedded page, update script, manifest, worker, offline page, and icons, so code
+changes are detectable even when the release label is unchanged. Root HTML uses
+`Cache-Control: no-store`; PWA metadata, worker, script, offline page, and icons
+use `no-cache` revalidation. All assets are embedded in the Go executable; the
+existing Docker packaging needs no additional runtime asset directory.
+
+Web app verification runs in the container publishing workflow before publishing:
+`go test ./...`, `go vet ./...`, `node tests/pwa-updates.mjs`, and
+`node tests/ui.mjs`. The real production-server browser check builds two release
+versions and runs `node tests/pwa-browser.mjs <first-executable> <second-executable>`.
+It creates isolated temporary account storage and a non-incognito Chromium
+profile, checks installability and responsive Settings, takes the server offline,
+and swaps builds to verify manual update/reload. Set `UI_BROWSER` to a Chromium
+executable when it is not found automatically; optionally set `UI_SCREENSHOTS`
+to an existing directory to save browser evidence. No production credentials or
+account storage are used.
+
 ## Optional ChatGPT usage status (native Codex runtime)
 
 The image includes the official **Codex CLI 0.167.2** (`rust-v0.167.2`)

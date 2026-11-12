@@ -6,6 +6,14 @@ const homePage = `<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
+  <meta name="app-version" content="{{APP_VERSION}}">
+  <meta name="app-build-id" content="{{APP_BUILD_ID}}">
+  <meta name="theme-color" content="#202322">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Agent">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <script src="/pwa-updates.js" defer></script>
   <title>Agent</title>
   <style>
     :root { color-scheme: dark; font: 14px/1.6 'Segoe UI', Arial, sans-serif; color: #e1e6e2; background: #202322; --muted: #a0aaa3; --line: #333936; --accent: #b4d6a3; --field: #252a27; }
@@ -326,6 +334,16 @@ const homePage = `<!doctype html>
             <p id="password-status" role="status" aria-live="polite"></p>
           </form>
         </section>
+        <section class="settings-card" id="pwa-updates" aria-labelledby="pwa-title">
+          <h2 id="pwa-title">Web app updates</h2>
+          <p id="pwa-version">Current version: {{APP_VERSION}}</p>
+          <p id="pwa-status" role="status" aria-live="polite">Updates are applied only when you choose to reload.</p>
+          <div class="provider-actions">
+            <button class="reset" id="pwa-check" type="button">Check for updates</button>
+            <button class="send" id="pwa-apply" type="button" hidden>Update and reload</button>
+            <button class="reset" id="pwa-later" type="button" hidden>Later</button>
+          </div>
+        </section>
         <section class="settings-card" aria-labelledby="signout-title">
           <h2 id="signout-title">Sign out</h2>
           <p>Sign out of Agent on this browser. Your saved conversations will still be here when you return.</p>
@@ -448,6 +466,16 @@ const homePage = `<!doctype html>
       const usagePanel = usageElement('panel'), usageDialog = usageElement('dialog');
       let usageProfile = '', usageData = null, usageEpoch = 0, usageTimer = null;
       let usageBusy = false, usageTarget = null, usageSubmitting = false;
+      // BEGIN update reload safety
+      // Only booleans and a revision leave this closure; drafts/passwords stay in memory.
+      let updateDraftRevision = 0;
+      document.addEventListener('input', () => { ++updateDraftRevision; });
+      window.agentUpdateSafety = () => ({
+        pending: busy || loadingConversation || passwordBusy || authBusy || connectionBusy || connectionSubmitting || usageBusy || usageSubmitting,
+        unsaved: Boolean(input.value || Array.from(document.querySelectorAll('input[type="password"], input[autocomplete="current-password"], input[autocomplete="new-password"]')).some(field => field.value) || document.querySelector('dialog[open]')),
+        revision: updateDraftRevision,
+      });
+      // END update reload safety
       function stopUsage() {
         ++usageEpoch;
         clearTimeout(usageTimer);
