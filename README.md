@@ -44,6 +44,75 @@ Stop with `docker compose down`.
 
 Compose probes the public `/healthz` endpoint using `/agent healthz` every 30 seconds. The image also retains `/everyoneagent` as a compatibility alias for existing health checks. The command uses the container's `PORT` (default `8080`), requests the loopback endpoint with a three-second timeout, and exits successfully only for HTTP 200 without following redirects. It does not initialize storage or contact a model provider. This is a web-server liveness check, not a database or ChatGPT readiness check. Docker marks the container unhealthy after three consecutive failures; the restart policy does not restart a container solely because it is unhealthy.
 
+## Optional ChatGPT usage status (native Codex runtime)
+
+The image includes the official **Codex CLI 0.167.2** (`rust-v0.167.2`)
+standalone Linux musl binary at `/usr/local/bin/codex`. This is a separate,
+server-side usage-status connection; it does not replace Agent's existing
+**Continue with ChatGPT** chat authorization or send chats through Codex. Missing
+usage authorization, unavailable usage data, and Codex failures must not prevent
+chat. No Codex install on the host/laptop, Node/npm, Rust toolchain, or additional
+published port is required. The runtime remains distroless and runs as
+UID/GID `65532:65532` with the existing `/data` mount.
+
+Agent starts `codex app-server --listen stdio:// -c
+cli_auth_credentials_store=\"file\"` as a child process, not an HTTP/WebSocket
+listener. `CODEX_USAGE_BINARY` optionally overrides the executable; otherwise
+Agent resolves `codex` from `PATH`. An override must be an already-installed
+compatible native executable, not a command with shell arguments. The private,
+writable `CODEX_HOME` is scoped to the Agent user and selected ChatGPT profile
+under `/data/account-data/<AgentUserID>/usage/<SIWCprofileID>/`; never share it
+between users/profiles or mount a personal laptop's Codex credentials there.
+Codex manages these separate credentials on the server. They are plaintext at
+rest: protect `/data`, backups, and host ACLs. Do not copy Agent's existing SIWC
+refresh tokens into Codex or expose Codex credential files to the browser.
+
+Usage sign-in requires the user's explicit approval of the provider's device-code
+flow; eligible accounts may need to enable device-code authorization in ChatGPT
+security/beta settings. Live approval and signed-in rate-limit retrieval are not
+part of the offline image check. The adapter restricts its calls to initialization
+and account login/read/rate-limit/logout RPCs; this is **not** a promise that the
+provider grants a narrower read-only OAuth scope. Local logout/credential deletion
+does not guarantee remote revocation; use the provider's account controls when
+remote revocation is required.
+
+`scripts/install-codex.sh` downloads only from the pinned official release during
+the build, verifies the exact archive SHA256 before extraction, and selects the
+binary from Docker's `TARGETARCH`. Unsupported architectures fail the build.
+The computed hashes of the downloaded official archive bytes are:
+
+| Platform | Official archive | SHA256 |
+| --- | --- | --- |
+| `linux/amd64` | `codex-x86_64-unknown-linux-musl.tar.gz` | `8246e846c550ea21197fcc4067bc270dca895e94ea42ed6a282e6f4e0125b15f` |
+| `linux/arm64` | `codex-aarch64-unknown-linux-musl.tar.gz` | `ed81fa2c7d209689af061b6f305ed554218de92a1c2c4019142b28f66fa64add` |
+
+The stage also verifies and preserves that release's `LICENSE` and `NOTICE` under
+`/usr/share/licenses/codex/`, together with a `BUILD-INFO` pin/target/hash record.
+Download tools stay in the build stage and its layer is reused until the pin or
+installer changes. Both musl executables were inspected as statically linked ELF
+binaries; no dynamic loader or shared-library runtime is added. Account-only RPCs
+need no shell, execution-server/code-mode/voice companions, or sandbox tools.
+The standalone app-server currently logs a missing-PATH-bubblewrap warning at
+startup; it is nonfatal for these account RPCs. This image is not a general Codex
+coding/terminal environment.
+
+Operators should update the pin and hashes together after reviewing the official
+release, then rerun protocol compatibility and image checks on both supported
+architectures. The image never self-updates Codex. To exercise a built image using
+host Python 3 and Docker (no live credentials or inference):
+
+```sh
+docker build -t agent:codex-smoke .
+python scripts/codex-runtime-smoke.py agent:codex-smoke
+```
+
+The check uses network-disabled ephemeral containers, a private writable temporary
+`CODEX_HOME`, and a read-only Codex root filesystem. It verifies the pinned version,
+nonroot configuration, stdio initialize/initialized, a signed-out `account/read`,
+the real signed-out rate-limit error, and both `/agent healthz` and the retained
+`/everyoneagent healthz` alias against the running application. It never mounts
+existing credentials, publishes a port, approves a login, or starts a model turn.
+
 ## Host-accessible data storage
 
 The image runs as UID/GID `65532:65532`. You can use a host folder instead of

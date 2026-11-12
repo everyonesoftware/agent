@@ -197,6 +197,28 @@ const homePage = `<!doctype html>
       .auth-center { padding: 20px 25px; }
     }
     @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+    .usage-subsection { border-top:1px solid var(--line); padding-top:20px; margin-top:16px; font-size:12px; overflow-wrap:anywhere; }
+    .usage-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+    .usage-heading h3 { margin:0; font-size:14px; font-weight:500; }
+    .usage-subsection p, .usage-help { color:var(--muted); font-size:11px; }
+    .usage-identity { font-size:12px!important; color:inherit!important; }
+    .usage-footer, .usage-actions { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-top:14px; }
+    #disconnect-chatgpt, .usage-subsection button, .usage-subsection a, #usage-dialog button { min-height:44px; }
+    .usage-footer .danger { background:transparent; }
+    .usage-help { margin-top:12px; }
+    .usage-help summary { cursor:pointer; padding:6px 0; }
+    .quota-window { margin:18px 0; }
+    .quota-label { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+    .quota-label strong { font-size:14px; font-weight:500; color:var(--accent); }
+    .quota-track { height:6px; border-radius:3px; background:#39403b; margin:8px 0 5px; overflow:hidden; }
+    .quota-fill { height:100%; background:var(--accent); }
+    .quota-reset, #usage-updated { font-size:10px; color:var(--muted); }
+    .usage-stale .quota-fill { background:#7b877d; }
+    .device-panel { margin:14px 0; padding:14px; border:1px solid var(--line); border-radius:5px; background:#202322; }
+    .device-code { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+    .device-code code { font:18px/1.5 Consolas,monospace; letter-spacing:1px; user-select:all; }
+    #usage-verification { display:inline-flex; align-items:center; }
+    #usage-error, #usage-confirm-error { color:#efada5; }
   </style>
 </head>
 <body>
@@ -275,6 +297,17 @@ const homePage = `<!doctype html>
           </div>
           <p id="provider-error" class="menu-error" role="alert" hidden></p>
           <p id="provider-feedback" role="status" aria-live="polite" hidden></p>
+          <section class="usage-subsection" id="usage-panel" aria-labelledby="usage-heading" hidden>
+            <div class="usage-heading"><h3 id="usage-heading">Allowance</h3><button id="usage-refresh" class="connection-refresh" type="button" aria-label="Refresh usage" title="Refresh usage"><span id="usage-badge" class="connection-badge off">Optional</span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button></div>
+            <p id="usage-message">See remaining allowance and reset times with a separate Codex sign-in. Your conversation connection won’t change.</p>
+            <p class="usage-identity" id="usage-identity" hidden></p>
+            <div class="device-panel" id="usage-device" hidden><strong>Approve your usage connection</strong><p>Open the OpenAI verification page, sign in to the intended ChatGPT account and workspace, and enter this code. Return here after approval.</p><div class="device-code"><code id="usage-code"></code><button class="reset" id="usage-copy" type="button">Copy code</button></div><div class="usage-actions"><a id="usage-verification" target="_blank" rel="noopener noreferrer" hidden>Open verification page ↗</a><button class="reset" id="usage-cancel" type="button">Cancel</button></div><p id="usage-expiry"></p></div>
+            <div id="usage-windows"></div>
+            <p id="usage-error" role="alert" hidden></p><p id="usage-feedback" role="status"></p>
+            <div class="usage-footer"><span id="usage-updated"></span><button class="reset" id="usage-connect" type="button">Connect usage account</button><button class="reset danger" id="usage-disconnect" type="button" aria-label="Disconnect usage connection" title="Disconnect usage connection" hidden>Disconnect</button></div>
+            <details class="usage-help"><summary>About this usage connection</summary><p>This separate Codex sign-in reads account and quota details only. It does not change conversation routing or the existing ChatGPT connection. Device sign-in can start here, including remotely.</p><p>Codex-reported windows may not cover every ChatGPT feature or Agent-specific limit. Matching email does not verify account or workspace identity. Use the intended account and workspace. This connection is optional; conversations work without it.</p></details>
+          </section>
+
 
         </section>
         <section class="settings-card" aria-labelledby="password-title">
@@ -331,6 +364,9 @@ const homePage = `<!doctype html>
     <p id="connection-confirm-error" class="menu-error" role="alert" hidden></p>
     <div class="dialog-actions"><button class="reset" id="cancel-disconnect" type="button" autofocus>Cancel</button><button class="reset danger" id="confirm-disconnect" type="submit">Disconnect account</button></div>
     </form>
+  </dialog>
+  <dialog class="connection-dialog" id="usage-dialog" aria-labelledby="usage-dialog-title" aria-describedby="usage-dialog-description">
+    <form id="usage-confirm-form"><h2 id="usage-dialog-title">Disconnect usage account?</h2><p id="usage-dialog-account"></p><p id="usage-dialog-description">Remove this usage connection from Agent. Your conversation connection and saved chats are kept. Remote revocation is not guaranteed.</p><label for="usage-password">Agent password</label><input id="usage-password" type="password" autocomplete="current-password" maxlength="72" required><p id="usage-confirm-error" class="menu-error" role="alert" hidden></p><div class="dialog-actions"><button class="reset" id="usage-dialog-cancel" type="button" autofocus>Cancel</button><button class="reset danger" id="usage-confirm" type="submit">Disconnect usage account</button></div></form>
   </dialog>
   <script>
     (function () {
@@ -407,7 +443,189 @@ const homePage = `<!doctype html>
       const confirmPassword = document.getElementById('confirm-password');
       let passwordBusy = false;
 
+      // Usage authorization is independent of the conversation connection.
+      const usageElement = id => document.getElementById('usage-' + id);
+      const usagePanel = usageElement('panel'), usageDialog = usageElement('dialog');
+      let usageProfile = '', usageData = null, usageEpoch = 0, usageTimer = null;
+      let usageBusy = false, usageTarget = null, usageSubmitting = false;
+      function stopUsage() {
+        ++usageEpoch;
+        clearTimeout(usageTimer);
+        usageTimer = null;
+        usageBusy = false;
+        usageProfile = '';
+        usageData = null;
+        usagePanel.hidden = true;
+      }
+      function usageVisible() { return !settingsPanel.hidden && !chatApp.hidden && !document.hidden && Boolean(activeProfileID); }
+      function syncUsage() {
+        if (!usageVisible()) { stopUsage(); return; }
+        if (usageProfile === activeProfileID) return;
+        usageProfile = activeProfileID;
+        usageData = null;
+        usagePanel.hidden = false;
+        void usageRequest('status');
+      }
+      function usagePoll() {
+        clearTimeout(usageTimer);
+        if (usageVisible() && ['pending', 'checking'].includes(usageData?.state)) {
+          usageTimer = setTimeout(() => { void usageRequest('status'); }, 2000);
+        }
+      }
+      function usageDate(value) {
+        if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return '';
+        const date = new Date(value * 1000);
+        return Number.isFinite(date.getTime()) ? date.toLocaleString() : '';
+      }
+      function renderUsage() {
+        if (!usageData) {
+          usageElement('badge').textContent = 'Checking…';
+          for (const id of ['connect', 'disconnect', 'device', 'identity']) usageElement(id).hidden = true;
+          usageElement('windows').replaceChildren();
+          usageElement('message').textContent = 'Checking usage availability…';
+          usageElement('updated').textContent = '';
+        }
+        const data = usageData || {}, state = data.state;
+        const mismatch = data.identity_match === 'different';
+        const stale = Boolean(data.snapshot?.stale);
+        const badge = usageElement('badge');
+        badge.textContent = usageBusy ? (usageData ? 'Refreshing…' : 'Checking…') : mismatch ? 'Review account' : stale ? 'Last known' : ({connected:'Connected',disconnected:'Optional',pending:'Awaiting approval',checking:'Checking…',expired:'Sign-in expired',unavailable:'Unavailable'}[state] || 'Unavailable');
+        badge.className = 'connection-badge' + (state === 'connected' && !mismatch && !stale ? '' : ['disconnected','unavailable'].includes(state) ? ' off' : ' warning');
+        usageElement('refresh').disabled = usageBusy || !usageData || !['connected','unavailable'].includes(state) || mismatch || usageDialog.open;
+        usageElement('refresh').setAttribute('aria-busy', String(usageBusy));
+        usageElement('connect').hidden = !usageData || ['pending','checking'].includes(state) || (state === 'connected' && !mismatch);
+        usageElement('connect').disabled = usageBusy || data.available !== true || usageDialog.open;
+        usageElement('connect').textContent = mismatch ? 'Use another usage account' : state === 'expired' ? 'Reconnect usage account' : 'Connect usage account';
+        usageElement('disconnect').hidden = !data.connection_id || ['pending','checking'].includes(state);
+        usageElement('disconnect').disabled = usageBusy || usageDialog.open;
+        usageElement('message').textContent = mismatch ? 'This usage account is different. Allowance is hidden. Reconnect with the intended account and workspace, or disconnect usage.' : data.available === false ? 'Usage service unavailable. The Codex dependency is unavailable; your conversation connection is unchanged.' : stale ? 'Showing last-known allowance; these values may no longer be current.' : state === 'expired' ? 'Sign in again to see allowance. Your conversation connection is unchanged.' : state === 'connected' ? 'Codex-reported allowance. Account and workspace matching are not verified by email alone.' : state === 'checking' ? 'Checking the signed-in usage account…' : state === 'pending' ? 'Waiting for OpenAI approval. Your conversation connection is unchanged.' : 'See remaining allowance and reset times with a separate Codex sign-in. Your conversation connection won’t change.';
+        usageElement('identity').hidden = !data.identity;
+        usageElement('identity').textContent = data.identity ? 'Usage account: ' + (data.identity.email || 'Email unavailable') + (data.identity.plan_type ? ' · ' + data.identity.plan_type : '') + ' · separate Codex sign-in' : '';
+        usageElement('error').textContent = data.error || '';
+        usageElement('error').hidden = !data.error;
+        const login = data.login;
+        usageElement('device').hidden = !login || !['pending','checking'].includes(state);
+        usageElement('code').textContent = typeof login?.user_code === 'string' ? login.user_code : '';
+        usageElement('expiry').textContent = usageDate(login?.expires_at) ? 'Code expires ' + usageDate(login.expires_at) + ' · local time' : 'Code expiry unavailable.';
+        const link = usageElement('verification');
+        link.hidden = true; link.removeAttribute('href');
+        try {
+          const url = new URL(login?.verification_url);
+          if (url.protocol === 'https:' && url.hostname === 'auth.openai.com' && !url.port && !url.username && !url.password && url.pathname === '/codex/device' && !url.search && !url.hash) { link.href = url.href; link.hidden = false; }
+        } catch (_) {}
+        usageElement('cancel').disabled = usageBusy;
+        const windows = usageElement('windows'); windows.replaceChildren();
+        windows.classList.toggle('usage-stale', stale);
+        if ((state === 'connected' || (state === 'unavailable' && stale)) && !mismatch) {
+          for (const window of Array.isArray(data.snapshot?.windows) ? data.snapshot.windows : []) {
+            const row = document.createElement('div'); row.className = 'quota-window';
+            const label = document.createElement('div'); label.className = 'quota-label';
+            const name = document.createElement('span'); name.textContent = window.label || 'Codex quota window';
+            const amount = document.createElement('strong');
+            const valid = typeof window.used_percent === 'number' && Number.isFinite(window.used_percent) && window.used_percent >= 0 && window.used_percent <= 100;
+            const remaining = valid ? Math.round((100 - window.used_percent) * 10) / 10 : null;
+            amount.textContent = valid ? remaining + '% left' : 'Unavailable';
+            label.append(name, amount); row.append(label);
+            if (valid) {
+              const track = document.createElement('div'); track.className = 'quota-track'; track.setAttribute('role', 'meter'); track.setAttribute('aria-label', name.textContent + ' remaining' + (stale ? ' (last known)' : '')); track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', '100'); track.setAttribute('aria-valuenow', String(remaining));
+              const fill = document.createElement('div'); fill.className = 'quota-fill'; fill.style.width = remaining + '%'; track.append(fill); row.append(track);
+            }
+            const reset = document.createElement('div'); reset.className = 'quota-reset';
+            reset.textContent = (usageDate(window.reset_at) ? 'Resets ' + usageDate(window.reset_at) + ' · local time' : 'Reset time unavailable') + (typeof window.window_minutes === 'number' && Number.isFinite(window.window_minutes) && window.window_minutes > 0 ? ' · ' + window.window_minutes + '-minute window' : '');
+            row.append(reset); windows.append(row);
+          }
+          if (!windows.childElementCount) { const unavailable = document.createElement('p'); unavailable.textContent = 'Allowance windows are unavailable. Refresh to try again.'; windows.append(unavailable); }
+        }
+        usageElement('updated').textContent = !mismatch && data.snapshot ? (usageDate(data.snapshot.fetched_at) ? 'Updated ' + usageDate(data.snapshot.fetched_at) + ' · local time' : 'Update time unavailable') + (stale ? ' · stale' : '') : '';
+      }
+      async function usageRequest(action, captured) {
+        if (!usageVisible() || usageBusy || !usageProfile) return false;
+        const priorState = usageData?.state;
+        let firstFetch = false;
+        const profile = usageProfile, epoch = ++usageEpoch;
+        const target = captured || {profile_id:profile,connection_id:usageData?.connection_id || ''};
+        clearTimeout(usageTimer);
+        usageBusy = true;
+        usageElement('feedback').textContent = '';
+        renderUsage();
+        try {
+          const payload = {...target};
+          if (action === 'connect') { payload.expected_connection_id = payload.connection_id; delete payload.connection_id; }
+          const response = await fetch('/api/usage/' + action + (action === 'status' ? '?profile_id=' + encodeURIComponent(profile) : ''), action === 'status' ? {cache:'no-store'} : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+          if ('password' in payload) payload.password = '';
+          const result = await response.json();
+          if (epoch !== usageEpoch || profile !== activeProfileID || profile !== usageProfile || !usageVisible()) return false;
+          if (!response.ok) throw new Error(result.error || 'Usage request failed. Please try again.');
+          if (result.profile_id !== profile) throw new Error('Usage account changed. Refresh Settings to retry.');
+          firstFetch = action === 'status' && ['pending','checking'].includes(priorState) && result.state === 'connected' && !result.snapshot && result.identity_match !== 'different';
+          usageData = result;
+          return true;
+        } catch (error) {
+          if (epoch !== usageEpoch || profile !== usageProfile || !usageVisible()) return false;
+          if (usageData?.snapshot) usageData = {...usageData,snapshot:{...usageData.snapshot,stale:true},error:error.message};
+          else usageData = {...(usageData || {profile_id:profile,available:false,state:'unavailable',connection_id:'',identity_match:'unverified'}),error:error.message};
+          if (action === 'disconnect' && usageDialog.open) { usageElement('confirm-error').textContent = error.message; usageElement('confirm-error').hidden = false; }
+          // A failed mutation may already have saved a new connection record.
+          // Reload its precondition before allowing retry, never retarget a dialog.
+          if (action !== 'status') {
+            try {
+              const recovery = await fetch('/api/usage/status?profile_id=' + encodeURIComponent(profile), {cache:'no-store'});
+              const current = await recovery.json();
+              if (epoch === usageEpoch && profile === usageProfile && profile === activeProfileID && usageVisible() && recovery.ok && current.profile_id === profile) {
+                usageData = {...current,error:error.message};
+                if (action === 'refresh' && current.snapshot) usageData.snapshot = {...current.snapshot,stale:true};
+              }
+            } catch (_) {} // Keep the original actionable failure and last-known data.
+          }
+          return false;
+        } finally {
+          if (captured && 'password' in captured) captured.password = '';
+          if (epoch === usageEpoch) { usageBusy = false; renderUsage(); if (firstFetch) void usageRequest('refresh'); else usagePoll(); }
+        }
+      }
+      usageElement('connect').addEventListener('click', () => { void usageRequest('connect'); });
+      usageElement('refresh').addEventListener('click', () => { void usageRequest(usageData?.state === 'unavailable' ? 'status' : 'refresh'); });
+      usageElement('cancel').addEventListener('click', () => {
+        if (usageData?.login) void usageRequest('cancel', {profile_id:usageProfile,connection_id:usageData.connection_id,login_id:usageData.login.login_id});
+      });
+      usageElement('copy').addEventListener('click', async () => {
+        const code = usageElement('code').textContent;
+        try { await navigator.clipboard.writeText(code); usageElement('feedback').textContent = 'Code copied.'; }
+        catch (_) { usageElement('feedback').textContent = 'Copy unavailable. Select and copy the code manually.'; }
+      });
+      usageElement('disconnect').addEventListener('click', () => {
+        if (usageBusy || !usageData?.connection_id) return;
+        usageTarget = Object.freeze({profile_id:usageProfile,connection_id:usageData.connection_id});
+        usageElement('password').value = '';
+        usageElement('confirm-error').hidden = true;
+        usageElement('dialog-account').textContent = (usageData.identity?.email || selectedProfile?.email || 'Selected account') + ' · usage connection only';
+        usageDialog.showModal(); renderUsage(); usageElement('dialog-cancel').focus();
+      });
+      usageElement('dialog-cancel').addEventListener('click', () => { if (!usageSubmitting) usageDialog.close(); });
+      usageDialog.addEventListener('cancel', event => { if (usageSubmitting) event.preventDefault(); });
+      usageDialog.addEventListener('close', () => {
+        if (usageDialog.open) return;
+        usageTarget = null; usageElement('password').value = ''; usageElement('confirm-error').textContent = ''; usageElement('confirm-error').hidden = true;
+        renderUsage();
+        if (usageVisible()) (usageElement('disconnect').hidden ? usageElement('connect') : usageElement('disconnect')).focus();
+      });
+      usageElement('confirm-form').addEventListener('submit', async event => {
+        event.preventDefault();
+        if (!usageTarget || usageSubmitting || !usageDialog.open) return;
+        const target = {...usageTarget,password:usageElement('password').value};
+        usageElement('password').value = '';
+        usageSubmitting = true;
+        usageElement('confirm-error').hidden = true;
+        const controls = Array.from(usageElement('confirm-form').elements);
+        controls.forEach(control => { control.disabled = true; });
+        usageElement('confirm-form').setAttribute('aria-busy','true');
+        try { if (await usageRequest('disconnect', target)) usageDialog.close(); }
+        finally { target.password = ''; usageElement('password').value = ''; usageSubmitting = false; controls.forEach(control => { control.disabled = false; }); usageElement('confirm-form').setAttribute('aria-busy','false'); if (usageDialog.open) usageElement('password').focus(); }
+      });
+      document.addEventListener('visibilitychange', () => { if (document.hidden) stopUsage(); else syncUsage(); });
+
       function showSettings(open, updateURL = true) {
+        if (!open) stopUsage();
         if (updateURL && (window.location.hash === '#settings') !== open) {
           const url = new URL(window.location.href);
           url.hash = open ? 'settings' : '';
@@ -714,7 +932,7 @@ const homePage = `<!doctype html>
           connectionStatus.textContent = 'Signed in as ' + user.username + '.';
           await refreshConnectionState();
           await refreshConversations();
-        } catch (_) { authGate.hidden = false; chatApp.hidden = true; }
+        } catch (_) { stopUsage(); authGate.hidden = false; chatApp.hidden = true; }
       }
 
       document.getElementById('logout-button').addEventListener('click', async function () {
@@ -724,6 +942,7 @@ const homePage = `<!doctype html>
         try {
           const response = await fetch('/api/auth/logout', { method: 'POST' });
           if (!response.ok) throw new Error('Sign out failed. Please try again.');
+          stopUsage();
           window.location.reload();
         } catch (_) { error.textContent = 'Sign out failed. Please try again.'; error.hidden = false; }
         finally { button.disabled = false; }
@@ -812,12 +1031,14 @@ const homePage = `<!doctype html>
         connectionRefresh = refreshConnectionData().finally(function () {
           connectionRefresh = null;
           updateConnectionControls();
+          syncUsage();
         });
         updateConnectionControls();
         return connectionRefresh;
       }
 
       async function refreshConnectionData() {
+        stopUsage();
         let connected = false;
         let oauthSelected = false;
         let planUsageEnabled = false;

@@ -1,3 +1,10 @@
+# Downloads run natively on the builder; TARGETARCH chooses the pinned runtime.
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS codex-download
+ARG TARGETARCH
+RUN apk add --no-cache curl
+COPY scripts/install-codex.sh /install-codex.sh
+RUN sh /install-codex.sh "$TARGETARCH" /out
+
 FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS build
 WORKDIR /src
 ARG VERSION=dev
@@ -10,6 +17,8 @@ RUN mkdir -p /out/data && chown 65532:65532 /out/data
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/agent .
 
 FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=codex-download /out/ /
+ENV PATH="/usr/local/bin:/usr/bin:/bin"
 COPY --from=build /out/agent /agent
 # Keep existing deployments' health checks working during the executable rename.
 COPY --from=build /out/agent /everyoneagent

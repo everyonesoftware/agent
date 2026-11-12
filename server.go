@@ -44,6 +44,7 @@ func newServer() http.Handler {
 		mux.Handle("GET /api/auth/profiles", accounts.scopedSIWCHandler(siwc, (*siwcService).profilesHandler))
 		mux.Handle("POST /api/auth/profiles/active", accounts.scopedPasswordSIWCHandler(siwc, false, (*siwcService).selectProfileHandler))
 		mux.Handle("POST /api/auth/disconnect", accounts.scopedPasswordSIWCHandler(siwc, false, (*siwcService).disconnectHandler))
+		registerUsageRoutes(mux, accounts, siwc)
 	} else {
 		log.Printf("local account database is unavailable: %v", accountErr)
 		unavailable := func(w http.ResponseWriter, _ *http.Request) {
