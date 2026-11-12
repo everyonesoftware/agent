@@ -45,6 +45,7 @@ const homePage = `<!doctype html>
     .history-group:first-child { margin-top: 0; }
     .session { width: 100%; display: block; padding: 10px; text-align: left; font-size: 12px; overflow-wrap: anywhere; }
     .session:hover { background: var(--field); }
+    .session-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
     .session[aria-current="true"] { color: var(--accent); background: #2c3930; }
     .session small { display: block; color: var(--muted); font-size: 10px; margin-top: 3px; }
     .history-state { color: var(--muted); font-size: 12px; padding: 6px 9px; }
@@ -144,20 +145,39 @@ const homePage = `<!doctype html>
     .workspace { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
     .workspace-header { min-height: 65px; padding: 12px 30px; border-bottom: 1px solid var(--line); display: flex; justify-content: flex-start; gap: 12px; }
     #conversation-title { margin: 0; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #conversation-save-status { flex: none; margin-left: auto; white-space: nowrap; color: var(--muted); font-size: 11px; }
+    #conversation-save-status::before { content: '✓'; color: var(--accent); margin-right: 6px; }
     .sidebar-toggle, .sidebar-backdrop { display: none; }
-    .messages { position: relative; flex: 1; min-height: 0; overflow-y: auto; padding: 30px max(24px, calc((100% - 800px) / 2)); scroll-behavior: auto; }
+    .messages { position: relative; flex: 1; min-height: 0; overflow-y: auto; padding: 34px max(24px, calc((100% - 740px) / 2)); scroll-behavior: auto; }
     .welcome { max-width: 540px; margin: clamp(25px, 12vh, 130px) auto 0; text-align: left; }
     .welcome h1 { margin: 0 0 8px; font-size: clamp(24px, 3vw, 32px); font-weight: 450; letter-spacing: -.8px; }
     .welcome p { color: var(--muted); font-size: 13px; }
-    .message, .message.user, .message.assistant { width: 100%; max-width: 800px; padding: 0; margin: 0 auto 30px; border: 0; border-radius: 0; background: transparent; }
-    .sender { margin-bottom: 8px; font-size: 11px; color: var(--muted); font-weight: 500; text-transform: none; letter-spacing: 0; }
-    .message.user .message-text { color: #c1cbc3; }
-    .message-text { font-size: 14px; line-height: 1.85; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .composer-wrap { width: 100%; max-width: 856px; margin: 0 auto; padding: 10px 28px 18px; border: 0; }
+    .message { width: 100%; max-width: 740px; min-width: 0; padding: 0; margin: 0 auto 30px; border: 0; border-radius: 0; background: transparent; }
+    .message.user { width: fit-content; max-width: 86%; margin-right: 0; margin-left: auto; }
+    .sender { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 11px; color: var(--muted); font-weight: 500; text-transform: none; letter-spacing: 0; }
+    .message.user .sender { justify-content: flex-end; margin-bottom: 7px; }
+    .message.user .message-text { padding: 12px 17px; color: #e1e8df; background: #2c3930; border: 1px solid #394b3d; border-radius: 12px 12px 3px 12px; }
+    .message.assistant .sender { color: #e1e6e2; font-weight: 600; }
+    .message.assistant .sender::before { content: 'e1'; display: grid; place-items: center; width: 21px; height: 21px; flex: none; border-radius: 5px; background: #2e3a30; color: var(--accent); font: 13px Georgia, serif; letter-spacing: -1px; }
+    .message-text { font-size: 14px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .message.assistant .message-text { white-space: normal; }
+    .message-text p { margin: 0 0 15px; white-space: pre-wrap; }
+    .message-text h2, .message-text h3, .message-text h4 { margin: 23px 0 9px; font-size: 15px; line-height: 1.5; font-weight: 600; letter-spacing: -.15px; }
+    .message-text h3, .message-text h4 { font-size: 14px; }
+    .message-text ul, .message-text ol { margin: 0 0 17px; padding-left: 21px; }
+    .message-text li { margin: 7px 0; padding-left: 3px; white-space: pre-wrap; }
+    .message-text strong { color: #eef2ee; font-weight: 600; }
+    .message-text code { font: 12px/1.65 Consolas, monospace; background: #181b1a; padding: 2px 5px; border-radius: 4px; }
+    .message-text pre { max-width: 100%; overflow-x: auto; padding: 14px 16px; margin: 16px 0; border: 1px solid var(--line); border-radius: 6px; background: #181b1a; white-space: pre; overflow-wrap: normal; }
+    .message-text pre code { padding: 0; border-radius: 0; }
+    .message-text blockquote { margin: 16px 0; padding: 0 16px; border-left: 2px solid #56645a; color: var(--muted); white-space: pre-wrap; }
+    .message-text > :first-child { margin-top: 0; }
+    .message-text > :last-child { margin-bottom: 0; }
+    .composer-wrap { width: 100%; max-width: 796px; margin: 0 auto; padding: 10px 28px 18px; border: 0; }
     .notice { min-height: 18px; color: var(--muted); font-size: 11px; margin: 0 0 8px; }
     .notice.error { color: #efada5; }
     .composer { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); box-shadow: none; }
-    textarea { width: 100%; flex: 1 0 100%; min-width: 0; min-height: 52px; max-height: min(400px, 45dvh); padding: 3px 32px 3px 3px; border: 0; resize: none; outline: none; color: inherit; background: transparent; }
+    textarea { width: 100%; flex: 1 0 100%; min-width: 0; min-height: 42px; max-height: min(400px, 45dvh); padding: 3px 32px 3px 3px; border: 0; resize: none; outline: none; color: inherit; background: transparent; }
     .composer-resize { position: absolute; top: 0; right: 0; display: flex; align-items: flex-start; justify-content: flex-end; width: 44px; height: 44px; padding: 0; color: #7f8b82; cursor: nesw-resize; touch-action: none; }
     .composer-resize svg { margin: 8px 8px 0 0; }
     .composer-resize:hover, .composer-resize:focus-visible { color: var(--accent); }
@@ -266,7 +286,7 @@ const homePage = `<!doctype html>
       </section></div>
     </aside>
     <div class="workspace">
-    <header class="workspace-header"><button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Open session navigation" aria-controls="session-sidebar" aria-expanded="false">☰</button><h1 id="conversation-title">New conversation</h1><h1 id="settings-title" hidden>Settings</h1></header>
+    <header class="workspace-header"><button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Open session navigation" aria-controls="session-sidebar" aria-expanded="false">☰</button><h1 id="conversation-title">New conversation</h1><h1 id="settings-title" hidden>Settings</h1><span id="conversation-save-status" role="status" hidden>Saved</span></header>
     <section class="settings-panel" id="settings-panel" aria-labelledby="settings-title" hidden>
       <div class="settings-content">
         <button class="reset" id="back-to-chat" type="button">← Back to conversation</button>
@@ -662,6 +682,7 @@ const homePage = `<!doctype html>
         settingsPanel.hidden = !open;
         document.getElementById('settings-title').hidden = !open;
         conversationTitle.hidden = open;
+        document.getElementById('conversation-save-status').hidden = open || !notice.hidden;
         messageList.hidden = open;
         document.querySelector('.composer-wrap').hidden = open;
         settingsButton.setAttribute('aria-pressed', String(open));
@@ -777,7 +798,7 @@ const homePage = `<!doctype html>
       });
       const composerResize = document.getElementById('composer-resize');
       function setComposerHeight(height) {
-        input.style.height = Math.max(52, Math.min(400, window.innerHeight * .45, height)) + 'px';
+        input.style.height = Math.max(42, Math.min(400, window.innerHeight * .45, height)) + 'px';
       }
       resizeWithPointer(composerResize, function (event) {
         const height = input.getBoundingClientRect().height, y = event.clientY;
@@ -915,7 +936,11 @@ const homePage = `<!doctype html>
           const heading = document.createElement('h2'); heading.className = 'history-group'; heading.textContent = group; conversationList.appendChild(heading);
           for (const item of items) {
             const button = document.createElement('button'); button.type = 'button'; button.className = 'session';
-            button.textContent = item.title || 'Conversation';
+            const title = document.createElement('span');
+            title.className = 'session-title';
+            title.textContent = item.title || 'Conversation';
+            button.title = title.textContent;
+            button.appendChild(title);
             button.dataset.conversationId = item.id;
             if (item.id === conversationId) button.setAttribute('aria-current', 'true');
             const date = new Date(Number(item.updated_at) * 1000);
@@ -995,7 +1020,7 @@ const homePage = `<!doctype html>
           messageList.replaceChildren();
           input.value = '';
           for (const item of result.messages || []) { addMessage(item.role, item.content); conversation.push({ role: item.role, content: item.content }); }
-          notice.textContent = 'This conversation is saved to your account.';
+          setConversationNotice('This conversation is saved to your account.', true);
           notice.classList.remove('error');
           renderConversations();
         } catch (_) {
@@ -1010,6 +1035,96 @@ const homePage = `<!doctype html>
         }
       }
 
+      // A deliberately small Markdown subset. Build DOM nodes, never interpret
+      // model output as HTML or load embedded images/resources.
+      function appendMessageInline(parent, value, depth = 0) {
+        if (depth > 6) { parent.append(document.createTextNode(value)); return; }
+        const tokens = /\x60([^\x60\n]+)\x60|\*\*([^\n]+?)\*\*|\*([^*\n]+)\*|\[([^\]\n]+)\]\(([^\s)]+)\)/g;
+        let offset = 0;
+        for (const match of value.matchAll(tokens)) {
+          parent.append(document.createTextNode(value.slice(offset, match.index)));
+          let node;
+          if (match[1] !== undefined) {
+            node = document.createElement('code');
+            node.textContent = match[1];
+          } else if (match[2] !== undefined || match[3] !== undefined) {
+            node = document.createElement(match[2] !== undefined ? 'strong' : 'em');
+            appendMessageInline(node, match[2] ?? match[3], depth + 1);
+          } else {
+            let url;
+            try { url = new URL(match[5]); } catch (_) {}
+            if (url && (url.protocol === 'https:' || url.protocol === 'http:')) {
+              node = document.createElement('a');
+              node.href = url.href;
+              node.target = '_blank';
+              node.rel = 'noopener noreferrer';
+              appendMessageInline(node, match[4], depth + 1);
+            } else {
+              node = document.createTextNode(match[0]);
+            }
+          }
+          parent.append(node);
+          offset = match.index + match[0].length;
+        }
+        parent.append(document.createTextNode(value.slice(offset)));
+      }
+
+      function renderMessageText(parent, content) {
+        const lines = content.replace(/\r\n?/g, '\n').split('\n');
+        const blockStart = line => /^(?:\x60{3,}|~{3,}|#{1,6}\s|\s*[-+*]\s|\s*\d+[.)]\s|>\s?)/.test(line);
+        for (let i = 0; i < lines.length;) {
+          const line = lines[i];
+          if (!line.trim()) { i++; continue; }
+          const fence = line.match(/^(\x60{3,}|~{3,})[^\n]*$/);
+          if (fence) {
+            const body = [];
+            i++;
+            while (i < lines.length) {
+              const close = lines[i].match(/^(\x60{3,}|~{3,})\s*$/);
+              if (close && close[1][0] === fence[1][0] && close[1].length >= fence[1].length) { i++; break; }
+              body.push(lines[i++]);
+            }
+            const pre = document.createElement('pre');
+            pre.tabIndex = 0;
+            pre.setAttribute('aria-label', 'Code block');
+            const code = document.createElement('code');
+            code.textContent = body.join('\n');
+            pre.append(code);
+            parent.append(pre);
+            continue;
+          }
+          const heading = line.match(/^(#{1,6})\s+(.+)$/);
+          if (heading) {
+            const node = document.createElement('h' + Math.min(4, Math.max(2, heading[1].length)));
+            appendMessageInline(node, heading[2]);
+            parent.append(node); i++; continue;
+          }
+          const listItem = line.match(/^\s*([-+*]|\d+[.)])\s+(.+)$/);
+          if (listItem) {
+            const ordered = /^\d/.test(listItem[1]);
+            const list = document.createElement(ordered ? 'ol' : 'ul');
+            if (ordered) list.start = Number.parseInt(listItem[1], 10);
+            while (i < lines.length) {
+              const item = lines[i].match(/^\s*([-+*]|\d+[.)])\s+(.+)$/);
+              if (!item || /^\d/.test(item[1]) !== ordered) break;
+              const li = document.createElement('li');
+              appendMessageInline(li, item[2]);
+              list.append(li); i++;
+            }
+            parent.append(list); continue;
+          }
+          const quote = /^>\s?/.test(line);
+          const body = [];
+          do {
+            body.push(quote ? lines[i].replace(/^>\s?/, '') : lines[i]);
+            i++;
+          } while (i < lines.length && lines[i].trim() && (quote ? /^>\s?/.test(lines[i]) : !blockStart(lines[i])));
+          const node = document.createElement(quote ? 'blockquote' : 'p');
+          appendMessageInline(node, body.join('\n'));
+          parent.append(node);
+        }
+      }
+
       function addMessage(role, content) {
         const bubble = document.createElement('article');
         bubble.className = 'message ' + role;
@@ -1018,14 +1133,22 @@ const homePage = `<!doctype html>
         sender.textContent = role === 'user' ? 'You' : 'Agent';
         const text = document.createElement('div');
         text.className = 'message-text';
-        text.textContent = content;
+        if (role === 'assistant') renderMessageText(text, content);
+        else text.textContent = content;
         bubble.append(sender, text);
         messageList.appendChild(bubble);
         messageList.scrollTop = messageList.scrollHeight;
         return bubble;
       }
 
+      function setConversationNotice(message, saved = false) {
+        notice.textContent = saved ? '' : message;
+        notice.hidden = saved;
+        document.getElementById('conversation-save-status').hidden = !saved || !settingsPanel.hidden;
+      }
+
       function showError(message, action) {
+        setConversationNotice(message);
         notice.replaceChildren(document.createTextNode(message));
         if (action === 'manage_usage') {
           const separator = document.createTextNode(' ');
@@ -1415,7 +1538,7 @@ const homePage = `<!doctype html>
         input.value = '';
         busy = true;
         setInteractionState();
-        notice.textContent = 'Waiting for the model…';
+        setConversationNotice('Waiting for the model…');
         notice.classList.remove('error');
 
         try {
@@ -1437,7 +1560,7 @@ const homePage = `<!doctype html>
           addMessage('assistant', result.reply);
           conversation.push({ role: 'user', content: content }, { role: 'assistant', content: result.reply });
           if (conversation.length > 40) conversation.splice(0, conversation.length - 40);
-          notice.textContent = conversationId ? 'This conversation is saved to your account.' : 'Reply received. This conversation has not been saved.';
+          setConversationNotice('Reply received. This conversation has not been saved.', Boolean(conversationId));
           await refreshConversations();
         } catch (error) {
           if (version !== conversationVersion) return;
@@ -1479,7 +1602,7 @@ const homePage = `<!doctype html>
         prompt.textContent = 'Ask a question to start a conversation.';
         welcome.append(title, prompt);
         messageList.appendChild(welcome);
-        notice.textContent = 'Messages are saved to your account after each reply.';
+        setConversationNotice('Messages are saved to your account after each reply.');
         notice.classList.remove('error');
         input.focus();
       });

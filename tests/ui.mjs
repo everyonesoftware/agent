@@ -176,7 +176,7 @@ const server = createServer(async (req, res) => {
     if (chatFailure) { json(429, { error: 'Test plan allowance reached.', action: chatErrorAction }); return; }
     const id = payload.conversation_id || 'created';
     const message = payload.messages.at(-1);
-    const reply = 'A real UI response from the isolated test fixture.';
+    const reply = 'A real UI response from the isolated test fixture.\n\n## A formatted reply\n\nKeep **two evenings** open.';
     history.set(id, [...(history.get(id) || []), message, { role: 'assistant', content: reply }]);
     if (!conversations.some(item => item.id === id)) conversations.unshift({ id, title: message.content, updated_at: Math.floor(Date.now() / 1000) });
     json(200, { reply, conversation_id: id }); return;
@@ -233,6 +233,7 @@ async function viewport(width, height) {
 }
 async function screenshot(name) {
   if (!process.env.UI_SCREENSHOTS) return;
+  await js('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
   const { data } = await cdp('Page.captureScreenshot', { format: 'png' });
   await writeFile(join(process.env.UI_SCREENSHOTS, name + '.png'), Buffer.from(data, 'base64'));
 }
@@ -284,6 +285,71 @@ try {
   await expectEventually("!document.querySelector('#chat-app').hidden && document.querySelectorAll('#conversation-list button').length>=3", 'Signed-in history missing');
   ok(calls.some(call => call.path === '/api/auth/register'), 'Create-account form uses the existing registration API');
   ok(await js("document.querySelector('.sidebar .brand').textContent==='e1Agent' && document.querySelector('#message-input').placeholder==='Message Agent'"), 'Chat sidebar and composer use the approved rebrand');
+  await session('A quieter week');
+  await expectEventually("document.querySelector('.message.assistant .message-text')?.textContent==='Leave two evenings open.'", 'Conversation layout fixture missing');
+  ok(await visible('#conversation-save-status') && !(await visible('#notice')), 'Saved status moves into the header instead of repeating above the composer');
+  ok(await js("document.querySelector('#message-input').getBoundingClientRect().height===42"), 'Composer starts compact while retaining its resize control');
+  for (const [width, height] of [[1440,900],[1280,850],[390,844],[320,640]]) {
+    await viewport(width,height);
+    ok(await js(`(() => {
+      const user=document.querySelector('.message.user'), answer=document.querySelector('.message.assistant');
+      const text=user.querySelector('.message-text'), box=text.getBoundingClientRect(), thread=answer.getBoundingClientRect();
+      const style=getComputedStyle(text);
+      return style.backgroundColor==='rgb(44, 57, 48)' && style.borderTopLeftRadius==='12px'
+        && getComputedStyle(answer).backgroundColor==='rgba(0, 0, 0, 0)'
+        && Math.abs(box.right-thread.right)<2 && box.width<thread.width*.9
+        && thread.width<=740 && document.documentElement.scrollWidth<=innerWidth;
+    })()`), `Soft green prompts align right while answers stay flat at ${width}px`);
+    if (width < 700) await click('#sidebar-toggle');
+    ok(await js(`(() => {
+      const title=document.querySelector('.session-title'), button=title.closest('button');
+      const saved=document.querySelector('#conversation-save-status').getBoundingClientRect();
+      const original=title.textContent;
+      title.textContent=original.repeat(30);
+      const fits=title.getBoundingClientRect().height<=parseFloat(getComputedStyle(title).lineHeight)*2+1;
+      title.textContent=original;
+      return fits && title.getBoundingClientRect().height>0 && button.title===original && saved.right<=innerWidth;
+    })()`), `Long session titles stay within two lines and Saved fits the header at ${width}px`);
+    if (width < 700) await click('#sidebar-backdrop');
+  }
+  await viewport(1280,850);
+  const plainHistory = history.get('one');
+  const formattedAnswer = 'I’d keep the quiet palette and give the conversation a clearer rhythm.\n\n## Start with the reading experience\n\n- Keep **lines comfortably short**.\n- Render *formatting* and `inline code`.\n\n### Quiet the surrounding interface\n\n1. Use a short title.\n2. Keep the composer compact.\n\n> Prompts and answers should feel distinct.\n\n```js\nconst literal = "<img src=x onerror=alert(1)>";\n' + 'x'.repeat(500) + '\n```\n\n[Safe link](https://example.com/) [Unsafe link](javascript:alert) [Data link](data:text/html,evil)\n\n<script>window.unexpectedExecution=true</script>\n<img src=x onerror="window.unexpectedExecution=true">';
+  history.set('one', [{role:'user',content:'Please keep **my wording** literal.\n' + 'longword'.repeat(70)}, {role:'assistant',content:formattedAnswer}]);
+  await session('A quieter week');
+  await expectEventually("!!document.querySelector('.message.assistant h2')", 'Assistant Markdown was not rendered');
+  ok(await js(`(() => {
+    const answer=document.querySelector('.message.assistant .message-text');
+    return answer.querySelector('h2').textContent==='Start with the reading experience'
+      && answer.querySelector('strong').textContent==='lines comfortably short'
+      && answer.querySelector('em').textContent==='formatting'
+      && answer.querySelectorAll('ul li').length===2 && answer.querySelectorAll('ol li').length===2
+      && answer.querySelector('blockquote') && answer.querySelector('pre code').textContent.includes('<img src=x')
+      && answer.querySelectorAll('a').length===1 && answer.querySelector('a').href==='https://example.com/'
+      && answer.querySelector('a').rel==='noopener noreferrer' && answer.querySelector('a').target==='_blank'
+      && !answer.querySelector('script,img,iframe,svg') && !window.unexpectedExecution
+      && document.querySelector('.message.user .message-text').textContent.includes('**my wording**')
+      && !document.querySelector('.message.user strong');
+  })()`), 'Assistant formatting is semantic, user text stays literal, and unsafe HTML/URLs stay inert');
+  for (const [width,height] of [[1280,900],[390,844],[320,640]]) {
+    await viewport(width,height);
+    ok(await js("document.documentElement.scrollWidth<=innerWidth && document.querySelector('#messages').scrollWidth<=document.querySelector('#messages').clientWidth && document.querySelector('.message.user').getBoundingClientRect().left>=0"), `Long prompts and code blocks do not overflow the thread at ${width}px`);
+    await js("document.querySelector('#messages').scrollTop=0");
+    await screenshot('agent-soft-bubbles-stress-'+width);
+  }
+  history.set('one', [{role:'user',content:'How could we make this conversation easier to read?'}, {role:'assistant',content:'I’d keep the quiet, dark palette and give the conversation a clearer rhythm. The biggest improvement is **making the answer—not the interface—the focus.**\n\n## Start with the reading experience\n\n- **Keep lines comfortably short.** Use a focused reading column.\n- **Render the formatting.** Headings, bold text, and lists should be easy to scan.\n- **Separate the speakers.** Prompts get a subtle green bubble; answers stay open.\n\n## Quiet the surrounding interface\n\nUse short conversation titles, move the saved status into the header, and keep the composer compact until more space is needed.'}]);
+  await viewport(1280,900);
+  await session('A quieter week');
+  await expectEventually("document.querySelector('.message.assistant strong')?.textContent==='making the answer—not the interface—the focus.'", 'Visual sample missing');
+  await js("document.querySelector('#messages').scrollTop=0");
+  await screenshot('agent-soft-bubbles-desktop');
+  await viewport(390,844);
+  await js("document.querySelector('#messages').scrollTop=0");
+  await screenshot('agent-soft-bubbles-phone');
+  history.set('one', plainHistory);
+  await viewport(1280,850);
+  await session('A quieter week');
+  await expectEventually("document.querySelector('.message.assistant .message-text')?.textContent==='Leave two evenings open.'", 'Plain conversation restore failed');
   await click('#message-input');
   await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
   await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
@@ -751,6 +817,7 @@ try {
   await expectEventually("document.querySelector('#account-select')?.value==='pending' && !document.querySelector('#check-chatgpt').disabled", 'Reconnect after confirmed disconnect failed');
   await click('#new-chat');
   ok(await visible('#welcome'), 'New conversation resets the conversation view');
+  ok(!(await visible('#conversation-save-status')), 'An unsaved new conversation does not claim to be saved');
   chatDelay = 250;
   await js("document.querySelector('#message-input').value='A test conversation';document.querySelector('#model-select').value='test-two';document.querySelector('#model-select').dispatchEvent(new Event('change'));document.querySelector('#chat-form').requestSubmit()");
   await expectEventually("document.querySelector('#send-button').disabled", 'Send loading state missing');
@@ -758,6 +825,7 @@ try {
   await session('Dinner ideas');
   await expectEventually("document.querySelector('#messages').textContent.includes('A real UI response')", 'Chat response missing');
   await expectEventually("document.querySelector('#conversation-title').textContent==='A test conversation'", 'New chat title did not update');
+  ok(await js("document.querySelector('.message.assistant h2')?.textContent==='A formatted reply'"), 'New model replies use the same formatted renderer as saved conversations');
   const chatCall = calls.findLast(call => call.path === '/api/chat');
   ok(chatCall.payload.model === 'test-two' && chatCall.payload.conversation_id === '', 'Composer sends selected model and correct conversation identity');
   ok(await js("!document.querySelector('#disconnect-dialog').open"), 'Ordinary model choice and chat do not ask for a connection password');
@@ -766,6 +834,7 @@ try {
   await expectEventually("document.querySelector('#model-select').value==='test-two'", 'Model preference missing after reload');
   await session('A test conversation');
   await expectEventually("document.querySelector('#messages').textContent.includes('A real UI response')", 'Saved messages missing after reload');
+  ok(await js("document.querySelector('.message.assistant strong')?.textContent==='two evenings'"), 'Formatting survives loading the saved original Markdown after reload');
   ok(true, 'Model preference and saved conversation survive page reload');
   listFailure = true;
   await cdp('Page.reload');
@@ -789,6 +858,7 @@ try {
   chatFailure = true; await click('#new-chat');
   await js("document.querySelector('#message-input').value='Failure test';document.querySelector('#chat-form').requestSubmit()");
   await expectEventually("!!document.querySelector('#notice a')", 'Usage action missing');
+  ok(await visible('#notice'), 'Request failures remain visible above the composer');
   ok(await js("document.querySelector('#notice a').href==='https://chatgpt.com/settings/usage'"), 'Provider usage errors retain the actionable usage link');
   chatFailure = false;
   await session('A test conversation');
