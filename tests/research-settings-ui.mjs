@@ -62,11 +62,14 @@ try{
  let port;await until(async()=>{try{port=(await readFile(join(profile,'DevToolsActivePort'),'utf8')).split('\n')[0];return true;}catch{return false;}},'browser start');
  const tabs=await(await fetch('http://127.0.0.1:'+port+'/json/list')).json();socket=new WebSocket(tabs.find(t=>t.type==='page').webSocketDebuggerUrl);
  await new Promise(r=>socket.onopen=r);socket.onmessage=e=>{const d=JSON.parse(e.data);if(d.method==='Runtime.exceptionThrown')errors.push(d.params.exceptionDetails.text);const p=pending.get(d.id);if(p){pending.delete(d.id);d.error?p.reject(Error(d.error.message)):p.resolve(d.result);}};
- await cdp('Page.enable');await cdp('Runtime.enable');await cdp('Page.navigate',{url:origin});
+ await cdp('Page.enable');await cdp('Runtime.enable');
+ if(process.env.UI_LOCALE)await cdp('Emulation.setLocaleOverride',{locale:process.env.UI_LOCALE});
+ await cdp('Page.navigate',{url:origin});
  await wait("!document.querySelector('#chat-app').hidden && !document.querySelector('#model-select').disabled");
  ok(!calls.length,'Ordinary chat does not request research settings');
  await click('settings-button');await wait("document.querySelector('#research-settings-card') && !document.querySelector('#research-key-form').hidden");await settled();
  ok(calls.length===1&&calls[0].method==='GET','Opening Settings reads metadata only');
+ ok(await js("document.querySelector('#research-usage-panel')?.hidden === true"),'Usage is hidden until a key is configured');
  ok(await js("Array.from(document.querySelectorAll('.settings-content > .settings-card')).map(e=>e.querySelector('h2').textContent).join('|')==='Web app updates|ChatGPT connection|Web research|Reset password|Sign out'"),'Card order preserves existing settings');
  await fill();await click('research-key-show');ok(await js("document.querySelector('#research-api-key').type==='text' && window.agentUpdateSafety().unsaved"),'Shown candidate remains an unsaved draft');
  for(const width of [1280,390,320]){
@@ -85,11 +88,40 @@ try{
  await fill();mode='invalid';await click('research-key-verify');await settled();ok(settings.configured&&await js("!document.querySelector('#research-key-saved').hidden"),'Failed replacement keeps old saved key visible');
  await click('research-key-cancel');ok(await js("document.querySelector('#research-api-key').value==='' && document.activeElement.id==='research-key-replace'"),'Cancel clears draft and restores focus');
  mode='';const checks=calls.length;await click('research-key-check');await wait("!document.querySelector('#research-key-check').disabled");ok(calls.slice(checks).filter(c=>c.method==='POST').length===1,'Test connection sends exactly one check');
+ ok(await js("!document.querySelector('#research-usage-panel').hidden && /No usage snapshot yet/.test(document.querySelector('#research-usage-windows').textContent)"),'Missing headers show unknown usage, never zero');
+ const observed='2026-11-12T18:42:00Z',future='2099-12-01T08:00:00Z';
+ const quota=(remaining,limit=2000,reset=future)=>({observed_at:observed,windows:[{limit:1,remaining:0,reset_at:'2026-11-12T18:42:01Z',window_seconds:1},{limit,remaining,reset_at:reset,window_seconds:2592000}]});
+ async function loadUsage(usage,expected){
+  settings={...settings,usage};const before=calls.length;
+  await click('back-to-chat');await click('settings-button');await settled();
+  await wait("document.querySelector('#research-usage-windows').textContent.includes("+JSON.stringify(expected)+")");
+  ok(calls.slice(before).length===1&&calls.at(-1).method==='GET','Usage snapshot reads metadata only');
+ }
+ await loadUsage(quota(1380),await js('(1380).toLocaleString()'));
+ ok(await js("document.querySelector('#research-usage-windows [role=progressbar]').getAttribute('aria-valuenow')==='1380' && document.querySelector('#research-usage-windows').textContent.includes((620).toLocaleString()+' of '+(2000).toLocaleString()+' used')"),'Brave quota renders remaining, used and accessible progress');
+ ok(await js("!/running low|No requests remaining/.test(document.querySelector('#research-usage-windows').textContent) && /1-second/.test(document.querySelector('#research-usage-windows').textContent)"),'Burst window is separate and never treated as exhausted monthly quota');
+ ok(await js("/Not live/.test(document.querySelector('#research-usage-panel').textContent) && /Snapshot/.test(document.querySelector('#research-usage-panel').textContent) && /Other apps/.test(document.querySelector('#research-usage-panel').textContent)"),'Snapshot age and shared-key caveats are visible');
+ ok(await js("(()=>{const a=document.querySelector('#research-usage-dashboard');return a.href==='https://api-dashboard.search.brave.com/' && a.target==='_blank' && a.rel.includes('noopener') && a.referrerPolicy==='no-referrer'})()"),'Dashboard opens safely without a credential or referrer');
+ for(const width of [1280,412,390,320]){
+  await cdp('Emulation.setDeviceMetricsOverride',{width,height:915,deviceScaleFactor:1,mobile:width<600});
+  await js("document.querySelector('#research-usage-panel').scrollIntoView({block:'center'})");
+  ok(await js("document.documentElement.scrollWidth<=innerWidth && document.querySelector('#research-settings-card').scrollWidth<=document.querySelector('#research-settings-card').clientWidth && document.querySelector('#research-usage-dashboard').getBoundingClientRect().height>=44"),'Usage layout and dashboard touch target at '+width);
+  if(process.env.UI_SCREENSHOTS){const {data}=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(join(process.env.UI_SCREENSHOTS,'research-usage-'+width+'.png'),Buffer.from(data,'base64'));}
+ }
+ await loadUsage(quota(80),'running low');
+ await loadUsage(quota(0),'No requests remaining');
+ await loadUsage(quota(0,2000,'2026-01-01T00:00:00Z'),'Reset time has passed');
+ ok(await js("!/No requests remaining/.test(document.querySelector('#research-usage-windows').textContent)"),'Past reset never claims a live exhausted quota or invents replenishment');
+ await loadUsage(quota(0,0),'Unlimited');
+ ok(await js("!document.querySelector('#research-usage-windows [role=progressbar]')"),'Unlimited quota has no misleading zero-limit progress bar');
+ await loadUsage({observed_at:observed,windows:[{limit:1,remaining:0,reset_at:future,window_seconds:1}]},'No quota snapshot yet');
+ await loadUsage({observed_at:observed,windows:[{limit:2000,remaining:-1,reset_at:future,window_seconds:2592000}]},'No usage snapshot yet');
+ await loadUsage(null,'No usage snapshot yet');
  await click('research-key-remove');ok(await js("document.querySelector('#research-key-remove-dialog').scrollWidth<=document.querySelector('#research-key-remove-dialog').clientWidth && document.querySelector('#research-key-remove-dialog').getBoundingClientRect().bottom<=innerHeight"),'Remove confirmation fits 320px');await key('Escape');await wait("!document.querySelector('#research-key-remove-dialog').open");ok(settings.configured&&await js("!document.querySelector('#research-key-remove-dialog').open"),'Escape keeps saved key');
  await click('research-key-remove');await click('research-key-keep');ok(settings.configured,'Keep key cancels removal');
  await click('research-key-remove');mode='conflict';await click('research-key-remove-confirm');await wait("!document.querySelector('#research-key-remove-dialog').open");await settled();ok(settings.configured&&await js("/review/i.test(document.querySelector('#research-key-error').textContent)"),'Conflict refreshes metadata and requires review');
  mode='lostack';await click('research-key-replace');await fill();await click('research-key-verify');await wait("document.querySelector('#research-key-form').hidden");ok(settings.configured,'Lost save acknowledgment reconciles metadata without replay');
- mode='offline';await click('back-to-chat');await click('settings-button');await wait("!document.querySelector('#research-settings-retry').hidden");ok(await js("!/verified|connected/i.test(document.querySelector('#research-settings-badge').textContent)"),'Metadata failure never shows stale connected badge');
+ mode='offline';await click('back-to-chat');await click('settings-button');await wait("!document.querySelector('#research-settings-retry').hidden");ok(await js("!/verified|connected/i.test(document.querySelector('#research-settings-badge').textContent) && document.querySelector('#research-usage-panel').hidden"),'Metadata failure never shows stale connected badge or usage');
  mode='';await click('research-settings-retry');await wait("!document.querySelector('#research-key-replace').disabled && !document.querySelector('#research-key-saved').hidden");
  // A lost acknowledgment plus disconnected reconciliation must never claim Connected.
  mode='lostackoffline';delay=12500;await click('research-key-replace');await fill();const beforeTimeout=calls.length;
@@ -102,7 +134,7 @@ try{
  await click('research-key-replace');await fill();await click('back-to-chat');ok(await js("document.querySelector('#research-api-key').value===''") ,'Leaving Settings clears candidate');
  await click('settings-button');await wait("!document.querySelector('#research-key-remove').disabled");
  mode='';delay=350;await click('research-key-remove');await click('research-key-remove-confirm');await wait("window.agentUpdateSafety().pending");ok(await js("document.querySelector('#research-key-check').disabled"),'Inflight mutation blocks overlapping controls and reload');
- await wait("!document.querySelector('#research-key-form').hidden && !document.querySelector('#research-key-verify').disabled");ok(!settings.configured,'Confirmed removal updates metadata');delay=0;
+ await wait("!document.querySelector('#research-key-form').hidden && !document.querySelector('#research-key-verify').disabled");ok(!settings.configured&&await js("document.querySelector('#research-usage-panel').hidden && !document.querySelector('#research-usage-windows').textContent"),'Confirmed removal clears usage and updates metadata');delay=0;
  mode='http503ack';await fill();await click('research-key-verify');await wait("!window.agentUpdateSafety().pending");
  ok(settings.configured && await js("!document.querySelector('#research-key-saved').hidden && document.querySelector('#research-api-key').value===''") ,'HTTP 503 without authoritative metadata reconciles a committed save');
  await click('research-key-remove');await click('research-key-remove-confirm');await wait("!window.agentUpdateSafety().pending");

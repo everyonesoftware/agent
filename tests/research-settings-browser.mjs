@@ -76,6 +76,7 @@ try {
     if(data.error)job.reject(new Error(data.error.message));else job.resolve(data.result);
   };
   await cdp('Runtime.enable'); await cdp('Page.enable');
+  if(process.env.UI_LOCALE)await cdp('Emulation.setLocaleOverride',{locale:process.env.UI_LOCALE});
   await cdp('Emulation.setDeviceMetricsOverride', {width:1440,height:1000,deviceScaleFactor:1,mobile:false});
   await cdp('Page.navigate', {url:origin});
   await eventual("!!document.getElementById('account-form')", 'Account form missing');
@@ -98,6 +99,12 @@ try {
   await eventual("!document.getElementById('research-key-saved').hidden && document.getElementById('research-api-key').value===''") .catch(error=>{throw new Error('Verified key was not saved and cleared: '+error.message);});
   const saved=await api('/api/research/settings');
   assert.equal(saved.body.settings.configured,true);assert.equal(saved.body.settings.key_suffix,'ABCD');assert.ok(saved.body.settings.revision);noKeys(saved);
+  assert.equal(saved.body.settings.usage.windows[1].limit,2000);
+  assert.equal(saved.body.settings.usage.windows[1].remaining,1999);
+  assert.equal(saved.body.settings.usage.windows[1].window_seconds,2592000);
+  assert.ok(Date.parse(saved.body.settings.usage.observed_at));
+  await eventual("document.querySelector('#research-usage-windows').textContent.includes((1999).toLocaleString())",'Verification quota snapshot was not rendered');
+  assert.ok(await js("!document.querySelector('#research-usage-panel').hidden && document.querySelector('#research-usage-windows [role=progressbar]').getAttribute('aria-valuenow')==='1999'"));
   assert.equal((await api('/__fixture/state')).body.verify_calls,1,'Explicit save must send exactly one verification request');
   assert.equal((await api('/__fixture/state')).body.model_calls,0,'Key verification must not call the model');
   assert.equal((await api('/api/research')).body.search_available,true);
@@ -113,16 +120,20 @@ try {
   assert.equal(otherInitial.body.settings.configured,false);assert.equal((await otherAPI('/api/research')).body.search_available,false);
   const otherSaved=await otherAPI('/api/research/settings/verify',{api_key:keys.other,expected_revision:otherInitial.body.settings.revision});
   assert.equal(otherSaved.status,200);assert.equal(otherSaved.body.settings.key_suffix,'EFGH');noKeys(otherSaved);
+  assert.equal(otherSaved.body.settings.usage.windows[1].remaining,1998);
+  assert.deepEqual((await api('/api/research/settings')).body.settings.usage,saved.body.settings.usage,'Another owner cannot overwrite this user’s snapshot');
   assert.equal((await api('/api/research/settings')).body.settings.key_suffix,'ABCD');
   await api('/__fixture/reopen',{}); await cdp('Page.reload');
   await eventual("!document.getElementById('research-key-saved').hidden", 'Stored key did not survive a production-router storage reopen');
   assert.equal((await api('/api/research/settings')).body.settings.key_suffix,'ABCD');
+  assert.deepEqual((await api('/api/research/settings')).body.settings.usage,saved.body.settings.usage,'Usage survives reopening SQLite');
   pass('Credentials are per-user and survive reopening the real persistent database without being returned to the page');
 
   await click('#research-key-replace');await enterKey(keys.rejected);await click('#research-key-verify');
   await eventual("!document.getElementById('research-key-error').hidden && !document.getElementById('research-key-verify').disabled", 'Rejected replacement did not show an actionable error');
   const afterRejected=await api('/api/research/settings');
   assert.equal(afterRejected.body.settings.key_suffix,'ABCD');assert.equal(afterRejected.body.settings.revision,saved.body.settings.revision);
+  assert.deepEqual(afterRejected.body.settings.usage,saved.body.settings.usage,'A rejected replacement must not change the saved key’s usage');
   noKeys(await js("({error:document.getElementById('research-key-error').textContent,feedback:document.getElementById('research-key-feedback').textContent})"));
   await click('#research-key-cancel');
   await eventual("!document.getElementById('research-key-saved').hidden && document.getElementById('research-api-key').value===''") .catch(error=>{throw new Error('Cancel did not restore saved key: '+error.message);});
@@ -142,12 +153,15 @@ try {
   assert.equal((await api('/__fixture/state')).body.last_suffix,'WXYZ');
   pass('Successful replacement changes the revision and invalidates prior consent; connection checks use the saved owner key');
 
-  for(const width of [1440,390,320]) {
+  for(const width of [1440,412,390,320]) {
     await cdp('Emulation.setDeviceMetricsOverride',{width,height:width<600?844:1000,deviceScaleFactor:1,mobile:width<600});
     await settingsCardInView();
     assert.ok(await js("document.documentElement.scrollWidth<=innerWidth && document.getElementById('research-settings-card').scrollWidth<=document.getElementById('research-settings-card').clientWidth"),'Key settings must fit '+width+'px');
     if(width<600)assert.ok(await js("document.getElementById('research-key-replace').getBoundingClientRect().height>=44"),'Phone key actions need a 44px target');
     await screenshot('agent-brave-settings-real-connected-'+width);
+    await js("(() => {const p=document.getElementById('settings-panel'),u=document.getElementById('research-usage-panel');p.scrollTop+=u.getBoundingClientRect().top-p.getBoundingClientRect().top-18;})()");
+    assert.ok(await js("document.querySelector('#research-usage-windows [role=progressbar]').getBoundingClientRect().width>0 && document.querySelector('#research-usage-dashboard').getBoundingClientRect().height>=44"),'Usage progress and dashboard target must fit '+width+'px');
+    await screenshot('agent-brave-settings-real-usage-'+width);
   }
   await click('#back-to-chat');
   await js("(() => {document.getElementById('research-toggle').checked=true;document.getElementById('message-input').value='Research a public topic with the configured search key.';document.getElementById('chat-form').requestSubmit();})()");
@@ -161,6 +175,12 @@ try {
   pass('Saved configuration feeds actual research tool execution only after task approval, with no keys in model requests or inspector records');
 
   await click('#settings-button');await eventual("!document.getElementById('research-key-saved').hidden",'Saved key settings did not reopen');
+  const callsAfterResearch=(await api('/__fixture/state')).body.search_calls;
+  const researchUsage=(await api('/api/research/settings')).body.settings.usage;
+  assert.equal(researchUsage.windows[1].remaining,2000-callsAfterResearch,'Ordinary approved research must save response usage');
+  await eventual("document.querySelector('#research-usage-windows').textContent.includes(("+(2000-callsAfterResearch)+").toLocaleString())",'Research snapshot was not shown on reopening Settings');
+  assert.equal((await api('/__fixture/state')).body.search_calls,callsAfterResearch,'Opening Settings must not query Brave to refresh usage');
+  pass('Real Brave response headers feed owner-scoped persisted usage through verification, test and approved research without background calls');
   await api('/__fixture/reject-saved?enabled=1',{});await click('#research-key-check');
   await eventual("/invalid|unavailable|attention/i.test(document.getElementById('research-settings-badge').textContent)",'A rejected saved key must not retain a passing verification indicator');
   const failedCheck=await api('/api/research/settings');assert.equal(failedCheck.body.settings.configured,true);assert.equal(failedCheck.body.settings.key_suffix,'WXYZ');noKeys(failedCheck);
@@ -171,6 +191,8 @@ try {
   await click('#research-key-remove');await click('#research-key-remove-confirm');
   await eventual("document.getElementById('research-key-saved').hidden && !document.getElementById('research-api-key').disabled",'Local removal did not restore setup');
   const removed=await api('/api/research/settings');assert.equal(removed.body.settings.configured,false);assert.ok(removed.body.settings.revision);
+  assert.ok(!removed.body.settings.usage,'Removal clears persisted usage');
+  assert.ok(await js("document.querySelector('#research-usage-panel').hidden && !document.querySelector('#research-usage-windows').textContent"),'Removal clears the rendered snapshot');
   assert.equal((await api('/api/research')).body.search_available,false);
   const beforeStale=(await api('/__fixture/state')).body.search_calls;
   const stale=await api('/api/research/settings/verify',{api_key:keys.first,expected_revision:replaced.body.settings.revision});

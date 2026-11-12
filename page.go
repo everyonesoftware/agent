@@ -140,6 +140,24 @@ const homePage = `<!doctype html>
     #research-key-suffix { font: 13px Consolas, monospace; }
     #research-key-error:empty, #research-key-feedback:empty { display: none; }
     #research-settings-card .connection-help summary { min-height: 44px; }
+    .research-usage { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 12px; }
+    .research-usage h3, .research-usage h4 { margin: 0; font-size: 13px; font-weight: 500; }
+    .research-usage-heading { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+    .research-usage-heading > span, .research-usage p { color: var(--muted); font-size: 11px; }
+    .research-usage-window { margin-top: 16px; }
+    .research-usage-number { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-top: 8px; }
+    .research-usage-number strong { font-size: 32px; line-height: 1.2; font-weight: 500; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+    .research-usage-number span { color: var(--muted); }
+    .research-usage-track { height: 6px; margin: 13px 0 8px; overflow: hidden; background: #39413b; border-radius: 4px; }
+    .research-usage-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+    .research-usage-stats { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+    .research-usage-window.warning .research-usage-number strong { color: #dfc38e; }
+    .research-usage-window.warning .research-usage-fill { background: #dfc38e; }
+    .research-usage-window .research-usage-notice { padding: 10px 12px; border-left: 2px solid #dfc38e; background: #353126; color: #dfc38e; }
+    .research-usage-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px 16px; margin-top: 15px; padding-top: 13px; border-top: 1px solid var(--line); }
+    .research-usage-footer > span { color: var(--muted); font-size: 11px; }
+    .research-usage-footer a { display: inline-flex; align-items: center; min-height: 44px; border-radius: 5px; text-decoration: none; }
+    .research-usage .connection-help { margin-top: 16px; }
     .security-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0; text-align: left; }
     .security-toggle h2 { margin: 0; }
     .security-copy { margin: 7px 0 0; }
@@ -442,6 +460,14 @@ const homePage = `<!doctype html>
             <div class="research-settings-actions"><button class="send" id="research-key-verify" type="submit">Verify &amp; save</button><button class="reset" id="research-key-cancel" type="button">Cancel</button></div>
           </form>
           <p id="research-key-error" class="menu-error" role="alert"></p><p id="research-key-feedback" class="connection-detail" role="status" aria-live="polite"></p><button class="reset" id="research-settings-retry" type="button" hidden>Retry settings</button>
+          <section id="research-usage-panel" class="research-usage" aria-labelledby="research-usage-title" hidden>
+            <div class="research-usage-heading"><h3 id="research-usage-title">Search usage</h3><span>Brave-reported quota</span></div>
+            <div id="research-usage-windows"></div>
+            <p id="research-usage-observed"></p>
+            <p>Not live. Other apps using this key may have used more since this snapshot. This is not a billing balance.</p>
+            <div class="research-usage-footer"><span>Updates after searches.<br>No background test queries.</span><a id="research-usage-dashboard" class="reset" href="https://api-dashboard.search.brave.com/" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Brave dashboard ↗</a></div>
+            <details class="connection-help"><summary>What counts toward usage?</summary><p>This snapshot reflects Brave’s reported quota, not just searches made in Agent. Verify &amp; save and Test connection each send one query, which may count toward usage. Opening Settings sends no search query.</p><p>Limit windows and reset times come from Brave. Check your Brave dashboard for current availability, plan and billing details. Public-page retrieval does not use your Brave Search quota.</p></details>
+          </section>
           <p id="research-key-consent" class="connection-detail">Saving a key does not approve research. Each task still needs your permission.</p>
           <details class="connection-help"><summary>About your search key</summary><p>Get a Search API key from your Brave Search account. Agent stores it on this server for your user; it is never sent in model messages. Only its suffix is shown after saving.</p><p>Updating or removing your key stops your active research permissions; other users are unaffected.</p></details>
         </section>
@@ -1064,6 +1090,73 @@ const homePage = `<!doctype html>
         searchEl('research-key-show').setAttribute('aria-pressed', 'false');
         searchEditing = false; ++updateDraftRevision;
       }
+      function searchUsageNode(tag, text, className) {
+        const node = document.createElement(tag);
+        if (text !== undefined) node.textContent = text;
+        if (className) node.className = className;
+        return node;
+      }
+      function searchUsageWindowLabel(seconds) {
+        if (seconds % 86400 === 0) return (seconds / 86400).toLocaleString() + '-day quota';
+        if (seconds % 3600 === 0) return (seconds / 3600).toLocaleString() + '-hour quota';
+        if (seconds % 60 === 0) return (seconds / 60).toLocaleString() + '-minute quota';
+        return seconds.toLocaleString() + '-second rate limit';
+      }
+      function searchUsageTime(value) {
+        return new Date(value).toLocaleString(undefined, {year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',timeZoneName:'short'});
+      }
+      function renderSearchUsage(known) {
+        const panel = searchEl('research-usage-panel'), container = searchEl('research-usage-windows');
+        const observed = searchEl('research-usage-observed');
+        panel.hidden = !known || !searchData.configured;
+        container.replaceChildren(); observed.textContent = '';
+        if (panel.hidden) return;
+        const usage = searchData.usage;
+        const valid = usage && typeof usage.observed_at === 'string' && Number.isFinite(Date.parse(usage.observed_at)) && Array.isArray(usage.windows) && usage.windows.length > 0 && usage.windows.length <= 16 && usage.windows.every(w => w && Number.isSafeInteger(w.limit) && w.limit >= 0 && Number.isSafeInteger(w.remaining) && w.remaining >= 0 && (w.limit === 0 || w.remaining <= w.limit) && Number.isSafeInteger(w.window_seconds) && w.window_seconds > 0 && typeof w.reset_at === 'string' && Number.isFinite(Date.parse(w.reset_at)));
+        if (!valid) {
+          container.append(searchUsageNode('p', 'No usage snapshot yet'));
+          container.append(searchUsageNode('p', 'Usage will appear after a search returns quota information. Missing data does not mean you have no requests left.'));
+          return;
+        }
+        const windows = [...usage.windows].sort((a, b) => b.window_seconds - a.window_seconds);
+        const primary = windows.find(w => w.window_seconds > 1);
+        if (primary) {
+          const block = searchUsageNode('div', undefined, 'research-usage-window');
+          block.append(searchUsageNode('h4', searchUsageWindowLabel(primary.window_seconds)));
+          const number = searchUsageNode('div', undefined, 'research-usage-number');
+          number.append(searchUsageNode('strong', primary.limit === 0 ? 'Unlimited' : primary.remaining.toLocaleString()));
+          if (primary.limit !== 0) number.append(searchUsageNode('span', 'requests remaining'));
+          block.append(number);
+          if (primary.limit === 0) block.append(searchUsageNode('p', 'Brave reports no request cap for this window. Other rate limits may still apply.'));
+          else {
+            const percentage = primary.remaining / primary.limit * 100;
+            const track = searchUsageNode('div', undefined, 'research-usage-track');
+            track.setAttribute('role', 'progressbar'); track.setAttribute('aria-label', 'Requests remaining in ' + searchUsageWindowLabel(primary.window_seconds));
+            track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', String(primary.limit)); track.setAttribute('aria-valuenow', String(primary.remaining));
+            track.setAttribute('aria-valuetext', primary.remaining.toLocaleString() + ' of ' + primary.limit.toLocaleString() + ' requests remaining in this snapshot');
+            const fill = searchUsageNode('div', undefined, 'research-usage-fill'); fill.style.width = percentage + '%'; track.append(fill); block.append(track);
+            const stats = searchUsageNode('div', undefined, 'research-usage-stats');
+            stats.append(searchUsageNode('span', (primary.limit - primary.remaining).toLocaleString() + ' of ' + primary.limit.toLocaleString() + ' used'), searchUsageNode('span', percentage.toLocaleString(undefined, {maximumFractionDigits:1}) + '% left'));
+            block.append(stats);
+          }
+          block.append(searchUsageNode('p', 'Quota resets ' + searchUsageTime(primary.reset_at)));
+          const expired = Date.parse(primary.reset_at) <= Date.now();
+          if (expired) block.append(searchUsageNode('p', 'Reset time has passed. Search again to get a new snapshot; remaining requests have not been estimated.'));
+          else if (primary.limit > 0 && primary.remaining / primary.limit <= 0.1) {
+            block.classList.add('warning');
+            block.append(searchUsageNode('p', primary.remaining === 0 ? 'No requests remaining in this quota snapshot. Check Brave for current availability.' : 'Your search quota is running low in this snapshot. Check your plan in Brave before starting a large research task.', 'research-usage-notice'));
+          }
+          container.append(block);
+        } else container.append(searchUsageNode('p', 'No quota snapshot yet. Brave has reported only a short-term rate limit.'));
+        const others = windows.filter(w => w !== primary);
+        if (others.length) {
+          const details = searchUsageNode('details', undefined, 'connection-help');
+          details.append(searchUsageNode('summary', 'Other rate limits (' + others.length + ')'));
+          for (const window of others) details.append(searchUsageNode('p', searchUsageWindowLabel(window.window_seconds) + ' · ' + (window.limit === 0 ? 'Unlimited' : window.remaining.toLocaleString() + ' of ' + window.limit.toLocaleString() + ' remaining') + ' in snapshot · Reset ' + searchUsageTime(window.reset_at)));
+          container.append(details);
+        }
+        observed.textContent = 'Snapshot from last response · ' + searchUsageTime(usage.observed_at);
+      }
       function renderSearchSettings() {
         const known = Boolean(searchData) && !searchUnknown;
         const badge = searchEl('research-settings-badge');
@@ -1078,6 +1171,7 @@ const homePage = `<!doctype html>
         for (const node of searchEl('research-settings-card').querySelectorAll('button, input')) node.disabled = searchBusy || (!known && node.id !== 'research-settings-retry');
         searchEl('research-key-remove-confirm').disabled = searchBusy;
         searchEl('research-key-keep').disabled = searchBusy;
+        renderSearchUsage(known);
       }
       async function searchFetch(action, expectedRevision) {
         const controller = new AbortController();

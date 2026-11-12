@@ -21,7 +21,8 @@ type researchWeb struct {
 	apiKey          string
 	lookupIP        func(context.Context, string) ([]netip.Addr, error)
 	dialContext     func(context.Context, string, string) (net.Conn, error)
-	searchTransport http.RoundTripper // Internal fixture seam; never user-configurable.
+	searchTransport http.RoundTripper    // Internal fixture seam; never user-configurable.
+	observeUsage    func(*researchUsage) // Settings-only metadata, never tool output.
 }
 
 const researchTimeout = 15 * time.Second
@@ -284,6 +285,11 @@ func (w *researchWeb) search(ctx context.Context, query string) (string, error) 
 		return "", errors.New("Brave Search request failed")
 	}
 	defer resp.Body.Close()
+	// Capture only responses from the fixed HTTPS endpoint, including 429s.
+	// Redirects and transport failures return above without observing anything.
+	if w.observeUsage != nil {
+		w.observeUsage(parseResearchUsage(resp.Header, time.Now().UTC()))
+	}
 	if resp.StatusCode != http.StatusOK {
 		return "", &researchSearchError{status: resp.StatusCode}
 	}

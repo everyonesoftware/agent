@@ -124,13 +124,29 @@ search subscription is created automatically. Without your own saved key, the
 consent card reports **page retrieval only** and the model has no search tool.
 
 Each Agent user has separate search settings. The browser receives only status,
-the key's final characters, revision metadata, and verification timestamps—not
+the key's final characters, revision metadata, verification timestamps, and
+allowlisted usage metadata—not
 the saved credential. Keys are excluded from model messages, conversation history,
 Run Inspector captures, URLs, and browser storage. They are stored server-side in
 the local SQLite database **without encryption at rest**, under the same storage
 protections as the rest of Agent's account data; protect the data directory and
 its backups. Connection status reflects the last explicit check, not continuous
 provider monitoring. Opening Settings does not send a search request.
+
+**Search usage** shows a saved snapshot of Brave's quota response headers after
+an actual search, including an explicit verification or connection test. It
+shows remaining requests, usage within the reported window, and the provider's
+reset time in your local timezone. Short-term burst limits are listed separately
+from longer quota windows. A zero cap means Brave reports an unlimited window;
+missing or malformed headers mean unknown usage, not zero remaining requests.
+Low and exhausted quota warnings describe the snapshot, not live availability.
+After a reset time passes, Agent does not invent a replenished balance.
+
+Usage is account-scoped, survives restarting Agent, and is cleared when a key is
+removed or replaced. It is not a billing balance, and other apps using the same
+Brave key may have consumed more since the displayed snapshot. Opening Settings
+only reads local metadata; it never sends a background query to refresh usage.
+Use the **Brave dashboard** link for current provider plan and billing details.
 
 Use **Replace key** to enter a new credential; a failed verification leaves the
 previous saved key unchanged. **Test connection** checks the saved key without

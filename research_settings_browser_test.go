@@ -47,6 +47,10 @@ func TestResearchSettingsBrowser(t *testing.T) {
 			fmt.Fprintf(w, `{"error":"PRIVATE-UPSTREAM-DETAIL %s"}`, key)
 			return
 		}
+		w.Header().Set("X-RateLimit-Limit", "1, 2000")
+		w.Header().Set("X-RateLimit-Policy", "1;w=1, 2000;w=2592000")
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("0, %d", 2000-searches.Load()))
+		w.Header().Set("X-RateLimit-Reset", "1, 2592000")
 		io.WriteString(w, `{"web":{"results":[{"title":"Isolated search fixture","url":"https://example.com/","description":"Synthetic evidence from the isolated test upstream, not a real web search."}]}}`)
 	}))
 	defer brave.Close()

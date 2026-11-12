@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -15,13 +16,14 @@ import (
 // Credentials remain in the protected local account database, not encrypted at
 // rest. Only this explicitly allowlisted metadata is serialized to the browser.
 type researchSettings struct {
-	Configured    bool   `json:"configured"`
-	Provider      string `json:"provider"`
-	KeySuffix     string `json:"key_suffix"`
-	Revision      string `json:"revision"`
-	VerifiedAt    string `json:"verified_at"`
-	LastCheckedAt string `json:"last_checked_at"`
-	Status        string `json:"status"`
+	Usage         *researchUsage `json:"usage"`
+	Configured    bool           `json:"configured"`
+	Provider      string         `json:"provider"`
+	KeySuffix     string         `json:"key_suffix"`
+	Revision      string         `json:"revision"`
+	VerifiedAt    string         `json:"verified_at"`
+	LastCheckedAt string         `json:"last_checked_at"`
+	Status        string         `json:"status"`
 }
 type researchCredential struct {
 	researchSettings
@@ -35,7 +37,10 @@ func migrateResearchSettings(db *sql.DB) error {
 	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS research_settings (
  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
  api_key TEXT NOT NULL, revision TEXT NOT NULL, verified_at TEXT NOT NULL,
- last_checked_at TEXT NOT NULL, status TEXT NOT NULL)`)
+ last_checked_at TEXT NOT NULL, status TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS research_usage (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ revision TEXT NOT NULL, observed_ns INTEGER NOT NULL, snapshot TEXT NOT NULL)`)
 	return err
 }
 
@@ -43,7 +48,8 @@ type researchRowQuerier interface{ QueryRow(string, ...any) *sql.Row }
 
 func loadResearchCredential(q researchRowQuerier, userID string) (researchCredential, error) {
 	v := emptyResearchCredential()
-	err := q.QueryRow(`SELECT api_key,revision,verified_at,last_checked_at,status FROM research_settings WHERE user_id=?`, userID).Scan(&v.apiKey, &v.Revision, &v.VerifiedAt, &v.LastCheckedAt, &v.Status)
+	var snapshot string
+	err := q.QueryRow(`SELECT s.api_key,s.revision,s.verified_at,s.last_checked_at,s.status,COALESCE(u.snapshot,'') FROM research_settings s LEFT JOIN research_usage u ON u.user_id=s.user_id AND u.revision=s.revision WHERE s.user_id=?`, userID).Scan(&v.apiKey, &v.Revision, &v.VerifiedAt, &v.LastCheckedAt, &v.Status, &snapshot)
 	if errors.Is(err, sql.ErrNoRows) {
 		return emptyResearchCredential(), nil
 	}
@@ -51,6 +57,11 @@ func loadResearchCredential(q researchRowQuerier, userID string) (researchCreden
 		return researchCredential{}, err
 	}
 	v.Configured = v.apiKey != ""
+	if snapshot != "" && v.Configured {
+		if err := json.Unmarshal([]byte(snapshot), &v.Usage); err != nil {
+			return researchCredential{}, err
+		}
+	}
 	if v.Configured {
 		if len(v.apiKey) < 4 {
 			return researchCredential{}, errors.New("invalid stored research credential")
@@ -201,6 +212,36 @@ func (s *researchSettingsService) persist(userID, token, expected string, next r
 	if err != nil {
 		return err
 	}
+	// Same-revision checks never write a stale captured usage value. Replacement
+	// and removal atomically discard the old revision's snapshot.
+	if next.Revision != current.Revision {
+		if next.apiKey != "" && next.apiKey == current.apiKey && current.Usage != nil {
+			currentTime, _ := time.Parse(time.RFC3339Nano, current.Usage.ObservedAt)
+			nextTime := time.Time{}
+			if next.Usage != nil {
+				nextTime, _ = time.Parse(time.RFC3339Nano, next.Usage.ObservedAt)
+			}
+			if currentTime.After(nextTime) {
+				next.Usage = current.Usage
+			}
+		}
+		if _, err = tx.Exec(`DELETE FROM research_usage WHERE user_id=?`, userID); err != nil {
+			return err
+		}
+		if next.Usage != nil && next.apiKey != "" {
+			observed, e := time.Parse(time.RFC3339Nano, next.Usage.ObservedAt)
+			if e != nil {
+				return e
+			}
+			data, e := json.Marshal(next.Usage)
+			if e != nil {
+				return e
+			}
+			if _, err = tx.Exec(`INSERT INTO research_usage(user_id,revision,observed_ns,snapshot) VALUES(?,?,?,?)`, userID, next.Revision, observed.UnixNano(), string(data)); err != nil {
+				return err
+			}
+		}
+	}
 	return tx.Commit()
 }
 func (s *researchSettingsService) handler(w http.ResponseWriter, r *http.Request) {
@@ -284,7 +325,25 @@ func (s *researchSettingsService) handler(w http.ResponseWriter, r *http.Request
 		defer s.release(user.ID)
 		ctx, cancel := context.WithTimeout(r.Context(), researchTimeout)
 		defer cancel()
-		_, verifyErr := s.web(key).search(ctx, "Agent connection test")
+		var adapter *researchWeb
+		if mutation {
+			adapter = s.web(key)
+			copy := *adapter
+			adapter = &copy
+			next.Usage = nil
+			adapter.observeUsage = func(usage *researchUsage) {
+				next.Usage = usage
+				// Verification of the already stored key is also a real
+				// observation, even when Brave replies 429. A failed candidate
+				// replacement must never attach its quota to the current key.
+				if key == current.apiKey {
+					_ = s.accounts.saveResearchUsage(user.ID, current.Revision, usage)
+				}
+			}
+		} else {
+			adapter = s.webWithUsage(user.ID, current)
+		}
+		_, verifyErr := adapter.search(ctx, "Agent connection test")
 		if verifyErr != nil {
 			var checkStatus string
 			responseStatus, code, message, checkStatus = researchVerificationFailure(verifyErr)
@@ -321,6 +380,11 @@ func (s *researchSettingsService) handler(w http.ResponseWriter, r *http.Request
 		s.research.invalidateUserLocked(user.ID)
 	}
 	s.research.mu.Unlock()
+	// Reply with persisted metadata, not a pre-network snapshot that may have
+	// been superseded by an ordinary search while this check was in flight.
+	if err == nil {
+		next, err = s.accounts.researchCredentialForUser(user.ID)
+	}
 	switch {
 	case errors.Is(err, errResearchSettingsConflict):
 		fresh, e := s.accounts.researchCredentialForUser(user.ID)
@@ -358,7 +422,7 @@ func (s *researchService) webForUserLocked(userID string) (researchWebClient, st
 	if err != nil {
 		return nil, "", err
 	}
-	return s.settings.web(v.apiKey), v.Revision, nil
+	return s.settings.webWithUsage(userID, v), v.Revision, nil
 }
 func (s *researchService) taskCredentialValidLocked(t *researchTask) bool {
 	if s.settings == nil {
