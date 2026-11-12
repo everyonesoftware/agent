@@ -40,6 +40,11 @@ const settle = async () => { await new Promise(resolve => setImmediate(resolve))
 test('installable metadata and Settings update controls are embedded in the real page', () => {
   for(const value of ['name="app-build-id" content="{{APP_BUILD_ID}}"','name="app-version" content="{{APP_VERSION}}"','rel="manifest" href="/manifest.webmanifest"','name="theme-color"','rel="apple-touch-icon" href="/icons/apple-touch-icon.png"','name="apple-mobile-web-app-capable" content="yes"','src="/pwa-updates.js" defer','Web app updates','id="pwa-check"','id="pwa-apply"','id="pwa-later"']) assert.ok(page.includes(value), value);
 });
+test('Web app updates is the first settings card', () => {
+  const settings = page.slice(page.indexOf('<section class="settings-panel"'), page.indexOf('<div class="chat-layout"'));
+  const cards = [...settings.matchAll(/<section class="settings-card"[^>]*aria-labelledby="([^"]+)"/g)].map(match => match[1]);
+  assert.deepEqual(cards, ['pwa-title', 'connection-title', 'password-title', 'signout-title']);
+});
 test('checks compare build IDs even when the version is unchanged, and Later never reloads', async () => {
   const f=fixture(); await settle(); assert.equal(f.registrations,1);
   f.click('pwa-check'); await settle();

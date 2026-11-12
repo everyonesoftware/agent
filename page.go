@@ -344,6 +344,16 @@ const homePage = `<!doctype html>
       <div class="settings-content">
         <button class="reset" id="back-to-chat" type="button">← Back to conversation</button>
         <p>Manage your connections, account, and security.</p>
+        <section class="settings-card" id="pwa-updates" aria-labelledby="pwa-title">
+          <h2 id="pwa-title">Web app updates</h2>
+          <p id="pwa-version">Current version: {{APP_VERSION}}</p>
+          <p id="pwa-status" role="status" aria-live="polite">Updates are applied only when you choose to reload.</p>
+          <div class="provider-actions">
+            <button class="reset" id="pwa-check" type="button">Check for updates</button>
+            <button class="send" id="pwa-apply" type="button" hidden>Update and reload</button>
+            <button class="reset" id="pwa-later" type="button" hidden>Later</button>
+          </div>
+        </section>
         <section class="settings-card" aria-labelledby="connection-title">
           <div class="connection-heading"><h2 id="connection-title">ChatGPT connection</h2><button class="connection-refresh" id="check-chatgpt" type="button" title="Refresh connection status" aria-label="Refresh ChatGPT connection status" aria-busy="true"><span class="connection-badge off" id="connection-badge">Checking…</span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button></div>
           <label id="account-select-label" for="account-select" hidden>Active ChatGPT account</label>
@@ -406,16 +416,6 @@ const homePage = `<!doctype html>
             <button class="send" id="password-submit" type="submit">Update password</button>
             <p id="password-status" role="status" aria-live="polite"></p>
           </form>
-        </section>
-        <section class="settings-card" id="pwa-updates" aria-labelledby="pwa-title">
-          <h2 id="pwa-title">Web app updates</h2>
-          <p id="pwa-version">Current version: {{APP_VERSION}}</p>
-          <p id="pwa-status" role="status" aria-live="polite">Updates are applied only when you choose to reload.</p>
-          <div class="provider-actions">
-            <button class="reset" id="pwa-check" type="button">Check for updates</button>
-            <button class="send" id="pwa-apply" type="button" hidden>Update and reload</button>
-            <button class="reset" id="pwa-later" type="button" hidden>Later</button>
-          </div>
         </section>
         <section class="settings-card" aria-labelledby="signout-title">
           <h2 id="signout-title">Sign out</h2>
