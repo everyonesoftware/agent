@@ -93,11 +93,13 @@ func (p *responsesProvider) complete(ctx context.Context, messages []chatMessage
 	request.Header.Set("Authorization", "Bearer "+accessToken)
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "text/event-stream")
+	traceRequest(ctx, "chatgpt", model, body)
 	response, err := p.auth.client.Do(request)
 	if err != nil {
 		return "", &providerFailure{kind: "responses_transport"}
 	}
 	defer response.Body.Close()
+	traceStatus(ctx, response.StatusCode)
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return "", readSafeAPIError(response, "responses_http")
 	}
@@ -262,6 +264,7 @@ func collectResponseText(response *http.Response) (string, error) {
 				Param string `json:"param"`
 			} `json:"error"`
 			Response struct {
+				Usage *RunUsage `json:"usage"`
 				Error struct {
 					Type  string `json:"type"`
 					Code  string `json:"code"`
@@ -285,6 +288,9 @@ func collectResponseText(response *http.Response) (string, error) {
 			completedText = event.Text
 		case "response.completed":
 			completed = true
+			if response.Request != nil {
+				traceUsage(response.Request.Context(), event.Response.Usage)
+			}
 			if output.Len() == 0 && completedText == "" {
 				for _, item := range event.Response.Output {
 					for _, content := range item.Content {

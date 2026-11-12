@@ -84,16 +84,23 @@ func (p *openAICompatibleProvider) complete(ctx context.Context, messages []chat
 		req.Header.Set("Authorization", "Bearer "+p.apiKey)
 	}
 
+	traceRequest(ctx, "openai-compatible", p.model, body)
 	resp, err := p.client.Do(req)
 	if err != nil {
 		return "", &providerFailure{kind: "transport"}
 	}
 	defer resp.Body.Close()
+	traceStatus(ctx, resp.StatusCode)
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return "", readSafeAPIError(resp, "http")
 	}
 
 	var result struct {
+		Usage *struct {
+			Prompt     int `json:"prompt_tokens"`
+			Completion int `json:"completion_tokens"`
+			Total      int `json:"total_tokens"`
+		} `json:"usage"`
 		Choices []struct {
 			Message struct {
 				Content string `json:"content"`
@@ -113,6 +120,9 @@ func (p *openAICompatibleProvider) complete(ctx context.Context, messages []chat
 			status:    resp.StatusCode,
 			requestID: safeDiagnosticToken(resp.Header.Get("X-Request-Id")),
 		}
+	}
+	if result.Usage != nil {
+		traceUsage(ctx, &RunUsage{result.Usage.Prompt, result.Usage.Completion, result.Usage.Total})
 	}
 	return result.Choices[0].Message.Content, nil
 }

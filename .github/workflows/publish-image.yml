@@ -58,6 +58,9 @@ jobs:
           go build -ldflags="-X main.version=pwa-test-a" -o "$RUNNER_TEMP/agent-pwa-a" .
           go build -ldflags="-X main.version=pwa-test-b" -o "$RUNNER_TEMP/agent-pwa-b" .
 
+      - name: Verify Run Inspector against the production server
+        run: node tests/run-inspector-browser.mjs "$RUNNER_TEMP/agent-pwa-a"
+
       - name: Verify installability, offline privacy, and explicit updates
         run: node tests/pwa-browser.mjs "$RUNNER_TEMP/agent-pwa-a" "$RUNNER_TEMP/agent-pwa-b"
 

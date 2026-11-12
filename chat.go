@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const (
@@ -21,9 +23,11 @@ type chatMessage struct {
 }
 
 type chatRequest struct {
-	Messages       []chatMessage `json:"messages"`
-	Model          string        `json:"model"`
-	ConversationID string        `json:"conversation_id,omitempty"`
+	RunID           string        `json:"run_id,omitempty"`
+	OmittedMessages int           `json:"omitted_messages,omitempty"`
+	Messages        []chatMessage `json:"messages"`
+	Model           string        `json:"model"`
+	ConversationID  string        `json:"conversation_id,omitempty"`
 }
 
 func chatHandler(provider modelProvider) http.HandlerFunc {
@@ -63,7 +67,46 @@ func chatHandlerWithStore(provider modelProvider, accounts *accountStore) http.H
 			return
 		}
 
-		reply, err := provider.complete(r.Context(), request.Messages, request.Model)
+		if request.RunID != "" && !runIDPattern.MatchString(request.RunID) || request.OmittedMessages < 0 || request.OmittedMessages > 1000000 {
+			writeChatError(w, 400, "Invalid run metadata.")
+			return
+		}
+		var user authUser
+		if accounts != nil {
+			var ok bool
+			user, ok = currentAuthUser(r.Context())
+			if !ok {
+				writeChatError(w, 401, "Sign in to continue.")
+				return
+			}
+			if request.ConversationID != "" {
+				var exists int
+				if err := accounts.db.QueryRow(`SELECT 1 FROM conversations WHERE id=? AND user_id=?`, request.ConversationID, user.ID).Scan(&exists); err != nil {
+					writeChatError(w, 404, "Conversation not found.")
+					return
+				}
+			}
+		}
+		now := time.Now()
+		messages := append([]chatMessage{{Role: "system", Content: instructionsAt(now)}}, request.Messages...)
+		ctx := r.Context()
+		var capture *runCapture
+		if accounts != nil {
+			var captureErr error
+			capture, captureErr = accounts.createRun(user, request.RunID, request.ConversationID, messages, now, request.OmittedMessages)
+			if errors.Is(captureErr, errRunExists) {
+				writeChatError(w, 409, "Run ID already exists.")
+				return
+			}
+			if capture != nil {
+				ctx = context.WithValue(ctx, runContextKey{}, capture)
+				w.Header().Set("X-Agent-Run-ID", capture.run.ID)
+			}
+		}
+		reply, err := provider.complete(ctx, messages, request.Model)
+		if capture != nil && err != nil {
+			capture.finish("", err)
+		}
 		if err != nil {
 			if errors.Is(err, errModelNotConfigured) {
 				writeChatError(w, http.StatusServiceUnavailable, "Connect your ChatGPT account or configure LLM_MODEL and provider settings.")
@@ -74,18 +117,32 @@ func chatHandlerWithStore(provider modelProvider, accounts *accountStore) http.H
 			return
 		}
 		result := map[string]string{"reply": reply}
+		runID := ""
+		if capture != nil {
+			runID = capture.run.ID
+			result["run_id"] = runID
+		}
 		if accounts != nil {
 			user, ok := currentAuthUser(r.Context())
 			if !ok {
 				writeChatError(w, http.StatusUnauthorized, "Sign in to continue.")
 				return
 			}
-			conversationID, saveErr := accounts.saveExchange(user, request.ConversationID, []chatMessage{request.Messages[len(request.Messages)-1], {Role: "assistant", Content: reply}})
+			conversationID, saveErr := accounts.saveRunExchange(user, request.ConversationID, []chatMessage{request.Messages[len(request.Messages)-1], {Role: "assistant", Content: reply}}, runID)
 			if saveErr != nil {
+				if capture != nil {
+					capture.finish(reply, saveErr)
+				}
 				writeChatError(w, http.StatusInternalServerError, "The reply was generated, but the conversation could not be saved.")
 				return
 			}
 			result["conversation_id"] = conversationID
+			if capture != nil {
+				capture.run.ConversationID = conversationID
+			}
+		}
+		if capture != nil {
+			capture.finish(reply, nil)
 		}
 		writeChatJSON(w, http.StatusOK, result)
 	}

@@ -31,6 +31,7 @@ func newServer() http.Handler {
 		mux.Handle("GET /api/auth/me", accounts.middleware(http.HandlerFunc(accounts.meHandler)))
 		mux.Handle("POST /api/auth/password", accounts.middleware(http.HandlerFunc(accounts.passwordChangeHandler)))
 		mux.Handle("POST /api/chat", accounts.middleware(chatHandlerWithStore(provider, accounts)))
+		mux.Handle("GET /api/runs/{id}", accounts.middleware(http.HandlerFunc(accounts.runHandler)))
 		mux.Handle("GET /api/models", accounts.middleware(modelsHandler(provider)))
 		mux.Handle("GET /api/conversations", accounts.middleware(http.HandlerFunc(accounts.listConversations)))
 		mux.Handle("GET /api/conversations/{id}", accounts.middleware(http.HandlerFunc(accounts.conversationMessages)))

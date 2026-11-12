@@ -186,6 +186,59 @@ const homePage = `<!doctype html>
     .send { margin-left: auto; min-width: 54px; padding: 7px 12px; border-radius: 5px; background: var(--accent); color: #1c281a; font-size: 12px; font-weight: 600; }
     .send:hover:not(:disabled) { background: #c4e5b5; }
     .hint { margin: 7px 0 0; color: var(--muted); font-size: 10px; text-align: center; }
+    .chat-layout { display: flex; position: relative; flex: 1; min-height: 0; min-width: 0; }
+    .chat-thread { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+    .inspect-run { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; padding: 5px 0; min-height: 32px; font-size: 11px; color: var(--accent); }
+    .inspect-run:hover { text-decoration: underline; }
+    .inspect-run svg { width: 14px; height: 14px; flex: none; }
+    .run-inspector { display: flex; flex-direction: column; flex: 0 0 430px; max-width: 44%; min-width: 0; min-height: 0; background: #1b1f1c; border-left: 1px solid #3c453f; }
+    .run-heading { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 12px 17px 5px; }
+    .run-heading > div { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+    .run-heading h2 { font-size: 13px; font-weight: 600; margin: 0; }
+    .run-state { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 10px; }
+    .run-state::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+    .run-state.completed { color: var(--accent); }
+    .run-state.failed, .run-state.interrupted { color: #efada5; }
+    .run-state.running { color: #dfc38e; }
+    .run-close { min-width: 36px; min-height: 36px; font-size: 20px; line-height: 1; padding: 0; color: var(--muted); }
+    .run-meta { padding: 0 17px 11px; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+    .run-tabs { display: flex; gap: 20px; padding: 0 17px; border-bottom: 1px solid var(--line); }
+    .run-tabs button { min-height: 40px; border-radius: 0; border-bottom: 2px solid transparent; padding: 6px 0; color: var(--muted); font-size: 12px; }
+    .run-tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+    .run-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 17px; position: relative; }
+    .run-caption { margin: 0 0 15px; font-size: 11px; color: var(--muted); }
+    .run-feedback { margin-bottom: 15px; color: #dfc38e; font-size: 12px; }
+    .run-feedback p { margin: 0 0 7px; }
+    .run-inspector dl { margin: 0 0 18px; }
+    .run-inspector dl > div { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; padding: 7px 0; border-bottom: 1px solid #2c332e; font-size: 12px; }
+    .run-inspector dt { color: var(--muted); }
+    .run-inspector dd { margin: 0; overflow-wrap: anywhere; }
+    .run-inspector h3 { margin: 17px 0 9px; font-size: 11px; font-weight: 600; }
+    .run-block { padding: 12px; border: 1px solid var(--line); border-radius: 5px; margin: 0 0 12px; background: #202522; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+    .run-inspector pre { font: 11px/1.65 Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 15px; padding: 12px; border: 1px solid var(--line); border-radius: 5px; background: #151916; }
+    .run-inspector summary { min-height: 36px; cursor: pointer; color: var(--accent); font-size: 12px; padding: 6px 0; }
+    .run-inspector summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .run-event { position: relative; display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 9px; padding-bottom: 19px; }
+    .run-event:not(:last-child)::before { content: ''; position: absolute; left: 10px; width: 1px; top: 23px; bottom: 3px; background: #3a453c; }
+    .run-event-mark { display: grid; place-items: center; width: 21px; height: 21px; border: 1px solid #465543; border-radius: 50%; color: var(--accent); font-size: 11px; }
+    .run-event.failed .run-event-mark { color: #efada5; border-color: #78514b; }
+    .run-event.running .run-event-mark { color: #dfc38e; border-color: #665d44; }
+    .run-event-title { font-size: 12px; font-weight: 500; }
+    .run-event-detail, .run-event-time { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+    .run-event-time { margin-top: 3px; font-size: 10px; }
+    .run-event button { min-height: 30px; padding: 3px 0; color: var(--accent); font-size: 11px; }
+    .run-footer { padding: 10px 17px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
+    @media (max-width: 1000px) {
+      .run-inspector { position: absolute; inset: 0; z-index: 8; max-width: none; width: 100%; border-left: 0; }
+    }
+    @media (max-width: 700px) {
+      .run-close, .run-tabs button, .run-inspector summary, .inspect-run, .run-event button { min-height: 44px; }
+      .run-close { min-width: 44px; }
+      .run-heading { padding: 8px 14px 4px; }
+      .run-scroll { padding: 14px; }
+      .run-tabs { padding: 0 14px; }
+      .run-inspector dl > div { grid-template-columns: 90px minmax(0, 1fr); gap: 10px; font-size: 11px; }
+    }
     .auth-gate { width: 100%; height: 100vh; height: 100dvh; margin: 0; padding: 0; border: 0; border-radius: 0; background: #202322; display: flex; flex-direction: column; overflow-y: auto; }
     .auth-header { min-height: 90px; padding: 20px 44px; border: 0; }
 
@@ -372,6 +425,8 @@ const homePage = `<!doctype html>
         </section>
       </div>
     </section>
+    <div class="chat-layout" id="chat-layout">
+    <div class="chat-thread" id="chat-thread">
     <section class="messages" id="messages" aria-live="polite" aria-relevant="additions text" aria-label="Conversation">
       <div class="welcome" id="welcome">
         <h1>What can I help with?</h1>
@@ -389,6 +444,25 @@ const homePage = `<!doctype html>
         <button class="send" id="send-button" type="submit">Send</button>
       </form>
       <p class="hint">Enter to send · Shift+Enter for a new line</p>
+    </div>
+    </div>
+    <aside class="run-inspector" id="run-inspector" aria-labelledby="run-title" hidden>
+      <div class="run-heading"><div><h2 id="run-title">Run Inspector</h2><span class="run-state" id="run-state" role="status">Loading</span></div><button type="button" class="run-close" id="run-close" aria-label="Close Run Inspector">×</button></div>
+      <div class="run-meta" id="run-meta">Read-only</div>
+      <nav class="run-tabs" role="tablist" aria-label="Run details">
+        <button type="button" role="tab" id="run-tab-timeline" aria-controls="run-view-timeline" aria-selected="true" data-run-tab="timeline">Timeline</button>
+        <button type="button" role="tab" id="run-tab-context" aria-controls="run-view-context" aria-selected="false" tabindex="-1" data-run-tab="context">Context</button>
+        <button type="button" role="tab" id="run-tab-model" aria-controls="run-view-model" aria-selected="false" tabindex="-1" data-run-tab="model">Model call</button>
+      </nav>
+      <div class="run-scroll" id="run-scroll">
+        <div class="run-feedback" id="run-feedback" hidden><p id="run-feedback-text"></p><button type="button" class="reset" id="run-retry">Retry</button></div>
+        <p class="run-caption" id="run-truncation" hidden></p>
+        <section role="tabpanel" id="run-view-timeline" aria-labelledby="run-tab-timeline" tabindex="0"><p class="run-caption">Execution events, not the model’s private reasoning.</p><div id="run-events"></div><p class="run-caption" id="run-tools"></p></section>
+        <section role="tabpanel" id="run-view-context" aria-labelledby="run-tab-context" tabindex="0" hidden><p class="run-caption">Server-supplied context for this turn. Dates use the server timezone.</p><dl id="run-context-values"></dl><h3>Baseline instructions</h3><div class="run-block" id="run-instructions"></div><h3>Messages included in the model context</h3><div id="run-messages"></div></section>
+        <section role="tabpanel" id="run-view-model" aria-labelledby="run-tab-model" tabindex="0" hidden><p class="run-caption">Captured provider payloads exclude authorization headers. Private reasoning is not recorded.</p><dl id="run-model-values"></dl><div class="run-block" id="run-error" hidden></div><details id="run-request"><summary>Sanitized request</summary><pre></pre></details><details id="run-response"><summary>Sanitized response</summary><pre></pre></details></section>
+      </div>
+      <footer class="run-footer">Private to your Agent account. Traces contain chat text; retained for up to 7 days, latest 50 runs. Older chats may have no trace.</footer>
+    </aside>
     </div>
     </div>
   </main>
@@ -450,6 +524,7 @@ const homePage = `<!doctype html>
       let historyError = '';
       let historyRequest = 0;
       let conversationId = '';
+      let omittedConversationMessages = 0;
       let modelStorageKey = 'everyoneagent.model';
 
       const authGate = document.getElementById('auth-gate');
@@ -480,6 +555,241 @@ const homePage = `<!doctype html>
       const newPassword = document.getElementById('new-password');
       const confirmPassword = document.getElementById('confirm-password');
       let passwordBusy = false;
+
+      const runPanel = document.getElementById('run-inspector');
+      const runOverlay = window.matchMedia('(max-width: 1000px)');
+      const pendingRuns = new Set();
+      let inspectedRun = '', runEpoch = 0, runTimer = null, runController = null;
+      let runOrigin = null, runTab = 'timeline', runSnapshot = null, runPolls = 0;
+      function runElement(id) { return document.getElementById('run-' + id); }
+      function runNode(tag, text, className) {
+        const node = document.createElement(tag);
+        if (text !== undefined) node.textContent = text;
+        if (className) node.className = className;
+        return node;
+      }
+      function runDuration(milliseconds) {
+        return typeof milliseconds === 'number' && Number.isFinite(milliseconds) && milliseconds >= 0
+          ? (milliseconds / 1000).toFixed(1) + ' s' : 'Not available';
+      }
+      function runValues(target, values) {
+        target.replaceChildren();
+        for (const [label, value] of values) {
+          const row = document.createElement('div');
+          row.append(runNode('dt', label), runNode('dd', value));
+          target.append(row);
+        }
+      }
+      function runSetTab(tab, focus = false) {
+        runTab = tab;
+        for (const name of ['timeline', 'context', 'model']) {
+          const active = name === tab, button = runElement('tab-' + name);
+          button.setAttribute('aria-selected', String(active));
+          button.tabIndex = active ? 0 : -1;
+          runElement('view-' + name).hidden = !active;
+        }
+        runElement('scroll').scrollTop = 0;
+        if (focus) runElement('tab-' + tab).focus();
+      }
+      function updateSidebarInert() {
+        sidebar.inert = (!runPanel.hidden && runOverlay.matches) || (mobile.matches && !chatApp.classList.contains('sidebar-open'));
+      }
+      function runOverlayState() {
+        const overlay = !runPanel.hidden && runOverlay.matches;
+        runPanel.setAttribute('role', overlay ? 'dialog' : 'complementary');
+        if (overlay) runPanel.setAttribute('aria-modal', 'true');
+        else runPanel.removeAttribute('aria-modal');
+        document.getElementById('chat-thread').inert = overlay;
+        document.querySelector('.workspace-header').inert = overlay;
+        updateSidebarInert();
+        if (overlay && !runPanel.contains(document.activeElement)) runElement('close').focus({preventScroll:true});
+      }
+      function stopRunPolling() {
+        ++runEpoch;
+        clearTimeout(runTimer); runTimer = null;
+        if (runController) runController.abort();
+        runController = null;
+      }
+      function closeRunInspector(restoreFocus = true) {
+        stopRunPolling();
+        inspectedRun = ''; runSnapshot = null; runPanel.hidden = true;
+        for (const button of messageList.querySelectorAll('.inspect-run')) button.setAttribute('aria-expanded', 'false');
+        runOverlayState();
+        runElement('events').replaceChildren(); runElement('messages').replaceChildren();
+        for (const name of ['context-values','model-values','instructions']) runElement(name).replaceChildren();
+        runElement('request').querySelector('pre').textContent = '';
+        runElement('response').querySelector('pre').textContent = '';
+        runElement('error').textContent = '';
+        if (restoreFocus && runOrigin?.isConnected) runOrigin.focus({preventScroll:true});
+        runOrigin = null;
+      }
+      function runFeedback(message, retry = true) {
+        runElement('feedback').hidden = !message;
+        runElement('feedback-text').textContent = message;
+        runElement('retry').hidden = !retry;
+      }
+      function renderRun(run) {
+        const focusedEvent = document.activeElement.closest('#run-events .run-event');
+        const focusedEventKey = focusedEvent?.dataset.eventKey;
+        runSnapshot = run;
+        const labels = {running:'Running',completed:'Completed',failed:'Failed',interrupted:'Interrupted'};
+        const state = labels[run.state] ? run.state : '';
+        runElement('state').textContent = labels[state] || 'Unknown';
+        runElement('state').className = 'run-state ' + state;
+        runElement('meta').textContent = [run.id, run.model || 'Model not selected', runDuration(run.duration_ms), 'Read-only'].join(' · ');
+        const events = runElement('events'); events.replaceChildren();
+        for (const event of Array.isArray(run.events) ? run.events : []) {
+          const titles = {context:'Context prepared',provider:'Model request started',completed:'Response received',failed:'Request failed',interrupted:'Run interrupted'};
+          const title = Object.hasOwn(titles, event.name) ? titles[event.name] : event.name;
+          const kind = ['completed','running','failed'].includes(event.state) ? event.state : '';
+          const row = runNode('div', undefined, 'run-event ' + kind);
+          row.dataset.eventKey = String(event.name) + '|' + String(event.at);
+          const mark = runNode('span', kind === 'failed' ? '!' : kind === 'running' ? '…' : '✓', 'run-event-mark');
+          const content = document.createElement('div');
+          content.append(runNode('div', title, 'run-event-title'), runNode('div', event.detail, 'run-event-detail'));
+          const timestamp = new Date(event.at), start = new Date(run.started_at);
+          const elapsed = timestamp - start;
+          if (Number.isFinite(elapsed) && elapsed >= 0) content.append(runNode('div', runDuration(elapsed) + ' from start', 'run-event-time'));
+          const action = runNode('button', /context/i.test(event.name) ? 'View context →' : 'View model call →');
+          action.type = 'button';
+          action.addEventListener('click', () => runSetTab(/context/i.test(event.name) ? 'context' : 'model', true));
+          content.append(action); row.append(mark, content); events.append(row);
+        }
+        const context = run.context || {};
+        const toolCount = Array.isArray(context.tools) ? context.tools.length : 0;
+        runElement('tools').textContent = toolCount === 0 ? '0 tools available · No web search performed' : toolCount + ' tools available';
+        runValues(runElement('context-values'), [
+          ['Current date', context.current_date || 'Not recorded'],
+          ['Timezone', [context.timezone, context.utc_offset].filter(Boolean).join(' · ') || 'Not recorded'],
+          ['Context source', 'Server clock'], ['Instructions', context.instructions_version || 'Not recorded'],
+          ['Tools', toolCount === 0 ? 'None available' : context.tools.join(', ')], ['Skills / memory', 'None loaded'],
+          ['Excluded before inference', typeof context.omitted_messages === 'number' ? String(context.omitted_messages) : 'Not recorded'],
+          ['Excluded from capture', typeof context.capture_omitted_messages === 'number' ? String(context.capture_omitted_messages) : 'Not recorded'],
+        ]);
+        runElement('instructions').textContent = context.instructions || 'Not recorded';
+        const messages = runElement('messages'); messages.replaceChildren();
+        for (const message of Array.isArray(context.messages) ? context.messages : []) {
+          messages.append(runNode('h3', String(message.role || 'message').toUpperCase()), runNode('div', message.content, 'run-block'));
+        }
+        const usage = run.usage;
+        runValues(runElement('model-values'), [
+          ['Provider', run.provider || 'Not selected'], ['Model', run.model || 'Not selected'],
+          ['Started', run.started_at || 'Not recorded'], ['Finished', run.finished_at || (state === 'running' ? 'In progress' : 'Not recorded')],
+          ['Duration', runDuration(run.duration_ms)], ['HTTP status', run.http_status ? String(run.http_status) : 'Not received'],
+          ['Retries', typeof run.retries === 'number' ? String(run.retries) : 'Not recorded'],
+          ['Token usage', usage ? [typeof usage.input_tokens === 'number' ? usage.input_tokens + ' input' : '', typeof usage.output_tokens === 'number' ? usage.output_tokens + ' output' : '', typeof usage.total_tokens === 'number' ? usage.total_tokens + ' total' : ''].filter(Boolean).join(' · ') || 'Not reported' : 'Not reported'],
+          ['Cost', 'Not available'],
+        ]);
+        runElement('error').hidden = !run.error;
+        runElement('error').textContent = run.error || '';
+        const truncated = run.request_truncated || run.response_truncated || context.truncated;
+        runElement('truncation').hidden = !truncated;
+        runElement('truncation').textContent = 'Capture size limit reached. Some trace content was omitted; this is not a complete payload.';
+        for (const field of ['request','response']) {
+          const details = runElement(field), data = run[field];
+          details.querySelector('pre').textContent = data === undefined || data === null
+            ? (state === 'running' ? 'Not captured yet.' : 'Not captured.')
+            : typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+        }
+        if (focusedEvent) {
+          const replacement = Array.from(events.querySelectorAll('.run-event')).find(row => row.dataset.eventKey === focusedEventKey)?.querySelector('button');
+          (replacement || runElement('tab-' + runTab)).focus({preventScroll:true});
+        }
+      }
+      async function readRun() {
+        if (!inspectedRun || runPanel.hidden || document.hidden || runController) return;
+        clearTimeout(runTimer);
+        const id = inspectedRun, epoch = runEpoch, controller = new AbortController();
+        runController = controller;
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        let poll = false;
+        try {
+          const response = await fetch('/api/runs/' + encodeURIComponent(id), {cache:'no-store',signal:controller.signal});
+          if (epoch !== runEpoch) return;
+          if (response.status === 404) {
+            runFeedback(pendingRuns.has(id) ? 'Waiting for the server to record this run…' : 'This trace is no longer available, or was not recorded. Older chats and expired traces cannot be inspected.', !pendingRuns.has(id));
+            runElement('state').textContent = 'Unavailable';
+            runElement('state').className = 'run-state';
+            poll = pendingRuns.has(id);
+          } else {
+            if (!response.ok) throw new Error('read');
+            const data = await response.json();
+            if (epoch !== runEpoch) return;
+            if (!data.run || data.run.id !== id) throw new Error('invalid');
+            runFeedback(''); renderRun(data.run);
+            poll = data.run.state === 'running';
+          }
+        } catch (_) {
+          if (epoch === runEpoch) runFeedback('Run details could not be loaded. ' + (runSnapshot ? 'Showing the last received snapshot; it may be out of date.' : 'Your conversation is unchanged.'));
+        } finally {
+          clearTimeout(timeout);
+          if (epoch === runEpoch) {
+            runController = null;
+            if (poll && ++runPolls < 180) runTimer = setTimeout(() => { void readRun(); }, 1000);
+            else if (poll) runFeedback('Live monitoring paused after three minutes. Refresh to check this run again.');
+          }
+        }
+      }
+      function openRunInspector(id, origin) {
+        closeRunInspector(false);
+        inspectedRun = id; runOrigin = origin; runPolls = 0;
+        runPanel.hidden = false;
+        origin.setAttribute('aria-expanded', 'true');
+        runElement('state').textContent = 'Loading'; runElement('state').className = 'run-state';
+        runElement('meta').textContent = id + ' · Read-only';
+        runElement('tools').textContent = '';
+        runElement('error').hidden = true; runElement('truncation').hidden = true;
+        runElement('request').open = false; runElement('response').open = false;
+        runFeedback(''); runSetTab('timeline'); runOverlayState();
+        runElement('close').focus({preventScroll:true});
+        void readRun();
+      }
+      function attachRun(bubble, id) {
+        if (!id || typeof id !== 'string') return;
+        const button = runNode('button', 'Inspect run', 'inspect-run');
+        button.type = 'button'; button.dataset.runId = id;
+        button.setAttribute('aria-controls', 'run-inspector');
+        button.setAttribute('aria-expanded', String(id === inspectedRun));
+        button.addEventListener('click', () => id === inspectedRun ? closeRunInspector() : openRunInspector(id, button));
+        bubble.append(button);
+        if (id === inspectedRun) runOrigin = button;
+      }
+      function newRunID() {
+        if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+        const bytes = crypto.getRandomValues(new Uint8Array(16));
+        bytes[6] = (bytes[6] & 15) | 64; bytes[8] = (bytes[8] & 63) | 128;
+        const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+        return [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-');
+      }
+      runElement('close').addEventListener('click', () => closeRunInspector());
+      runElement('retry').addEventListener('click', () => { runPolls = 0; void readRun(); });
+      document.querySelectorAll('[data-run-tab]').forEach(button => button.addEventListener('click', () => runSetTab(button.dataset.runTab)));
+      runElement('inspector').addEventListener('keydown', event => {
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeRunInspector(); }
+        if (event.target.matches('[data-run-tab]') && ['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) {
+          event.preventDefault();
+          const names = ['timeline','context','model']; let index = names.indexOf(runTab);
+          if (event.key === 'Home') index = 0;
+          if (event.key === 'End') index = 2;
+          if (event.key === 'ArrowLeft') index = (index + 2) % 3;
+          if (event.key === 'ArrowRight') index = (index + 1) % 3;
+          runSetTab(names[index], true);
+        }
+        if (event.key === 'Tab' && runOverlay.matches) {
+          const controls = Array.from(runPanel.querySelectorAll('button:not([disabled]), summary, [tabindex="0"]')).filter(node => node.getClientRects().length && node.tabIndex >= 0);
+          const first = controls[0], last = controls[controls.length - 1];
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        }
+      });
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && !runPanel.hidden && !document.querySelector('dialog[open]')) closeRunInspector();
+      });
+      runOverlay.addEventListener('change', runOverlayState);
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) stopRunPolling();
+        else if (inspectedRun && !runPanel.hidden) void readRun();
+      });
 
       // Usage authorization is independent of the conversation connection.
       const usageElement = id => document.getElementById('usage-' + id);
@@ -673,6 +983,7 @@ const homePage = `<!doctype html>
       document.addEventListener('visibilitychange', () => { if (document.hidden) stopUsage(); else syncUsage(); });
 
       function showSettings(open, updateURL = true) {
+        if (open) closeRunInspector(false);
         if (!open) stopUsage();
         if (updateURL && (window.location.hash === '#settings') !== open) {
           const url = new URL(window.location.href);
@@ -684,6 +995,7 @@ const homePage = `<!doctype html>
         conversationTitle.hidden = open;
         document.getElementById('conversation-save-status').hidden = open || !notice.hidden;
         messageList.hidden = open;
+        document.getElementById('chat-layout').hidden = open;
         document.querySelector('.composer-wrap').hidden = open;
         settingsButton.setAttribute('aria-pressed', String(open));
         closeAccount(false);
@@ -752,7 +1064,7 @@ const homePage = `<!doctype html>
         sidebarToggle.setAttribute('aria-expanded', String(expanded));
         sidebarToggle.setAttribute('aria-label', expanded ? 'Close session navigation' : 'Open session navigation');
         backdrop.hidden = !expanded;
-        sidebar.inert = mobile.matches && !expanded;
+        updateSidebarInert();
         if (!expanded) closeAccount(false);
         if (expanded) document.getElementById('new-chat').focus({ preventScroll: true });
         else if (restoreFocus && mobile.matches) sidebarToggle.focus();
@@ -1014,12 +1326,14 @@ const homePage = `<!doctype html>
           if (!response.ok || !Array.isArray(result.messages)) throw new Error('load');
           if (version !== conversationVersion) return;
           conversationId = item.id;
+          closeRunInspector(false);
+          omittedConversationMessages = Number(result.omitted_messages) || 0;
           historyError = '';
           conversationTitle.textContent = (result.conversation && result.conversation.title) || item.title || 'Conversation';
           conversation.length = 0;
           messageList.replaceChildren();
           input.value = '';
-          for (const item of result.messages || []) { addMessage(item.role, item.content); conversation.push({ role: item.role, content: item.content }); }
+          for (const item of result.messages || []) { const bubble = addMessage(item.role, item.content); if (item.role === 'assistant') attachRun(bubble, item.run_id); conversation.push({ role: item.role, content: item.content }); }
           setConversationNotice('This conversation is saved to your account.', true);
           notice.classList.remove('error');
           renderConversations();
@@ -1535,6 +1849,9 @@ const homePage = `<!doctype html>
         addMessage('user', content);
         const requestMessages = conversation.slice(-39).concat([{ role: 'user', content: content }]);
         const thinking = addMessage('assistant', 'Thinking…');
+        const runID = newRunID();
+        pendingRuns.add(runID);
+        attachRun(thinking, runID);
         input.value = '';
         busy = true;
         setInteractionState();
@@ -1545,7 +1862,7 @@ const homePage = `<!doctype html>
           const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: requestMessages, model: modelSelect.value, conversation_id: conversationId })
+            body: JSON.stringify({ messages: requestMessages, model: modelSelect.value, conversation_id: conversationId, run_id: runID, omitted_messages: omittedConversationMessages + Math.max(0, conversation.length - 39) })
           });
           const result = await response.json();
           if (version !== conversationVersion) return;
@@ -1557,21 +1874,23 @@ const homePage = `<!doctype html>
           thinking.remove();
           conversationId = result.conversation_id || conversationId;
           if (conversationTitle.textContent === 'New conversation') conversationTitle.textContent = content.slice(0, 80);
-          addMessage('assistant', result.reply);
+          attachRun(addMessage('assistant', result.reply), result.run_id || runID);
           conversation.push({ role: 'user', content: content }, { role: 'assistant', content: result.reply });
-          if (conversation.length > 40) conversation.splice(0, conversation.length - 40);
+          if (conversation.length > 40) omittedConversationMessages += conversation.splice(0, conversation.length - 40).length;
           setConversationNotice('Reply received. This conversation has not been saved.', Boolean(conversationId));
           await refreshConversations();
         } catch (error) {
           if (version !== conversationVersion) return;
           thinking.remove();
-          addMessage('assistant', 'I could not complete that request.');
+          attachRun(addMessage('assistant', 'I could not complete that request.'), runID);
           showError(error.message || 'Check the model provider settings and try again.', error.action);
           if (error.action === 'reauthorize') await refreshConnectionState();
         } finally {
+          pendingRuns.delete(runID);
+          if (inspectedRun === runID) { clearTimeout(runTimer); if (runController) { stopRunPolling(); } void readRun(); }
           busy = false;
           setInteractionState();
-          if (settingsPanel.hidden) input.focus();
+          if (settingsPanel.hidden && runPanel.hidden) input.focus();
         }
       });
 
@@ -1586,6 +1905,8 @@ const homePage = `<!doctype html>
         if (busy || loadingConversation) return;
         showSettings(false);
         conversationVersion++;
+        closeRunInspector(false);
+        omittedConversationMessages = 0;
         conversation.length = 0;
         conversationId = '';
         conversationTitle.textContent = 'New conversation';

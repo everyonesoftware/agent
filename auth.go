@@ -65,6 +65,10 @@ CREATE INDEX IF NOT EXISTS messages_conversation ON messages(user_id, conversati
 		_ = db.Close()
 		return nil, err
 	}
+	if err = migrateRuns(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return &accountStore{db: db, dataDir: filepath.Dir(path), oauthServices: make(map[string]*siwcService)}, nil
 }
 
@@ -398,12 +402,16 @@ type savedConversation struct {
 }
 
 type savedMessage struct {
+	RunID     string `json:"run_id,omitempty"`
 	Role      string `json:"role"`
 	Content   string `json:"content"`
 	CreatedAt int64  `json:"created_at"`
 }
 
 func (s *accountStore) saveExchange(user authUser, conversationID string, messages []chatMessage) (string, error) {
+	return s.saveRunExchange(user, conversationID, messages, "")
+}
+func (s *accountStore) saveRunExchange(user authUser, conversationID string, messages []chatMessage, runID string) (string, error) {
 	now := time.Now().Unix()
 	newConversation := conversationID == ""
 	if newConversation {
@@ -437,7 +445,7 @@ func (s *accountStore) saveExchange(user authUser, conversationID string, messag
 		}
 	}
 	for _, message := range messages {
-		if _, err = tx.Exec(`INSERT INTO messages(conversation_id,user_id,role,content,created_at) VALUES(?,?,?,?,?)`, conversationID, user.ID, message.Role, message.Content, now); err != nil {
+		if _, err = tx.Exec(`INSERT INTO messages(conversation_id,user_id,role,content,created_at,run_id) VALUES(?,?,?,?,?,?)`, conversationID, user.ID, message.Role, message.Content, now, assistantRunID(message.Role, runID)); err != nil {
 			return "", err
 		}
 	}
@@ -479,7 +487,7 @@ func (s *accountStore) conversationMessages(w http.ResponseWriter, r *http.Reque
 		writeChatError(w, http.StatusNotFound, "Conversation not found.")
 		return
 	}
-	rows, err := s.db.Query(`SELECT role,content,created_at FROM messages WHERE conversation_id=? AND user_id=? ORDER BY id`, id, user.ID)
+	rows, err := s.db.Query(`SELECT role,content,created_at,run_id FROM messages WHERE conversation_id=? AND user_id=? ORDER BY id`, id, user.ID)
 	if err != nil {
 		writeChatError(w, http.StatusInternalServerError, "Conversation could not be loaded.")
 		return
@@ -488,7 +496,7 @@ func (s *accountStore) conversationMessages(w http.ResponseWriter, r *http.Reque
 	messages := make([]savedMessage, 0)
 	for rows.Next() {
 		var m savedMessage
-		if rows.Scan(&m.Role, &m.Content, &m.CreatedAt) != nil {
+		if rows.Scan(&m.Role, &m.Content, &m.CreatedAt, &m.RunID) != nil {
 			writeChatError(w, http.StatusInternalServerError, "Conversation could not be loaded.")
 			return
 		}
@@ -507,6 +515,10 @@ func (s *accountStore) deleteConversation(w http.ResponseWriter, r *http.Request
 	defer tx.Rollback()
 	if _, err := tx.Exec(`DELETE FROM messages WHERE conversation_id=? AND user_id=?`, r.PathValue("id"), user.ID); err != nil {
 		writeChatError(w, http.StatusInternalServerError, "Conversation could not be deleted.")
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM runs WHERE conversation_id=? AND user_id=?`, r.PathValue("id"), user.ID); err != nil {
+		writeChatError(w, 500, "Conversation could not be deleted.")
 		return
 	}
 	result, err := tx.Exec(`DELETE FROM conversations WHERE id=? AND user_id=?`, r.PathValue("id"), user.ID)

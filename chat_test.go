@@ -87,8 +87,8 @@ func TestChatAPIUsesConfiguredOpenAICompatibleProvider(t *testing.T) {
 	if gotModel != "test-model" {
 		t.Errorf("provider model = %q, want %q", gotModel, "test-model")
 	}
-	if gotMessageCount != 3 {
-		t.Errorf("provider message count = %d, want 3", gotMessageCount)
+	if gotMessageCount != 4 {
+		t.Errorf("provider message count = %d, want 4 (including trusted context)", gotMessageCount)
 	}
 	if gotLastMessage != "What can you do?" {
 		t.Errorf("provider last message = %q, want the submitted question", gotLastMessage)

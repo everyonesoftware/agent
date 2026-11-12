@@ -44,6 +44,25 @@ let authorizationFailure = false;
 let authorizationDelay = 0;
 let modelsDelay = 0;
 let remoteRevoked = true;
+let runReadFailure = false;
+const runs = new Map();
+function fixtureRun(id, state = 'completed', messages = [{role:'user',content:'Plan a quiet week.'}]) {
+  return {
+    id, state, conversation_id:'one', started_at:'2026-11-11T18:00:00-08:00',
+    finished_at:state === 'running' ? '' : '2026-11-11T18:00:02.400-08:00', duration_ms:2400,
+    provider:'Isolated fixture provider', model:'test-one', retries:0, http_status:state==='failed'?429:200,
+    context:{current_date:'2026-11-11', timezone:'America/Los_Angeles', utc_offset:'-08:00', instructions_version:'baseline-v1',
+      instructions:'Missing knowledge is not evidence that an event has not happened. No live retrieval is available.',
+      messages:[{role:'system',content:'Current date: 2026-11-11. No tools available.'},...messages], omitted_messages:0, tools:[]},
+    events:[{name:'Context prepared',detail:'Server-supplied date and baseline instructions.',at:'2026-11-11T18:00:00-08:00',state:'completed'},
+      {name:state==='failed'?'Provider failed':state==='running'?'Waiting for response':'Response received',detail:'Fixture event only.',at:'2026-11-11T18:00:02.400-08:00',state:state==='failed'?'failed':state==='running'?'running':'completed'}],
+    request:{model:'test-one',messages:[{role:'system',content:'Current date: 2026-11-11.'},...messages]},
+    response:state==='running'?undefined:{text:'<script>window.traceExecuted=true</script> <img src=x onerror=alert(1)>'},
+    error:state==='failed'?'Fixture provider failure.':undefined,
+    request_truncated:false,response_truncated:false,
+  };
+}
+runs.set('history-run', fixtureRun('history-run'));
 const providerProfiles = [
   { id: 'p1', label: 'Personal', email: 'personal@example.com', connected: true, plan_usage_enabled: true, oauth_selected: true },
   { id: 'p2', label: 'Other', email: 'other@example.com', connected: true, plan_usage_enabled: true, oauth_selected: true },
@@ -59,7 +78,7 @@ let conversations = [
   { id: 'unsafe', title: '<img src=x onerror=alert(1)>', updated_at: 1 },
 ];
 const history = new Map([
-  ['one', [{ role: 'user', content: 'Plan a quiet week.' }, { role: 'assistant', content: 'Leave two evenings open.' }]],
+  ['one', [{ role: 'user', content: 'Plan a quiet week.' }, { role: 'assistant', content: 'Leave two evenings open.', run_id:'history-run' }]],
   ['two', [{ role: 'user', content: 'Suggest dinner.' }, { role: 'assistant', content: 'Try rice and roasted vegetables.' }]],
   ['unsafe', [{ role: 'assistant', content: '<script>window.unexpectedExecution=true</script>' }]],
 ]);
@@ -160,6 +179,10 @@ const server = createServer(async (req, res) => {
     await new Promise(resolve => setTimeout(resolve, modelsDelay));
     json(modelsFailure ? 503 : 200, modelsFailure ? { error: 'Fixture models unavailable' } : { models: [{ id: 'test-one', name: 'Test model one' }, { id: 'test-two', name: 'Test model two' }] }); return;
   }
+  if (url.pathname.startsWith('/api/runs/')) {
+    const run = runs.get(decodeURIComponent(url.pathname.split('/').pop()));
+    json(runReadFailure ? 503 : run ? 200 : 404, runReadFailure ? {error:'Trace read failed.'} : run ? {run} : {error:'Run not found.'}); return;
+  }
   if (url.pathname === '/api/conversations') {
     json(listFailure ? 500 : 200, listFailure ? { error: 'Test history unavailable.' } : { conversations }); return;
   }
@@ -172,14 +195,16 @@ const server = createServer(async (req, res) => {
     let text = ''; for await (const chunk of req) text += chunk;
     const payload = JSON.parse(text);
     call.payload = payload;
+    if (payload.run_id) runs.set(payload.run_id, fixtureRun(payload.run_id, 'running', payload.messages));
     await new Promise(resolve => setTimeout(resolve, chatDelay));
-    if (chatFailure) { json(429, { error: 'Test plan allowance reached.', action: chatErrorAction }); return; }
+    if (payload.run_id) runs.set(payload.run_id, fixtureRun(payload.run_id, chatFailure ? 'failed' : 'completed', payload.messages));
+    if (chatFailure) { json(429, { error: 'Test plan allowance reached.', action: chatErrorAction, run_id:payload.run_id }); return; }
     const id = payload.conversation_id || 'created';
     const message = payload.messages.at(-1);
     const reply = 'A real UI response from the isolated test fixture.\n\n## A formatted reply\n\nKeep **two evenings** open.';
-    history.set(id, [...(history.get(id) || []), message, { role: 'assistant', content: reply }]);
+    history.set(id, [...(history.get(id) || []), message, { role: 'assistant', content: reply, run_id:payload.run_id }]);
     if (!conversations.some(item => item.id === id)) conversations.unshift({ id, title: message.content, updated_at: Math.floor(Date.now() / 1000) });
-    json(200, { reply, conversation_id: id }); return;
+    json(200, { reply, conversation_id: id, run_id:payload.run_id }); return;
   }
   json(404, { error: 'Unexpected test endpoint: ' + url.pathname });
 });
@@ -287,6 +312,70 @@ try {
   ok(await js("document.querySelector('.sidebar .brand').textContent==='e1Agent' && document.querySelector('#message-input').placeholder==='Message Agent'"), 'Chat sidebar and composer use the approved rebrand');
   await session('A quieter week');
   await expectEventually("document.querySelector('.message.assistant .message-text')?.textContent==='Leave two evenings open.'", 'Conversation layout fixture missing');
+  ok(await visible('.inspect-run'), 'Saved assistant messages expose their real run inspection action');
+  ok(!(await visible('#run-inspector')), 'Inspector starts closed without taking chat space');
+  await click('.inspect-run');
+  await expectEventually("document.querySelector('#run-inspector')?.textContent.includes('Context prepared')", 'Inspector timeline missing');
+  ok(await js("document.querySelector('#run-state').textContent==='Completed'"), 'Inspector shows server-recorded state');
+  await click('#run-tab-context');
+  ok(await js("document.querySelector('#run-view-context').textContent.includes('2026-11-11') && document.querySelector('#run-view-context').textContent.includes('America/Los_Angeles') && document.querySelector('#run-view-context').textContent.includes('Missing knowledge')"), 'Context tab exposes server date, timezone, and baseline instructions');
+  await click('#run-tab-model');
+  await click('#run-request summary');
+  await click('#run-response summary');
+  ok(await js("document.querySelector('#run-request pre').textContent.includes('Plan a quiet week.') && document.querySelector('#run-response pre').textContent.includes('<script>') && !document.querySelector('#run-inspector script, #run-inspector img') && !window.traceExecuted"), 'Request and response disclosures preserve text without interpreting HTML');
+  ok(await js("document.querySelector('#run-view-model').textContent.includes('Not reported') && document.querySelector('#run-view-model').textContent.includes('Not available')"), 'Missing token usage and cost are explicit rather than fabricated');
+  await click('#run-close');
+  runs.set('history-run',{...fixtureRun('history-run'), request_truncated:true, context:{...fixtureRun('history-run').context,omitted_messages:8,capture_omitted_messages:2,truncated:true}});
+  await click('.inspect-run');
+  await expectEventually("document.querySelector('#run-state').textContent==='Completed'", 'Truncated trace missing');
+  await click('#run-tab-context');
+  ok(await visible('#run-truncation') && await js("document.querySelector('#run-context-values').textContent.includes('Excluded before inference8') && document.querySelector('#run-context-values').textContent.includes('Excluded from capture2')"), 'Context warns about incomplete capture and distinguishes inference omissions from trace-only omissions');
+  await click('#run-close');
+  runs.set('history-run',fixtureRun('history-run'));
+  runs.set('history-run',fixtureRun('history-run','running'));
+  await click('.inspect-run');
+  await expectEventually("document.querySelector('#run-state').textContent==='Running'", 'Running focus fixture missing');
+  await viewport(390,844);
+  await js("document.querySelector('#run-tab-timeline').focus()");
+  for (let i=0;i<2;i++) {
+    await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+    await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+  }
+  ok(await js("document.activeElement.matches('#run-events button')"), 'Timeline actions can be reached with real keyboard navigation');
+  runs.get('history-run').events[0].detail = 'Updated by the next server poll.';
+  await expectEventually("document.querySelector('#run-events').textContent.includes('Updated by the next server poll.')", 'Running trace did not refresh');
+  ok(await js("document.activeElement.matches('#run-events button') && document.querySelector('#run-inspector').contains(document.activeElement)"), 'Polling preserves keyboard focus inside the inspector');
+  await click('#run-close');
+  runs.set('history-run',fixtureRun('history-run'));
+  await viewport(1280,850);
+  await click('.inspect-run');
+  await expectEventually("document.querySelector('#run-state').textContent==='Completed'", 'Trace restore missing');
+  await click('#run-tab-model');
+  for (const [width,height] of [[1440,900],[1024,600],[760,600],[390,844],[320,640]]) {
+    await viewport(width,height);
+    ok(await js("(() => {const p=document.querySelector('#run-inspector'),r=p.getBoundingClientRect();return document.documentElement.scrollWidth<=innerWidth && document.documentElement.scrollHeight<=innerHeight && p.scrollWidth<=p.clientWidth && r.right<=innerWidth && r.bottom<=innerHeight && document.querySelector('#run-close').getBoundingClientRect().top>=0;})()"), `Inspector stays bounded at ${width}x${height}`);
+    if (width<701) ok(await js("document.querySelector('#run-close').getBoundingClientRect().height>=44 && document.querySelector('#run-tab-model').getBoundingClientRect().height>=44"), 'Phone inspector has accessible touch targets');
+    await screenshot('agent-run-inspector-'+width);
+  }
+  await viewport(760,640);
+  ok(await js("document.querySelector('#run-inspector').getAttribute('aria-modal')==='true' && document.querySelector('#session-sidebar').inert && document.querySelector('#chat-thread').inert"), 'Resizing an open inspector from phone to tablet keeps the background inert');
+  await viewport(390,844);
+  await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  ok(!(await visible('#run-inspector')) && await js("document.activeElement.matches('.inspect-run')"), 'Escape closes inspection and restores focus to its run');
+  await viewport(1280,850);
+  runReadFailure = true;
+  await click('.inspect-run');
+  await expectEventually("document.querySelector('#run-feedback').textContent.includes('could not')", 'Trace read failure not shown');
+  runReadFailure = false;
+  await click('#run-retry');
+  await expectEventually("document.querySelector('#run-state').textContent==='Completed'", 'Trace retry failed');
+  await click('#run-close');
+  runs.delete('history-run');
+  await click('.inspect-run');
+  await expectEventually("document.querySelector('#run-feedback').textContent.includes('no longer available')", 'Expired trace state missing');
+  await click('#run-close');
+  runs.set('history-run',fixtureRun('history-run'));
   ok(await visible('#conversation-save-status') && !(await visible('#notice')), 'Saved status moves into the header instead of repeating above the composer');
   ok(await js("document.querySelector('#message-input').getBoundingClientRect().height===42"), 'Composer starts compact while retaining its resize control');
   for (const [width, height] of [[1440,900],[1280,850],[390,844],[320,640]]) {
@@ -362,6 +451,10 @@ try {
   ok(await js("document.querySelector('#current-username').textContent==='Browser Test'"), 'Bottom-left profile shows authenticated user');
   ok(await visible('#app-version') && await js("document.querySelector('#app-version').textContent==='Version 42' && document.querySelector('#app-version').getBoundingClientRect().top >= document.querySelector('.account-row').getBoundingClientRect().bottom"), 'Build version is visible underneath the logged-in user');
   ok(!calls.some(c=>c.path.startsWith('/api/usage/')), 'Usage is not loaded during login or ordinary chat');
+  await click('.inspect-run');
+  await click('#settings-button');
+  ok(!(await visible('#run-inspector')), 'Settings closes inspection and stops trace activity');
+  await click('#back-to-chat');
   ok(await visible('#settings-button'), 'Gear button is available beside the profile');
   ok(await visible('#sidebar-resize'), 'Desktop sidebar has a resize handle');
   await drag('#sidebar-resize', 100, 0);
@@ -818,9 +911,14 @@ try {
   await click('#new-chat');
   ok(await visible('#welcome'), 'New conversation resets the conversation view');
   ok(!(await visible('#conversation-save-status')), 'An unsaved new conversation does not claim to be saved');
-  chatDelay = 250;
+  chatDelay = 1500;
   await js("document.querySelector('#message-input').value='A test conversation';document.querySelector('#model-select').value='test-two';document.querySelector('#model-select').dispatchEvent(new Event('change'));document.querySelector('#chat-form').requestSubmit()");
   await expectEventually("document.querySelector('#send-button').disabled", 'Send loading state missing');
+  await click('.inspect-run');
+  await expectEventually("document.querySelector('#run-state').textContent==='Running'", 'Pending model call did not expose its real running trace');
+  ok(await js("document.querySelector('#run-inspector').textContent.includes('Waiting for response')"), 'Inspector can monitor an in-flight request');
+  await screenshot('agent-run-inspector-running');
+  await click('#run-close');
   await click('#new-chat');
   await session('Dinner ideas');
   await expectEventually("document.querySelector('#messages').textContent.includes('A real UI response')", 'Chat response missing');
@@ -828,6 +926,10 @@ try {
   ok(await js("document.querySelector('.message.assistant h2')?.textContent==='A formatted reply'"), 'New model replies use the same formatted renderer as saved conversations');
   const chatCall = calls.findLast(call => call.path === '/api/chat');
   ok(chatCall.payload.model === 'test-two' && chatCall.payload.conversation_id === '', 'Composer sends selected model and correct conversation identity');
+  ok(typeof chatCall.payload.run_id==='string' && /^[a-f0-9-]{36}$/.test(chatCall.payload.run_id) && chatCall.payload.omitted_messages===0, 'Composer sends a bounded correlation ID and reports context omissions');
+  await click('.inspect-run');
+  await expectEventually("document.querySelector('#run-state').textContent==='Completed'", 'Completed trace unavailable');
+  await click('#run-close');
   ok(await js("!document.querySelector('#disconnect-dialog').open"), 'Ordinary model choice and chat do not ask for a connection password');
   ok(await js("!!document.querySelector('#conversation-list [aria-current=\"true\"]')"), 'Newly saved chat is selected in session history');
   await cdp('Page.reload');
@@ -836,6 +938,9 @@ try {
   await expectEventually("document.querySelector('#messages').textContent.includes('A real UI response')", 'Saved messages missing after reload');
   ok(await js("document.querySelector('.message.assistant strong')?.textContent==='two evenings'"), 'Formatting survives loading the saved original Markdown after reload');
   ok(true, 'Model preference and saved conversation survive page reload');
+  await click('.inspect-run');
+  await expectEventually("document.querySelector('#run-state').textContent==='Completed'", 'Trace association did not survive reload');
+  await click('#run-close');
   listFailure = true;
   await cdp('Page.reload');
   await expectEventually("document.querySelector('#conversation-list').textContent.includes('Saved conversations could not be loaded.')", 'History failure not shown');
@@ -860,6 +965,13 @@ try {
   await expectEventually("!!document.querySelector('#notice a')", 'Usage action missing');
   ok(await visible('#notice'), 'Request failures remain visible above the composer');
   ok(await js("document.querySelector('#notice a').href==='https://chatgpt.com/settings/usage'"), 'Provider usage errors retain the actionable usage link');
+  await click('.inspect-run');
+  await expectEventually("document.querySelector('#run-state').textContent==='Failed'", 'Failed request trace unavailable');
+  await click('#run-tab-model');
+  ok(await js("!document.querySelector('#run-error').hidden && document.querySelector('#run-error').textContent.includes('Fixture provider failure') && !document.querySelector('#run-state').classList.contains('completed')"), 'Failed model calls remain inspectable without a success indicator');
+  await screenshot('agent-run-inspector-failed');
+  await click('#run-close');
+  chatDelay = 0;
   chatFailure = false;
   await session('A test conversation');
   await expectEventually("document.querySelector('#messages').textContent.includes('A real UI response')", 'Saved chat missing');
