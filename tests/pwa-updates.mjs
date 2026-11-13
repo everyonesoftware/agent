@@ -139,15 +139,27 @@ test('new unsaved changes or active requests during activation are rechecked bef
 test('real page safety bridge reads live chat, request, password and dialog state without persistence', () => {
   const match=page.match(/      \/\/ BEGIN update reload safety([\s\S]*?)      \/\/ END update reload safety/);
   assert.ok(match,'page must expose its actual closure state');
+  const budgetFields=page.match(/      const searchBudgetFields = ([^;]+);/);
+  const budgetDirty=page.match(/      function searchBudgetDirty\(\) \{[\s\S]*?\n      \}/);
+  assert.ok(budgetFields && budgetDirty,'include the real budget draft check rather than a stub');
   const context={window:{},document:Object.assign(new Events(),{querySelectorAll:selector=>{context.passwordSelector=selector;return context.passwords;},querySelector:()=>context.dialog}),input:{value:''},searchKey:{value:''},passwords:[],dialog:null,
-    busy:false,loadingConversation:false,passwordBusy:false,authBusy:false,connectionBusy:false,connectionSubmitting:false,usageBusy:false,usageSubmitting:false,searchBusy:false};
-  vm.runInNewContext(match[1],context);
+    busy:false,loadingConversation:false,passwordBusy:false,authBusy:false,connectionBusy:false,connectionSubmitting:false,usageBusy:false,usageSubmitting:false,searchBusy:false,searchBudgetDraft:null,searchBudgetBase:null};
+  vm.runInNewContext('const searchBudgetFields = '+budgetFields[1]+';\n'+budgetDirty[0]+'\n'+match[1],context);
   const safety=()=>context.window.agentUpdateSafety();
   assert.equal(safety().pending,false); assert.equal(safety().unsaved,false);
   assert.match(context.passwordSelector,/autocomplete/, 'revealed password fields must remain guarded');
   for(const name of ['busy','loadingConversation','passwordBusy','authBusy','connectionBusy','connectionSubmitting','usageBusy','usageSubmitting','searchBusy']) {context[name]=true; assert.equal(safety().pending,true,name); context[name]=false;}
   context.input.value='private draft'; assert.equal(safety().unsaved,true); context.input.value='';
   context.searchKey.value='synthetic-brave-key'; assert.equal(safety().unsaved,true); assert.ok(!JSON.stringify(safety()).includes(context.searchKey.value)); context.searchKey.value='';
+  context.searchBudgetBase={enabled:false,maximum:'1000',period:'month',timezone:'UTC'};
+  context.searchBudgetDraft={...context.searchBudgetBase};
+  assert.equal(safety().unsaved,false,'saved cap values are not a draft');
+  for(const [field,value] of Object.entries({enabled:true,maximum:'500',period:'day',timezone:'America/Los_Angeles'})) {
+    context.searchBudgetDraft={...context.searchBudgetBase,[field]:value};
+    assert.equal(safety().unsaved,true,'unsaved budget '+field+' guards reload');
+    assert.ok(!JSON.stringify(safety()).includes('America/Los_Angeles'),'safety returns flags, not budget values');
+  }
+  context.searchBudgetDraft=null;context.searchBudgetBase=null;
   context.passwords=[{value:'private password'}]; assert.equal(safety().unsaved,true); context.passwords=[];
   context.dialog={open:true}; assert.equal(safety().unsaved,true);
   const revision=safety().revision; context.document.emit('input'); assert.notEqual(safety().revision,revision);
