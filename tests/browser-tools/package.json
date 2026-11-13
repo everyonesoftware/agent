@@ -1,0 +1,11 @@
+{
+  "name": "agent-browser-test-tools",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.12.0" },
+  "config": {
+    "chrome": "156.0.8078.80",
+    "linuxArchiveSha256": "b711c720f774be355197f32edf37e0651418ba036d92446ee2da19ac017540a7"
+  },
+  "dependencies": { "@puppeteer/browsers": "3.2.7" }
+}

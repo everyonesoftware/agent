@@ -94,6 +94,48 @@ executable when it is not found automatically; optionally set `UI_SCREENSHOTS`
 to an existing directory to save browser evidence. No production credentials or
 account storage are used.
 
+### Reproducible browser verification
+
+The release verification job uses the explicit `ubuntu-22.04` runner label and
+installs full **Chrome for Testing 156.0.8078.80** instead of selecting an ambient
+runner browser. `tests/browser-tools/package.json` pins Google's
+`@puppeteer/browsers` installer to **3.2.7**, with its transitive dependencies in
+`package-lock.json`, and pins the Linux browser archive's SHA-256. `npm ci` uses
+the lock without running dependency lifecycle scripts. Browser installation uses
+the archive integrity check and installs its declared Debian/Ubuntu dependencies;
+the actual tests run as the ordinary runner user with Chromium sandboxing enabled.
+There is no `--no-sandbox`, global sandbox-policy change, floating browser channel,
+or automatic fallback to a different installed browser in this CI job.
+
+An initial real-browser preflight verifies startup, the CDP endpoint, and the exact
+browser version before app assertions run. The existing UI, Memory, Inspector,
+research, and PWA suites remain required publication gates, using their existing
+real-browser assertions. The full production-server suites use isolated SQLite
+accounts and fixture upstreams, not production credentials or live model inference.
+
+All browser suites share `tests/browser-launcher.mjs`: it reports the executable
+and version, captures an 8 KiB stderr tail, fails promptly on spawn errors or early
+exit (including termination signals), and bounds cleanup even after a crash. A
+browser-specific 20-second readiness deadline is separate from application
+assertion deadlines. Failure diagnostics are retained for seven days in the
+workflow's `browser-diagnostics-<run>-<attempt>` artifact; these are browser
+lifecycle logs, not cookies, profiles, or account databases. Local browser discovery
+and explicit `UI_BROWSER` overrides remain available outside that controlled CI job.
+
+The small lifecycle/CI-contract checks run with:
+
+```sh
+npm ci --prefix tests/browser-tools --ignore-scripts --no-audit --no-fund
+node --test tests/browser-launcher.test.mjs tests/browser-ci.test.mjs
+```
+
+To update the browser, deliberately update the exact Chrome version and the
+SHA-256 of its official Linux archive together, update the installer lock if needed,
+and run preflight plus every browser suite on the chosen Ubuntu runner. Pinning
+the OS label prevents automatic major-OS migration; it does not freeze hosted
+runner patches or system packages. Local verification alone is not proof that the
+hosted runner's sandbox startup passed.
+
 ## Public-web research with task-scoped consent
 
 Ordinary chat has no tools. To research a task, enable **Research public web**

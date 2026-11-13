@@ -3,8 +3,9 @@
 // node tests/pwa-browser.mjs <first-executable> <second-executable>
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { spawnTestBrowser, waitForTestBrowser, stopTestBrowser } from './browser-launcher.mjs';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -77,8 +78,8 @@ try {
   assert.equal(versionResponse.status, 200, 'Production update metadata must be served');
   const first = await versionResponse.json();
   assert.ok(first.buildId);
-  browser = spawn(browserPath, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank'], { stdio: 'ignore' });
-  const portText = await until(async () => { try { return await readFile(join(profile, 'DevToolsActivePort'), 'utf8'); } catch { return ''; } }, 'Browser did not start');
+  browser = spawnTestBrowser(browserPath, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank'], { stdio: 'ignore' });
+  const portText = await waitForTestBrowser(browser, profile);
   const targets = await (await fetch('http://127.0.0.1:' + portText.split('\n')[0] + '/json/list')).json();
   socket = new WebSocket(targets.find(t => t.type === 'page').webSocketDebuggerUrl);
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
@@ -172,6 +173,6 @@ try {
 } finally {
   socket?.close();
   for (const job of pending.values()) clearTimeout(job.timer);
-  await stop(browser); await stop(server);
+  await stopTestBrowser(browser); await stop(server);
   await rm(directory, { recursive: true, force: true, maxRetries: 15, retryDelay: 200 });
 }

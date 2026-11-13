@@ -2,7 +2,7 @@
 // Run with Node 22+ and UI_BROWSER pointing to a Chromium executable.
 // All API data is confined to this local test server, never production storage.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawnTestBrowser, waitForTestBrowser, stopTestBrowser } from './browser-launcher.mjs';
 import { existsSync } from 'node:fs';
 import { readFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -213,7 +213,7 @@ const server = createServer(async (req, res) => {
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const origin = 'http://127.0.0.1:' + server.address().port;
-const child = spawn(browserPath, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank'], { stdio: 'ignore' });
+const child = spawnTestBrowser(browserPath, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank'], { stdio: 'ignore' });
 let socket;
 let nextId = 0;
 const pending = new Map();
@@ -274,7 +274,7 @@ async function drag(selector, dx, dy) {
 }
 function ok(condition, message) { assert.ok(condition, message); console.log('PASS ' + message); }
 try {
-  const portText = await until(async () => { try { return await readFile(join(profile, 'DevToolsActivePort'), 'utf8'); } catch { return ''; } }, 'Browser did not start');
+  const portText = await waitForTestBrowser(child, profile);
   const port = portText.split('\n')[0];
   const tabs = await (await fetch('http://127.0.0.1:' + port + '/json/list')).json();
   socket = new WebSocket(tabs.find(tab => tab.type === 'page').webSocketDebuggerUrl);
@@ -1125,10 +1125,9 @@ try {
   console.log('PASS all Focus / Quiet entry browser regressions (isolated API fixture)');
 } finally {
   if (socket) socket.close();
-  child.kill();
+  await stopTestBrowser(child);
   server.closeAllConnections();
   await new Promise(resolve => server.close(resolve));
-  await new Promise(resolve => child.exitCode !== null ? resolve() : child.once('exit', resolve));
   await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
 }
 

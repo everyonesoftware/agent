@@ -4,8 +4,9 @@
 // Optional: UI_BROWSER, UI_SCREENSHOTS, MEMORY_ARTIFACTS, MEMORY_TIMEOUT_MS.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { spawnTestBrowser, waitForTestBrowser, stopTestBrowser } from './browser-launcher.mjs';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -179,11 +180,11 @@ async function freshChat(prompt, expected, absent = []) {
 let success = false;
 try {
   await start();
-  browser = spawn(browserPath, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  browser = spawnTestBrowser(browserPath, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank'], { stdio: ['ignore', 'pipe', 'pipe'] });
   browser.stdout.on('data', data => { browserLog += data; });
   browser.stderr.on('data', data => { browserLog += data; });
   browser.on('error', error => { browserLog += String(error); });
-  const portText = await until(async () => { try { return await readFile(join(profile, 'DevToolsActivePort'), 'utf8'); } catch { return ''; } }, 'Headless browser did not start');
+  const portText = await waitForTestBrowser(browser, profile);
   const targets = await (await fetch('http://127.0.0.1:' + portText.split('\n')[0] + '/json/list')).json();
   socket = new WebSocket(targets.find(target => target.type === 'page').webSocketDebuggerUrl);
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
@@ -321,7 +322,7 @@ try {
   if (socket) socket.close();
   for (const job of pending.values()) { clearTimeout(job.timer); job.reject(new Error('Browser closed')); }
   pending.clear();
-  try { await stop(browser); } finally {
+  try { await stopTestBrowser(browser); } finally {
     try { await stop(server); } finally {
       provider.closeAllConnections();
       await new Promise(resolve => provider.close(resolve));

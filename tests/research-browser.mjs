@@ -4,8 +4,9 @@
 // Build Agent first, then: node tests/research-browser.mjs <executable>
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { spawnTestBrowser, waitForTestBrowser, stopTestBrowser } from './browser-launcher.mjs';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -96,9 +97,8 @@ try {
     stdio: 'ignore',
   });
   await until(async () => { try { return (await fetch(origin + '/healthz')).ok; } catch { return false; } }, 'Agent did not start');
-  browser = spawn(browserPath, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank'], { stdio: 'ignore' });
-  let portText;
-  await until(async () => { try { portText = await readFile(join(profile, 'DevToolsActivePort'), 'utf8'); return true; } catch { return false; } }, 'Browser did not start');
+  browser = spawnTestBrowser(browserPath, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank'], { stdio: 'ignore' });
+  const portText = await waitForTestBrowser(browser, profile);
   const targets = await (await fetch('http://127.0.0.1:' + portText.split('\n')[0] + '/json/list')).json();
   socket = new WebSocket(targets.find(t => t.type === 'page').webSocketDebuggerUrl);
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
@@ -299,7 +299,7 @@ try {
   if (socket) socket.close();
   for (const job of pending.values()) { clearTimeout(job.timer); job.reject(new Error('Browser closed')); }
   pending.clear();
-  await stop(browser); await stop(server);
+  await stopTestBrowser(browser); await stop(server);
   provider.closeAllConnections(); await new Promise(resolve => provider.close(resolve));
   await rm(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 200 });
 }

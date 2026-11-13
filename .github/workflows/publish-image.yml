@@ -18,7 +18,10 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    env:
+      TMPDIR: ${{ runner.temp }}
+      BROWSER_ARTIFACTS: ${{ runner.temp }}/agent-browser-diagnostics
     outputs:
       version: ${{ steps.version.outputs.value }}
     steps:
@@ -46,6 +49,20 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: '24'
+
+      - name: Install locked browser tooling
+        run: npm ci --prefix tests/browser-tools --ignore-scripts --no-audit --no-fund
+
+      - name: Test browser lifecycle diagnostics and CI contract
+        run: node --test tests/browser-launcher.test.mjs tests/browser-ci.test.mjs
+
+      - name: Install exact Chrome for Testing and its system dependencies
+        run: |
+          sudo apt-get update
+          sudo env "PATH=$PATH" "GITHUB_ENV=$GITHUB_ENV" node tests/browser-tools/install.mjs "$RUNNER_TEMP/agent-cft" --install-deps
+
+      - name: Verify sandbox-enabled browser startup and pinned CDP version
+        run: node tests/browser-tools/preflight.mjs
 
       - name: Test web app update lifecycle
         run: node tests/pwa-updates.mjs
@@ -77,6 +94,15 @@ jobs:
 
       - name: Verify installability, offline privacy, and explicit updates
         run: node tests/pwa-browser.mjs "$RUNNER_TEMP/agent-pwa-a" "$RUNNER_TEMP/agent-pwa-b"
+
+      - name: Retain bounded browser startup diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/agent-browser-diagnostics
+          if-no-files-found: ignore
+          retention-days: 7
 
   publish:
     outputs:

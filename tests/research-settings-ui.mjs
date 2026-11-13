@@ -1,6 +1,6 @@
 // Actual production HTML; isolated synthetic Brave API fixture. No live provider calls.
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
+import {spawnTestBrowser,waitForTestBrowser,stopTestBrowser} from './browser-launcher.mjs';
 import {existsSync} from 'node:fs';
 import {readFile,mkdtemp,rm,writeFile,mkdir} from 'node:fs/promises';
 import {createServer} from 'node:http';
@@ -51,7 +51,7 @@ const origin='http://127.0.0.1:'+server.address().port;
 const browser=process.env.UI_BROWSER||['C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe','C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(existsSync);
 assert.ok(browser,'Chromium required');
 const profile=await mkdtemp(join(process.env.TMPDIR||tmpdir(),'research-settings-'));
-const child=spawn(browser,['--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check','--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{stdio:'ignore'});
+const child=spawnTestBrowser(browser,['--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check','--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{stdio:'ignore'});
 let socket,seq=0;const pending=new Map(),errors=[];
 async function until(fn,msg){const deadline=Date.now()+18000;while(Date.now()<deadline){if(await fn())return;await new Promise(r=>setTimeout(r,35));}throw Error(msg);}
 function cdp(method,params={}){return new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});socket.send(JSON.stringify({id,method,params}));});}
@@ -63,7 +63,7 @@ const settled=()=>wait("!document.querySelector('#research-key-verify').disabled
 const ok=(v,m)=>{assert.ok(v,m);console.log('PASS '+m);};
 async function key(key,code=key){const windowsVirtualKeyCode=key==='Escape'?27:key==='Tab'?9:0;await cdp('Input.dispatchKeyEvent',{type:'keyDown',key,code,windowsVirtualKeyCode});await cdp('Input.dispatchKeyEvent',{type:'keyUp',key,code,windowsVirtualKeyCode});}
 try{
- let port;await until(async()=>{try{port=(await readFile(join(profile,'DevToolsActivePort'),'utf8')).split('\n')[0];return true;}catch{return false;}},'browser start');
+ const port=(await waitForTestBrowser(child,profile)).split('\n')[0];
  const tabs=await(await fetch('http://127.0.0.1:'+port+'/json/list')).json();socket=new WebSocket(tabs.find(t=>t.type==='page').webSocketDebuggerUrl);
  await new Promise(r=>socket.onopen=r);socket.onmessage=e=>{const d=JSON.parse(e.data);if(d.method==='Runtime.exceptionThrown')errors.push(d.params.exceptionDetails.text);const p=pending.get(d.id);if(p){pending.delete(d.id);d.error?p.reject(Error(d.error.message)):p.resolve(d.result);}};
  await cdp('Page.enable');await cdp('Runtime.enable');
@@ -196,4 +196,4 @@ try{
  ok(await js("!JSON.stringify(localStorage).includes('synthetic-fixture') && !JSON.stringify(sessionStorage).includes('synthetic-fixture') && !location.href.includes('synthetic-fixture')"),'No key in storage or URL');
  ok(calls.every(c=>!c.query)&&errors.length===0,'No credential queries or runtime errors');
  console.log('PASS Brave Search settings browser interactions');
-}finally{socket?.close();child.kill();server.closeAllConnections();await new Promise(r=>server.close(r));await new Promise(r=>setTimeout(r,300));await rm(profile,{recursive:true,force:true,maxRetries:8,retryDelay:200});}
+}finally{socket?.close();await stopTestBrowser(child);server.closeAllConnections();await new Promise(r=>server.close(r));await rm(profile,{recursive:true,force:true,maxRetries:8,retryDelay:200});}

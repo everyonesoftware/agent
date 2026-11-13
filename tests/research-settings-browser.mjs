@@ -1,9 +1,9 @@
 // Launched by TestResearchSettingsBrowser against the production Agent router.
 // Brave and model HTTP calls use isolated upstream fixtures in that Go test.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawnTestBrowser, waitForTestBrowser, stopTestBrowser } from './browser-launcher.mjs';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -63,8 +63,8 @@ async function settingsCardInView() {
   await js("(() => {const panel=document.getElementById('settings-panel'),card=document.getElementById('research-settings-card');panel.scrollTop+=card.getBoundingClientRect().top-panel.getBoundingClientRect().top-18;})()");
 }
 try {
-  browser = spawn(browserPath, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank'], { stdio: 'ignore' });
-  const portText = await until(async () => {try{return await readFile(join(profile,'DevToolsActivePort'),'utf8');}catch{return ''; }}, 'Browser did not start');
+  browser = spawnTestBrowser(browserPath, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank'], { stdio: 'ignore' });
+  const portText = await waitForTestBrowser(browser, profile);
   const targets = await (await fetch('http://127.0.0.1:' + portText.split('\n')[0] + '/json/list')).json();
   socket = new WebSocket(targets.find(target => target.type === 'page').webSocketDebuggerUrl);
   await new Promise((resolve, reject) => {socket.onopen=resolve;socket.onerror=reject;});
@@ -258,6 +258,6 @@ try {
 } finally {
   if(socket)socket.close();
   for(const job of pending.values()){clearTimeout(job.timer);job.reject(new Error('Browser closed'));}pending.clear();
-  if(browser&&browser.exitCode===null)await new Promise(resolve=>{browser.once('exit',resolve);browser.kill();});
+  await stopTestBrowser(browser);
   await rm(profile,{recursive:true,force:true,maxRetries:20,retryDelay:200});
 }
