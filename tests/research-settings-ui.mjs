@@ -10,7 +10,8 @@ const root=new URL('../',import.meta.url);
 const source=await readFile(new URL('page.go',root),'utf8');
 const html=source.slice(source.indexOf('`')+1,source.lastIndexOf('`')).replaceAll('{{APP_VERSION}}','42').replaceAll('{{APP_BUILD_ID}}','fixture');
 const pwa=await readFile(new URL('pwa_updates.go',root),'utf8');
-let settings={configured:false,provider:'Brave Search',key_suffix:'',revision:'',verified_at:'',last_checked_at:'',status:'not_configured'};
+const initialBudget={enabled:false,maximum:1000,period:'month',timezone:'UTC',revision:'b1',used:240,reserved:0,tracking_started_at:'2026-11-10T18:00:00Z',start_at:'2026-11-01T00:00:00Z',reset_at:'2026-12-01T00:00:00Z'};
+let settings={budget:{...initialBudget},configured:false,provider:'Brave Search',key_suffix:'',revision:'',verified_at:'',last_checked_at:'',status:'not_configured'};
 let mode='',delay=0,auth=true; const calls=[];
 const server=createServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost');
@@ -19,16 +20,19 @@ const server=createServer(async(req,res)=>{
  if(url.pathname==='/pwa-updates.js'){res.writeHead(200,{'Content-Type':'text/javascript'});res.end(pwa.slice(pwa.indexOf('`')+1,pwa.lastIndexOf('`')));return;}
  if(url.pathname.startsWith('/api/research/settings')){
   let payload={}; if(req.method==='POST'){let s='';for await(const c of req)s+=c;payload=JSON.parse(s);}
-  calls.push({path:url.pathname,method:req.method,query:url.search,keys:Object.keys(payload),revision:payload.expected_revision});
+  calls.push({path:url.pathname,method:req.method,query:url.search,keys:Object.keys(payload),revision:payload.expected_revision,payload});
   const action=url.pathname.split('/').at(-1);
   if(req.method==='GET'){if(mode==='offline'||mode==='lostackoffline'){reply(503,{error:'offline'});return;}reply(200,{settings});return;}
   if(mode==='conflict'){settings={...settings,revision:'external'};reply(409,{error:'changed',settings});return;}
   if(payload.expected_revision!==settings.revision){reply(409,{error:'changed',settings});return;}
+  if(mode==='budgetconflict'||(action==='budget'&&payload.expected_budget_revision!==settings.budget.revision)){settings={...settings,budget:{...settings.budget,revision:settings.budget.revision+'x'}};reply(409,{error:'changed',settings});return;}
+  if(mode==='exhausted'){reply(429,{code:'budget_exhausted',settings});return;}
   if(mode==='invalid'||mode==='unavailable'){reply(mode==='invalid'?422:503,{error:'Fixture failure',code:mode==='invalid'?'invalid_key':'unavailable',settings});return;}
-  if(action==='remove')settings={...settings,configured:false,key_suffix:'',status:'not_configured',revision:settings.revision+'r'};
+  if(action==='budget')settings={...settings,budget:{...settings.budget,enabled:payload.enabled,maximum:payload.maximum,period:payload.period,timezone:payload.timezone,revision:settings.budget.revision+'s',...(payload.period==='day'?{used:7,start_at:'2026-11-12T00:00:00Z',reset_at:'2026-11-13T00:00:00Z'}:{})}};
+  else if(action==='remove')settings={...settings,usage:null,configured:false,key_suffix:'',status:'not_configured',revision:settings.revision+'r'};
   else settings={...settings,configured:true,key_suffix:action==='verify'?payload.api_key.slice(-4):settings.key_suffix,revision:settings.revision+'v',status:'connected',verified_at:'2026-11-12T18:00:00Z',last_checked_at:'2026-11-12T18:00:00Z'};
   await new Promise(r=>setTimeout(r,delay));
-  if(mode==='lostack'||mode==='lostackoffline'){res.destroy();return;}
+  if(mode==='lostack'||mode==='lostackoffline'){reply(200,{});return;}
   if(mode==='http503ack'){reply(503,{error:'Gateway lost the acknowledgment after the write.'});return;}
   reply(200,{settings});return;
  }
@@ -69,7 +73,31 @@ try{
  ok(!calls.length,'Ordinary chat does not request research settings');
  await click('settings-button');await wait("document.querySelector('#research-settings-card') && !document.querySelector('#research-key-form').hidden");await settled();
  ok(calls.length===1&&calls[0].method==='GET','Opening Settings reads metadata only');
- ok(await js("document.querySelector('#research-usage-panel')?.hidden === true"),'Usage is hidden until a key is configured');
+ ok(await js("document.querySelector('#research-usage-panel')?.hidden === false && document.querySelector('#research-budget-used').textContent==='240' && !document.querySelector('#research-budget-enabled').checked && document.querySelector('#research-budget-progress').hidden"),'Agent tracking visible without a key and cap off by default');
+ const editBudget=async(id,value)=>js(`(()=>{const e=document.getElementById(${JSON.stringify(id)});e.type==='checkbox'?e.checked=${JSON.stringify(value)}:e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+ await editBudget('research-budget-enabled',true);
+ ok(await js("window.agentUpdateSafety().unsaved && !document.querySelector('#research-budget-save').disabled && /Unsaved/.test(document.querySelector('#research-budget-feedback').textContent)"),'Cap draft protects update reload');
+ delay=200;await click('research-budget-save');await wait('window.agentUpdateSafety().pending');
+ ok(await js("document.querySelector('#research-budget-period').disabled"),'Pending cap save disables overlapping edits');
+ await wait('!window.agentUpdateSafety().pending');delay=0;
+ ok(settings.budget.enabled&&calls.at(-1).payload.expected_budget_revision==='b1'&&calls.at(-1).payload.expected_revision===''&&await js("!window.agentUpdateSafety().unsaved && document.querySelector('#research-budget-progress').getAttribute('aria-valuenow')==='240' && document.querySelector('#research-budget-progress').getAttribute('aria-valuemax')==='1000' && document.querySelector('#research-budget-progress .research-usage-fill').style.width==='24%'"),'Save guards both revisions and progress fills USED toward cap');
+ await editBudget('research-budget-maximum','2000');
+ mode='budgetconflict';await click('research-budget-save');await wait('!window.agentUpdateSafety().pending');
+ ok(await js("document.querySelector('#research-budget-maximum').value==='2000' && window.agentUpdateSafety().unsaved && /review/i.test(document.querySelector('#research-budget-feedback').textContent)"),'Budget conflict preserves edits for explicit review');
+ mode='invalid';await click('research-budget-save');await wait('!window.agentUpdateSafety().pending');
+ ok(await js("window.agentUpdateSafety().unsaved && /could not|failed|invalid/i.test(document.querySelector('#research-budget-feedback').textContent)"),'Rejected cap save preserves draft');
+ mode='lostack';const capCalls=calls.length;await click('research-budget-save');await wait('!window.agentUpdateSafety().pending');
+
+ ok(settings.budget.maximum===2000&&calls.slice(capCalls).filter(c=>c.method==='POST').length===1&&await js("!window.agentUpdateSafety().unsaved && /review|acknowledged/i.test(document.querySelector('#research-budget-feedback').textContent)"),'Lost cap acknowledgment reconciles without replay');
+ mode='';await editBudget('research-budget-period','day');await editBudget('research-budget-timezone','UTC');await click('research-budget-save');await wait('!window.agentUpdateSafety().pending');
+ ok(settings.budget.used===7&&await js("document.querySelector('#research-budget-used').textContent==='7' && /UTC/.test(document.querySelector('#research-budget-reset').textContent)"),'Day selection uses historical server usage and authoritative reset timezone');
+ await editBudget('research-budget-maximum','2100');mode='lostackoffline';const unknownCapCalls=calls.length;
+ await click('research-budget-save');await wait('!window.agentUpdateSafety().pending');
+ ok(await js("!document.querySelector('#research-settings-retry').hidden && window.agentUpdateSafety().unsaved && /outcome unknown/i.test(document.querySelector('#research-key-error').textContent)"),'Unknown cap outcome is visible and recoverable without losing edits');
+ ok(calls.slice(unknownCapCalls).filter(c=>c.method==='POST').length===1,'Unknown cap save never replays automatically');
+ mode='';await click('research-settings-retry');await settled();
+ ok(await js("document.querySelector('#research-budget-maximum').value==='2100'"),'Explicit metadata retry preserves cap draft');
+ await editBudget('research-budget-maximum','2000');
  ok(await js("Array.from(document.querySelectorAll('.settings-content > .settings-card')).map(e=>e.querySelector('h2').textContent).join('|')==='Web app updates|ChatGPT connection|Web research|Reset password|Sign out'"),'Card order preserves existing settings');
  await fill();await click('research-key-show');ok(await js("document.querySelector('#research-api-key').type==='text' && window.agentUpdateSafety().unsaved"),'Shown candidate remains an unsaved draft');
  for(const width of [1280,390,320]){
@@ -88,6 +116,13 @@ try{
  await fill();mode='invalid';await click('research-key-verify');await settled();ok(settings.configured&&await js("!document.querySelector('#research-key-saved').hidden"),'Failed replacement keeps old saved key visible');
  await click('research-key-cancel');ok(await js("document.querySelector('#research-api-key').value==='' && document.activeElement.id==='research-key-replace'"),'Cancel clears draft and restores focus');
  mode='';const checks=calls.length;await click('research-key-check');await wait("!document.querySelector('#research-key-check').disabled");ok(calls.slice(checks).filter(c=>c.method==='POST').length===1,'Test connection sends exactly one check');
+ await editBudget('research-budget-maximum','2200');await click('research-key-check');await settled();
+ ok(await js("document.querySelector('#research-budget-maximum').value==='2200' && window.agentUpdateSafety().unsaved"),'Connection checks preserve unsaved cap edits and reload protection');
+ await click('back-to-chat');await click('settings-button');await settled();
+ ok(await js("document.querySelector('#research-budget-maximum').value==='2200' && /Unsaved/.test(document.querySelector('#research-budget-feedback').textContent)"),'Normal metadata rerenders preserve cap edits');
+ await editBudget('research-budget-maximum','2100');
+ mode='exhausted';await click('research-key-check');await settled();
+ ok(await js("/Agent search cap/.test(document.querySelector('#research-key-error').textContent) && !/Brave rate limit|rejected this key/.test(document.querySelector('#research-key-error').textContent)"),'Cap exhaustion gives cap actions, not provider rate-limit or invalid-key errors');mode='';
  ok(await js("!document.querySelector('#research-usage-panel').hidden && /No usage snapshot yet/.test(document.querySelector('#research-usage-windows').textContent)"),'Missing headers show unknown usage, never zero');
  const observed='2026-11-12T18:42:00Z',future='2099-12-01T08:00:00Z';
  const quota=(remaining,limit=2000,reset=future)=>({observed_at:observed,windows:[{limit:1,remaining:0,reset_at:'2026-11-12T18:42:01Z',window_seconds:1},{limit,remaining,reset_at:reset,window_seconds:2592000}]});
@@ -97,7 +132,24 @@ try{
   await wait("document.querySelector('#research-usage-windows').textContent.includes("+JSON.stringify(expected)+")");
   ok(calls.slice(before).length===1&&calls.at(-1).method==='GET','Usage snapshot reads metadata only');
  }
+ async function loadBudget(patch){settings={...settings,budget:{...settings.budget,...patch}};await click('back-to-chat');await click('settings-button');await settled();}
+ await loadBudget({...initialBudget,enabled:true});
+ ok(await js("document.querySelector('#research-budget-progress .research-usage-fill').style.width==='24%' && document.querySelector('#research-budget-notice').hidden && document.querySelector('#research-budget-provider').open===false"),'Agent usage is primary; provider snapshot is collapsed by default');
+ for(const width of [1280,390,320]){
+  await cdp('Emulation.setDeviceMetricsOverride',{width,height:915,deviceScaleFactor:1,mobile:width<600});
+  await js("document.querySelector('#research-usage-panel').scrollIntoView({block:'start'}); new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))");
+  ok(await js("document.documentElement.scrollWidth<=innerWidth && ['research-budget-enabled','research-budget-maximum','research-budget-period','research-budget-timezone','research-budget-save'].every(id=>{const r=document.getElementById(id).getBoundingClientRect();return r.height>=44 && r.right<=innerWidth && r.left>=0})"),'Cap controls fit with 44px targets at '+width);
+  if(process.env.UI_SCREENSHOTS){const {data}=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(join(process.env.UI_SCREENSHOTS,'research-budget-'+width+'.png'),Buffer.from(data,'base64'));}
+ }
+ await loadBudget({used:899,reserved:1});
+ ok(await js("/close to/.test(document.querySelector('#research-budget-notice').textContent) && !document.querySelector('#research-budget-reserved').hidden && document.querySelector('#research-budget-progress').getAttribute('aria-valuenow')==='899'"),'Near-cap warning includes reserved capacity but bar counts successes only');
+ await loadBudget({used:999,reserved:1});
+ ok(await js("/Limit reached/.test(document.querySelector('#research-budget-notice').textContent) && /^0 requests/.test(document.querySelector('#research-budget-remaining').textContent)"),'Reservation can reach cap without inventing successful usage');
+ await loadBudget({enabled:false,used:1,reserved:0});
+ ok(await js("document.querySelector('#research-budget-used').textContent==='1' && document.querySelector('#research-budget-progress').hidden && document.querySelector('#research-budget-notice').hidden"),'Cap-disabled low count remains tracked without a misleading progress bar');
+ await loadBudget({...initialBudget,period:'day',used:7});
  await loadUsage(quota(1380),await js('(1380).toLocaleString()'));
+ await js("document.querySelector('#research-budget-provider').open=true");
  ok(await js("document.querySelector('#research-usage-windows [role=progressbar]').getAttribute('aria-valuenow')==='1380' && document.querySelector('#research-usage-windows').textContent.includes((620).toLocaleString()+' of '+(2000).toLocaleString()+' used')"),'Brave quota renders remaining, used and accessible progress');
  ok(await js("!/running low|No requests remaining/.test(document.querySelector('#research-usage-windows').textContent) && /1-second/.test(document.querySelector('#research-usage-windows').textContent)"),'Burst window is separate and never treated as exhausted monthly quota');
  ok(await js("/Not live/.test(document.querySelector('#research-usage-panel').textContent) && /Snapshot/.test(document.querySelector('#research-usage-panel').textContent) && /Other apps/.test(document.querySelector('#research-usage-panel').textContent)"),'Snapshot age and shared-key caveats are visible');
@@ -112,8 +164,8 @@ try{
  await loadUsage(quota(0),'No requests remaining');
  await loadUsage(quota(0,2000,'2026-01-01T00:00:00Z'),'Reset time has passed');
  ok(await js("!/No requests remaining/.test(document.querySelector('#research-usage-windows').textContent)"),'Past reset never claims a live exhausted quota or invents replenishment');
- await loadUsage(quota(0,0),'Unlimited');
- ok(await js("!document.querySelector('#research-usage-windows [role=progressbar]')"),'Unlimited quota has no misleading zero-limit progress bar');
+ await loadUsage(quota(0,0),'No request-count cap');
+ ok(await js("!document.querySelector('#research-usage-windows [role=progressbar]')"),'No request-count cap has no misleading zero-limit progress bar');
  await loadUsage({observed_at:observed,windows:[{limit:1,remaining:0,reset_at:future,window_seconds:1}]},'No quota snapshot yet');
  await loadUsage({observed_at:observed,windows:[{limit:2000,remaining:-1,reset_at:future,window_seconds:2592000}]},'No usage snapshot yet');
  await loadUsage(null,'No usage snapshot yet');
@@ -134,7 +186,7 @@ try{
  await click('research-key-replace');await fill();await click('back-to-chat');ok(await js("document.querySelector('#research-api-key').value===''") ,'Leaving Settings clears candidate');
  await click('settings-button');await wait("!document.querySelector('#research-key-remove').disabled");
  mode='';delay=350;await click('research-key-remove');await click('research-key-remove-confirm');await wait("window.agentUpdateSafety().pending");ok(await js("document.querySelector('#research-key-check').disabled"),'Inflight mutation blocks overlapping controls and reload');
- await wait("!document.querySelector('#research-key-form').hidden && !document.querySelector('#research-key-verify').disabled");ok(!settings.configured&&await js("document.querySelector('#research-usage-panel').hidden && !document.querySelector('#research-usage-windows').textContent"),'Confirmed removal clears usage and updates metadata');delay=0;
+ await wait("!document.querySelector('#research-key-form').hidden && !document.querySelector('#research-key-verify').disabled");ok(!settings.configured&&await js("!document.querySelector('#research-usage-panel').hidden && document.querySelector('#research-budget-provider').hidden && !document.querySelector('#research-usage-windows').textContent && document.querySelector('#research-budget-used').textContent==='7'"),'Confirmed removal clears provider snapshot but preserves Agent tracking');delay=0;
  mode='http503ack';await fill();await click('research-key-verify');await wait("!window.agentUpdateSafety().pending");
  ok(settings.configured && await js("!document.querySelector('#research-key-saved').hidden && document.querySelector('#research-api-key').value===''") ,'HTTP 503 without authoritative metadata reconciles a committed save');
  await click('research-key-remove');await click('research-key-remove-confirm');await wait("!window.agentUpdateSafety().pending");

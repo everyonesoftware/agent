@@ -133,20 +133,44 @@ protections as the rest of Agent's account data; protect the data directory and
 its backups. Connection status reflects the last explicit check, not continuous
 provider monitoring. Opening Settings does not send a search request.
 
-**Search usage** shows a saved snapshot of Brave's quota response headers after
-an actual search, including an explicit verification or connection test. It
-shows remaining requests, usage within the reported window, and the provider's
-reset time in your local timezone. Short-term burst limits are listed separately
-from longer quota windows. A zero cap means Brave reports an unlimited window;
-missing or malformed headers mean unknown usage, not zero remaining requests.
-Low and exhausted quota warnings describe the snapshot, not live availability.
-After a reset time passes, Agent does not invent a replenished balance.
+**Brave Search usage** tracks successful search requests made by your Agent
+account after tracking began, including initial key verification, connection
+tests and successful retries. It does not include other apps using the key or
+unavailable history, and it is not Brave's account-wide usage or billing balance.
+Tracking stays on with no cap configured and persists across restarts, key
+replacement and key removal. Public-page retrieval does not use this counter.
 
-Usage is account-scoped, survives restarting Agent, and is cleared when a key is
-removed or replaced. It is not a billing balance, and other apps using the same
-Brave key may have consumed more since the displayed snapshot. Opening Settings
-only reads local metadata; it never sends a background query to refresh usage.
-Use the **Brave dashboard** link for current provider plan and billing details.
+Enable **Limit search requests** to set an optional maximum per calendar day or
+calendar month, with an explicit IANA timezone governing midnight resets. The
+progress bar fills toward requests used. Settings shows remaining capacity,
+the reset time, and warnings near or at the cap. Changing the cap, period or
+timezone does not delete history: Agent selects the requests recorded in the
+selected calendar interval. Caps are disabled by default.
+
+Capacity is reserved atomically before each Brave request, so concurrent tasks
+and connection tests cannot bypass the cap. Successful HTTP responses consume
+usage even if Agent cannot parse the response body; definitive error responses
+release the reservation. In-flight requests and requests with uncertain outcomes
+(for example, a connection failing after dispatch) remain reserved against the
+cap and are shown separately, not mislabeled as successful or billed requests.
+Reservations persist across restarts. At the cap, Agent stops new Brave searches
+until the next period or an explicit cap change; it does not silently switch
+providers. Existing evidence and public-page retrieval remain usable. Local
+storage failures fail closed rather than allowing untracked requests.
+
+The secondary **Brave-reported rate limits** disclosure retains the saved
+response-header snapshot for the current credential. It shows quota and burst
+windows separately, with observation and reset times in your browser's local
+timezone. A zero provider limit means **No request-count cap**, not free searches
+or unlimited credit. Missing or malformed headers mean unknown provider quota.
+After a snapshot reset time passes, Agent does not invent replenishment. Only
+this credential-specific snapshot is cleared when a key is removed or replaced;
+the Agent request history is retained.
+
+Opening Settings and saving a cap read or write local metadata only, never a
+background Brave query. Use **Brave dashboard** for current provider plan and
+billing details. Configuring a cap does not authorize research or change existing
+task permissions.
 
 Use **Replace key** to enter a new credential; a failed verification leaves the
 previous saved key unchanged. **Test connection** checks the saved key without
@@ -159,10 +183,13 @@ checks prevent stale tabs or delayed verification from overwriting newer setting
 or resurrecting a removed key. Saving a key never approves a research task.
 
 The authenticated Settings API is `GET /api/research/settings` and JSON
-`POST /api/research/settings/{verify|check|remove}`. Each mutation requires the
+`POST /api/research/settings/{verify|check|remove|budget}`. Each mutation requires the
 captured `expected_revision`; verification additionally accepts `api_key` in the
 bounded request body. Raw keys are never returned. Stale revisions return 409
-without silently retrying a mutation. The production-router/browser integration
+without silently retrying a mutation. Budget saves additionally require
+`expected_budget_revision`, `enabled`, `maximum` (1–10,000,000), `period` (`day`
+or `month`) and `timezone` (an IANA timezone name). Budget changes have their own
+revision and do not invalidate task approvals. The production-router/browser integration
 uses real local account storage and isolated Brave/model HTTP fixtures:
 
 ```sh

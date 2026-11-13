@@ -694,6 +694,9 @@ func (s *researchService) run(ctx context.Context, t *researchTask, p modelProvi
 			}
 			if err != nil {
 				output = `{"error":"The public web request failed. No evidence was retrieved."}`
+				if errors.Is(err, errResearchBudgetExhausted) {
+					output = `{"error":"Your Agent search request limit has been reached. No search was sent. Continue with existing evidence or public-page retrieval; change the cap in Settings or wait until reset for more searches."}`
+				}
 			} else {
 				researchAddURLs(allowed, output)
 			}

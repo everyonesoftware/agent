@@ -16,14 +16,15 @@ import (
 // Credentials remain in the protected local account database, not encrypted at
 // rest. Only this explicitly allowlisted metadata is serialized to the browser.
 type researchSettings struct {
-	Usage         *researchUsage `json:"usage"`
-	Configured    bool           `json:"configured"`
-	Provider      string         `json:"provider"`
-	KeySuffix     string         `json:"key_suffix"`
-	Revision      string         `json:"revision"`
-	VerifiedAt    string         `json:"verified_at"`
-	LastCheckedAt string         `json:"last_checked_at"`
-	Status        string         `json:"status"`
+	Budget        *researchBudget `json:"budget"`
+	Usage         *researchUsage  `json:"usage"`
+	Configured    bool            `json:"configured"`
+	Provider      string          `json:"provider"`
+	KeySuffix     string          `json:"key_suffix"`
+	Revision      string          `json:"revision"`
+	VerifiedAt    string          `json:"verified_at"`
+	LastCheckedAt string          `json:"last_checked_at"`
+	Status        string          `json:"status"`
 }
 type researchCredential struct {
 	researchSettings
@@ -41,7 +42,10 @@ func migrateResearchSettings(db *sql.DB) error {
  CREATE TABLE IF NOT EXISTS research_usage (
  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
  revision TEXT NOT NULL, observed_ns INTEGER NOT NULL, snapshot TEXT NOT NULL)`)
-	return err
+	if err != nil {
+		return err
+	}
+	return migrateResearchBudget(db)
 }
 
 type researchRowQuerier interface{ QueryRow(string, ...any) *sql.Row }
@@ -130,7 +134,7 @@ func (s *researchSettingsService) release(userID string) {
 	s.inflight--
 }
 func (s *researchSettingsService) register(mux *http.ServeMux) {
-	for _, pattern := range []string{"GET /api/research/settings", "POST /api/research/settings/verify", "POST /api/research/settings/check", "POST /api/research/settings/remove"} {
+	for _, pattern := range []string{"GET /api/research/settings", "POST /api/research/settings/verify", "POST /api/research/settings/check", "POST /api/research/settings/remove", "POST /api/research/settings/budget"} {
 		// Include unauthenticated failures in the no-store policy.
 		protected := s.accounts.middleware(http.HandlerFunc(s.handler))
 		mux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -161,6 +165,12 @@ func validResearchKey(key string) bool {
 	return true
 }
 func researchVerificationFailure(err error) (int, string, string, string) {
+	if errors.Is(err, errResearchBudgetExhausted) {
+		return 429, "budget_exhausted", errResearchBudgetExhausted.Error(), "connected"
+	}
+	if errors.Is(err, errResearchBudgetUnavailable) {
+		return 503, "unavailable", errResearchBudgetUnavailable.Error(), "unavailable"
+	}
 	var provider *researchSearchError
 	if errors.As(err, &provider) {
 		switch provider.status {
@@ -255,6 +265,10 @@ func (s *researchSettingsService) handler(w http.ResponseWriter, r *http.Request
 		settingsFailure(w, 403, "forbidden", "Cross-site settings requests are not allowed.", nil)
 		return
 	}
+	if r.Method == "POST" && r.URL.Path == "/api/research/settings/budget" {
+		s.budgetHandler(w, r, user.ID)
+		return
+	}
 	var expected *string
 	var key string
 	if r.Method != "GET" {
@@ -286,7 +300,7 @@ func (s *researchSettingsService) handler(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
-	current, err := s.accounts.researchCredentialForUser(user.ID)
+	current, err := s.current(user.ID)
 	if err != nil {
 		settingsFailure(w, 503, "unavailable", "Research settings are unavailable.", nil)
 		return
@@ -330,6 +344,7 @@ func (s *researchSettingsService) handler(w http.ResponseWriter, r *http.Request
 			adapter = s.web(key)
 			copy := *adapter
 			adapter = &copy
+			s.trackRequests(user.ID, adapter)
 			next.Usage = nil
 			adapter.observeUsage = func(usage *researchUsage) {
 				next.Usage = usage
@@ -345,11 +360,21 @@ func (s *researchSettingsService) handler(w http.ResponseWriter, r *http.Request
 		}
 		_, verifyErr := adapter.search(ctx, "Agent connection test")
 		if verifyErr != nil {
+			if errors.Is(verifyErr, errResearchBudgetExhausted) || errors.Is(verifyErr, errResearchBudgetUnavailable) {
+				fresh, e := s.current(user.ID)
+				if e != nil {
+					settingsFailure(w, 503, "unavailable", "Research settings are unavailable.", nil)
+					return
+				}
+				status, code, message, _ := researchVerificationFailure(verifyErr)
+				settingsFailure(w, status, code, message, &fresh)
+				return
+			}
 			var checkStatus string
 			responseStatus, code, message, checkStatus = researchVerificationFailure(verifyErr)
 			if mutation {
 				// Even failed verification must not report stale state as current.
-				fresh, e := s.accounts.researchCredentialForUser(user.ID)
+				fresh, e := s.current(user.ID)
 				if e != nil {
 					settingsFailure(w, 503, "unavailable", "Research settings are unavailable.", nil)
 					return
@@ -383,11 +408,11 @@ func (s *researchSettingsService) handler(w http.ResponseWriter, r *http.Request
 	// Reply with persisted metadata, not a pre-network snapshot that may have
 	// been superseded by an ordinary search while this check was in flight.
 	if err == nil {
-		next, err = s.accounts.researchCredentialForUser(user.ID)
+		next, err = s.current(user.ID)
 	}
 	switch {
 	case errors.Is(err, errResearchSettingsConflict):
-		fresh, e := s.accounts.researchCredentialForUser(user.ID)
+		fresh, e := s.current(user.ID)
 		if e != nil {
 			settingsFailure(w, 503, "unavailable", "Research settings are unavailable.", nil)
 			return

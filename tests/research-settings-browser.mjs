@@ -89,6 +89,9 @@ try {
   await eventual("!document.getElementById('research-api-key').disabled", 'Key settings did not load');
   const initial=await api('/api/research/settings');
   assert.equal(initial.status,200);assert.equal(initial.cache,'no-store');assert.equal(initial.body.settings.configured,false);
+  assert.equal(initial.body.settings.budget?.enabled,false,'A new account tracks searches without enabling a cap');
+  assert.equal(initial.body.settings.budget.used,0);
+  assert.equal(initial.body.settings.budget.reserved,0);
   assert.equal((await api('/api/research')).body.search_available,false,'A shared environment key must not enable per-user search');
   assert.equal((await api('/__fixture/state')).body.search_calls,0,'Opening Settings must not send a Brave query');
   assert.ok(await js("document.querySelector('#settings-panel .settings-card').id==='pwa-updates'"),'Web app updates must remain first');
@@ -99,6 +102,8 @@ try {
   await eventual("!document.getElementById('research-key-saved').hidden && document.getElementById('research-api-key').value===''") .catch(error=>{throw new Error('Verified key was not saved and cleared: '+error.message);});
   const saved=await api('/api/research/settings');
   assert.equal(saved.body.settings.configured,true);assert.equal(saved.body.settings.key_suffix,'ABCD');assert.ok(saved.body.settings.revision);noKeys(saved);
+  assert.equal(saved.body.settings.budget.used,1,'The initial successful verification counts as Agent usage');
+  assert.equal(saved.body.settings.budget.reserved,0);
   assert.equal(saved.body.settings.usage.windows[1].limit,2000);
   assert.equal(saved.body.settings.usage.windows[1].remaining,1999);
   assert.equal(saved.body.settings.usage.windows[1].window_seconds,2592000);
@@ -127,6 +132,7 @@ try {
   await eventual("!document.getElementById('research-key-saved').hidden", 'Stored key did not survive a production-router storage reopen');
   assert.equal((await api('/api/research/settings')).body.settings.key_suffix,'ABCD');
   assert.deepEqual((await api('/api/research/settings')).body.settings.usage,saved.body.settings.usage,'Usage survives reopening SQLite');
+  assert.equal((await api('/api/research/settings')).body.settings.budget.used,1,'Local request history survives reopening SQLite');
   pass('Credentials are per-user and survive reopening the real persistent database without being returned to the page');
 
   await click('#research-key-replace');await enterKey(keys.rejected);await click('#research-key-verify');
@@ -134,6 +140,7 @@ try {
   const afterRejected=await api('/api/research/settings');
   assert.equal(afterRejected.body.settings.key_suffix,'ABCD');assert.equal(afterRejected.body.settings.revision,saved.body.settings.revision);
   assert.deepEqual(afterRejected.body.settings.usage,saved.body.settings.usage,'A rejected replacement must not change the saved key’s usage');
+  assert.equal(afterRejected.body.settings.budget.used,1,'Definitively rejected requests do not consume the local successful-request count');
   noKeys(await js("({error:document.getElementById('research-key-error').textContent,feedback:document.getElementById('research-key-feedback').textContent})"));
   await click('#research-key-cancel');
   await eventual("!document.getElementById('research-key-saved').hidden && document.getElementById('research-api-key').value===''") .catch(error=>{throw new Error('Cancel did not restore saved key: '+error.message);});
@@ -145,6 +152,7 @@ try {
   await click('#research-key-replace');await enterKey(keys.replacement);await click('#research-key-verify');
   await eventual("!document.getElementById('research-key-saved').hidden && document.getElementById('research-key-suffix').textContent.includes('WXYZ')", 'Replacement was not reflected in the saved-key summary');
   const replaced=await api('/api/research/settings');assert.notEqual(replaced.body.settings.revision,saved.body.settings.revision);
+  assert.equal(replaced.body.settings.budget.used,2,'Key replacement preserves previous usage and counts the replacement verification');
   const oldExecution=await api('/api/chat',{...approvedPayload,research_task_id:oldTask.body.task.id});
   assert.ok(oldExecution.status>=400);assert.equal((await api('/__fixture/state')).body.model_calls,0,'A replaced credential must not reuse an earlier approved grant');
   await click('#research-key-check');
@@ -160,7 +168,7 @@ try {
     if(width<600)assert.ok(await js("document.getElementById('research-key-replace').getBoundingClientRect().height>=44"),'Phone key actions need a 44px target');
     await screenshot('agent-brave-settings-real-connected-'+width);
     await js("(() => {const p=document.getElementById('settings-panel'),u=document.getElementById('research-usage-panel');p.scrollTop+=u.getBoundingClientRect().top-p.getBoundingClientRect().top-18;})()");
-    assert.ok(await js("document.querySelector('#research-usage-windows [role=progressbar]').getBoundingClientRect().width>0 && document.querySelector('#research-usage-dashboard').getBoundingClientRect().height>=44"),'Usage progress and dashboard target must fit '+width+'px');
+    assert.ok(await js("document.querySelector('#research-budget-used').getBoundingClientRect().width>0 && document.querySelector('#research-usage-dashboard').getBoundingClientRect().height>=44"),'Local usage and dashboard target must fit '+width+'px');
     await screenshot('agent-brave-settings-real-usage-'+width);
   }
   await click('#back-to-chat');
@@ -181,6 +189,48 @@ try {
   await eventual("document.querySelector('#research-usage-windows').textContent.includes(("+(2000-callsAfterResearch)+").toLocaleString())",'Research snapshot was not shown on reopening Settings');
   assert.equal((await api('/__fixture/state')).body.search_calls,callsAfterResearch,'Opening Settings must not query Brave to refresh usage');
   pass('Real Brave response headers feed owner-scoped persisted usage through verification, test and approved research without background calls');
+  const local=await api('/api/research/settings');
+  assert.equal(local.body.settings.budget.used,4,'Verification, replacement, connection check and ordinary research are counted for this owner only');
+  assert.equal(local.body.settings.budget.reserved,0);
+  // Exercise the approved budget form against the real router, SQLite and Brave adapter.
+  await js("(() => {const enabled=document.getElementById('research-budget-enabled');if(!enabled.checked)enabled.click();for(const [id,value] of [['research-budget-maximum','5'],['research-budget-period','month'],['research-budget-timezone','America/Los_Angeles']]){const input=document.getElementById(id);input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));}})()");
+  const beforeBudgetSave=(await api('/__fixture/state')).body.search_calls;
+  await click('#research-budget-save');
+  await eventual("!document.getElementById('research-budget-save').disabled || /saved|enabled/i.test(document.getElementById('research-budget-feedback').textContent)",'Budget save did not settle');
+  await eventual("document.getElementById('research-budget-progress').getAttribute('aria-valuemax')==='5'",'Saved cap was not rendered');
+  const capped=await api('/api/research/settings');
+  assert.equal(capped.body.settings.budget.enabled,true);assert.equal(capped.body.settings.budget.maximum,5);
+  assert.equal(capped.body.settings.budget.timezone,'America/Los_Angeles');
+  assert.equal((await api('/__fixture/state')).body.search_calls,beforeBudgetSave,'Saving a cap sends no Brave request');
+  for(const width of [1440,390,320]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:width<600?875:1000,deviceScaleFactor:1,mobile:width<600});
+    await js("(() => {const p=document.getElementById('settings-panel'),u=document.getElementById('research-usage-panel');p.scrollTop+=u.getBoundingClientRect().top-p.getBoundingClientRect().top-18;})()");
+    assert.ok(await js("document.documentElement.scrollWidth<=innerWidth && document.getElementById('research-budget-progress').getBoundingClientRect().width>0 && document.getElementById('research-budget-save').getBoundingClientRect().height>=44"),'Used-progress and cap controls fit '+width+'px');
+    await screenshot('agent-brave-budget-fixture-'+width);
+    if(width===390){await js("document.getElementById('research-budget-save').scrollIntoView({block:'center'})");await screenshot('agent-brave-budget-fixture-phone-controls');}
+  }
+  assert.equal((await api('/api/research/settings/budget',{expected_revision:capped.body.settings.revision,expected_budget_revision:'stale',enabled:true,maximum:6,period:'month',timezone:'UTC'})).status,409,'Stale cap writes require explicit review');
+  await click('#research-key-check');await eventual("!document.getElementById('research-key-check').disabled",'Final available request did not settle');
+  assert.equal((await api('/api/research/settings')).body.settings.budget.used,5);
+  assert.ok(await js("document.getElementById('research-budget-progress').getAttribute('aria-valuenow')==='5' && !document.getElementById('research-budget-notice').hidden"),'Progress fills toward used requests and explains exhaustion');
+  const atCap=(await api('/__fixture/state')).body.search_calls;
+  await click('#research-key-check');await eventual("!document.getElementById('research-key-check').disabled",'Cap rejection did not settle');
+  assert.equal((await api('/__fixture/state')).body.search_calls,atCap,'An exhausted cap stops the request before Brave');
+  assert.ok(await js("/limit|cap/i.test(document.getElementById('research-key-error').textContent) && !/Brave rate limit/i.test(document.getElementById('research-key-error').textContent)"),'Local exhaustion is not mislabeled as a Brave rate limit');
+  const currentCap=await api('/api/research/settings');
+  assert.equal(currentCap.body.settings.status,'connected','Local budget exhaustion does not mark a valid credential invalid');
+  const disable=await api('/api/research/settings/budget',{expected_revision:currentCap.body.settings.revision,expected_budget_revision:currentCap.body.settings.budget.revision,enabled:false,maximum:5,period:'month',timezone:'America/Los_Angeles'});
+  assert.equal(disable.status,200);assert.equal(disable.body.settings.budget.used,5,'Disabling a cap retains usage');
+  await click('#back-to-chat');await click('#settings-button');await eventual("!document.getElementById('research-key-check').disabled",'Settings did not reload');
+  assert.ok(await js("document.getElementById('research-budget-progress').hidden && document.getElementById('research-budget-used').textContent.includes((5).toLocaleString())"),'Cap-disabled usage is visible without a misleading progress denominator');
+  assert.equal((await otherAPI('/api/research/settings')).body.settings.budget.used,1,'Another owner has an independent budget');
+  pass('Real budget form saves without queries, preserves history and enforces the cap before Brave dispatch');
+  // The extended scenarios intentionally use the bounded connection-check budget.
+  // Reopen the isolated application before testing upstream rejection; keep the
+  // real verification rate limiter intact rather than weakening it for this test.
+  await api('/__fixture/reopen',{});await cdp('Page.reload');
+  await eventual("!document.getElementById('research-key-check').disabled",'Settings did not return after reopening the fixture');
+  assert.equal((await api('/api/research/settings')).body.settings.budget.used,5,'Usage still survives reopening after cap enforcement');
   await api('/__fixture/reject-saved?enabled=1',{});await click('#research-key-check');
   await eventual("/invalid|unavailable|attention/i.test(document.getElementById('research-settings-badge').textContent)",'A rejected saved key must not retain a passing verification indicator');
   const failedCheck=await api('/api/research/settings');assert.equal(failedCheck.body.settings.configured,true);assert.equal(failedCheck.body.settings.key_suffix,'WXYZ');noKeys(failedCheck);
@@ -192,7 +242,8 @@ try {
   await eventual("document.getElementById('research-key-saved').hidden && !document.getElementById('research-api-key').disabled",'Local removal did not restore setup');
   const removed=await api('/api/research/settings');assert.equal(removed.body.settings.configured,false);assert.ok(removed.body.settings.revision);
   assert.ok(!removed.body.settings.usage,'Removal clears persisted usage');
-  assert.ok(await js("document.querySelector('#research-usage-panel').hidden && !document.querySelector('#research-usage-windows').textContent"),'Removal clears the rendered snapshot');
+  assert.ok(await js("!document.querySelector('#research-usage-panel').hidden && !document.querySelector('#research-usage-windows').textContent"),'Removal clears credential quota but retains the account usage panel');
+  assert.equal(removed.body.settings.budget.used,5,'Removing a key does not erase local request history');
   assert.equal((await api('/api/research')).body.search_available,false);
   const beforeStale=(await api('/__fixture/state')).body.search_calls;
   const stale=await api('/api/research/settings/verify',{api_key:keys.first,expected_revision:replaced.body.settings.revision});

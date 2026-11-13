@@ -21,8 +21,9 @@ type researchWeb struct {
 	apiKey          string
 	lookupIP        func(context.Context, string) ([]netip.Addr, error)
 	dialContext     func(context.Context, string, string) (net.Conn, error)
-	searchTransport http.RoundTripper    // Internal fixture seam; never user-configurable.
-	observeUsage    func(*researchUsage) // Settings-only metadata, never tool output.
+	searchTransport http.RoundTripper               // Internal fixture seam; never user-configurable.
+	observeUsage    func(*researchUsage)            // Settings-only metadata, never tool output.
+	reserveRequest  func() (func(int) error, error) // Durable account-scoped reservation, search only.
 }
 
 const researchTimeout = 15 * time.Second
@@ -280,7 +281,41 @@ func (w *researchWeb) search(ctx context.Context, query string) (string, error) 
 		client.Transport = w.searchTransport
 	}
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return errors.New("search redirects refused") }
+	// Never reserve for a request already cancelled before dispatch.
+	if ctx.Err() != nil {
+		return "", errors.New("Brave Search request cancelled before dispatch")
+	}
+	var settle func(int) error
+	if w.reserveRequest != nil {
+		settle, err = w.reserveRequest()
+		if err != nil {
+			return "", err
+		}
+	}
+	if ctx.Err() != nil {
+		if settle != nil {
+			if err := settle(http.StatusRequestTimeout); err != nil {
+				return "", err
+			}
+		}
+		return "", errors.New("Brave Search request cancelled before dispatch")
+	}
 	resp, err := client.Do(req)
+	// Settle at the HTTP boundary, not after parsing: a 2xx still counts when
+	// its body is unreadable. A redirect refusal has a definitive failed status.
+	observedAt := time.Now().UTC()
+	if settle != nil {
+		status := 0
+		if resp != nil {
+			status = resp.StatusCode
+		}
+		if settlementErr := settle(status); settlementErr != nil {
+			if resp != nil {
+				resp.Body.Close()
+			}
+			return "", settlementErr
+		}
+	}
 	if err != nil {
 		return "", errors.New("Brave Search request failed")
 	}
@@ -288,7 +323,7 @@ func (w *researchWeb) search(ctx context.Context, query string) (string, error) 
 	// Capture only responses from the fixed HTTPS endpoint, including 429s.
 	// Redirects and transport failures return above without observing anything.
 	if w.observeUsage != nil {
-		w.observeUsage(parseResearchUsage(resp.Header, time.Now().UTC()))
+		w.observeUsage(parseResearchUsage(resp.Header, observedAt))
 	}
 	if resp.StatusCode != http.StatusOK {
 		return "", &researchSearchError{status: resp.StatusCode}

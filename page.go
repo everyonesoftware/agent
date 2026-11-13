@@ -158,6 +158,22 @@ const homePage = `<!doctype html>
     .research-usage-footer > span { color: var(--muted); font-size: 11px; }
     .research-usage-footer a { display: inline-flex; align-items: center; min-height: 44px; border-radius: 5px; text-decoration: none; }
     .research-usage .connection-help { margin-top: 16px; }
+    .research-budget-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-top: 14px; }
+    .research-budget-fields label { display: block; margin: 0; min-width: 0; font-size: 12px; }
+    #research-budget-form input:not([type="checkbox"]), #research-budget-form select { display: block; width: 100%; min-width: 0; min-height: 44px; margin-top: 6px; padding: 8px 10px; border: 1px solid #465049; border-radius: 5px; background: #202322; color: inherit; font: inherit; }
+    .research-budget-toggle { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+    #research-budget-enabled { appearance: none; position: relative; width: 44px; height: 44px; flex: none; margin: 0; border: 0; background: transparent; cursor: pointer; }
+    #research-budget-enabled::before { content: ''; position: absolute; top: 10px; left: 2px; width: 40px; height: 24px; border-radius: 14px; background: #465049; }
+    #research-budget-enabled::after { content: ''; position: absolute; top: 14px; left: 6px; width: 16px; height: 16px; border-radius: 50%; background: #e1e6e2; }
+    #research-budget-enabled:checked::before { background: var(--accent); }
+    #research-budget-enabled:checked::after { left: 22px; background: #202322; }
+    #research-budget-enabled:disabled { opacity: .5; cursor: default; }
+    #research-budget-enabled:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    #research-budget-form { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+    #research-budget-feedback { margin: 0; }
+    #research-budget-notice:not(:empty) { padding: 10px 12px; border-left: 2px solid #dfc38e; background: #353126; color: #dfc38e; }
+    #research-budget-provider { border-top: 1px solid var(--line); padding-top: 12px; }
+    @media (max-width: 420px) { .research-budget-fields { grid-template-columns: minmax(0, 1fr); } .research-usage-heading { flex-wrap: wrap; gap: 4px 12px; } }
     .security-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0; text-align: left; }
     .security-toggle h2 { margin: 0; }
     .security-copy { margin: 7px 0 0; }
@@ -461,12 +477,31 @@ const homePage = `<!doctype html>
           </form>
           <p id="research-key-error" class="menu-error" role="alert"></p><p id="research-key-feedback" class="connection-detail" role="status" aria-live="polite"></p><button class="reset" id="research-settings-retry" type="button" hidden>Retry settings</button>
           <section id="research-usage-panel" class="research-usage" aria-labelledby="research-usage-title" hidden>
-            <div class="research-usage-heading"><h3 id="research-usage-title">Search usage</h3><span>Brave-reported quota</span></div>
+            <div class="research-usage-heading"><h3 id="research-usage-title">Brave Search usage</h3><span>Tracked by Agent</span></div>
+            <p id="research-budget-interval"></p>
+            <div class="research-usage-number"><strong id="research-budget-used"></strong><span id="research-budget-denominator"></span></div>
+            <div id="research-budget-progress" class="research-usage-track" role="progressbar" aria-label="Successful requests used toward Agent cap" aria-valuemin="0" hidden><div class="research-usage-fill"></div></div>
+            <div class="research-usage-stats"><span id="research-budget-remaining"></span><span id="research-budget-percent"></span></div>
+            <p id="research-budget-reserved" hidden></p><p id="research-budget-notice" role="status" hidden></p>
+            <p id="research-budget-reset"></p><p id="research-budget-tracking"></p>
+            <form id="research-budget-form">
+              <div class="research-budget-toggle"><div><label for="research-budget-enabled">Limit search requests</label><p>Stop new searches when this cap is reached.</p></div><input id="research-budget-enabled" type="checkbox" role="switch"></div>
+              <div class="research-budget-fields">
+                <label for="research-budget-maximum">Maximum requests<input id="research-budget-maximum" type="number" min="1" max="10000000" step="1" required></label>
+                <label for="research-budget-period">Calendar period<select id="research-budget-period"><option value="month">Calendar month</option><option value="day">Calendar day</option></select></label>
+                <label for="research-budget-timezone">Reset timezone<input id="research-budget-timezone" type="text" list="research-budget-timezones" required spellcheck="false" autocomplete="off"><datalist id="research-budget-timezones"><option value="UTC"></option></datalist></label>
+              </div>
+              <p>Calendar boundaries use the saved timezone. Changing the period selects recorded usage for that interval; it does not clear your history.</p>
+              <div class="research-settings-actions"><button id="research-budget-save" class="reset" type="submit" disabled>Save cap</button><p id="research-budget-feedback" role="status" aria-live="polite"></p></div>
+            </form>
+            <details class="connection-help"><summary>What counts toward Agent usage?</summary><p>Successful Brave Search requests made by your Agent account, including successful connection tests and retries, count toward usage. In-flight requests and uncertain outcomes reserve capacity against the cap and are shown separately, not as successful requests.</p><p>Tracking stays on with the cap off and survives key replacement or removal. Other apps and history before tracking began are not included. This is not Brave billing. Opening Settings sends no search query. Public-page retrieval is unaffected, and every research task still needs your permission.</p></details>
+            <details class="connection-help" id="research-budget-provider" hidden><summary>Brave-reported quota snapshot</summary>
             <div id="research-usage-windows"></div>
             <p id="research-usage-observed"></p>
             <p>Not live. Other apps using this key may have used more since this snapshot. This is not a billing balance.</p>
             <div class="research-usage-footer"><span>Updates after searches.<br>No background test queries.</span><a id="research-usage-dashboard" class="reset" href="https://api-dashboard.search.brave.com/" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Brave dashboard ↗</a></div>
-            <details class="connection-help"><summary>What counts toward usage?</summary><p>This snapshot reflects Brave’s reported quota, not just searches made in Agent. Verify &amp; save and Test connection each send one query, which may count toward usage. Opening Settings sends no search query.</p><p>Limit windows and reset times come from Brave. Check your Brave dashboard for current availability, plan and billing details. Public-page retrieval does not use your Brave Search quota.</p></details>
+            <p>This snapshot reflects Brave’s reported quota across apps, not only Agent. Limit windows and reset times come from Brave. Check your Brave dashboard for current availability, plan and billing details.</p>
+            </details>
           </section>
           <p id="research-key-consent" class="connection-detail">Saving a key does not approve research. Each task still needs your permission.</p>
           <details class="connection-help"><summary>About your search key</summary><p>Get a Search API key from your Brave Search account. Agent stores it on this server for your user; it is never sent in model messages. Only its suffix is shown after saving.</p><p>Updating or removing your key stops your active research permissions; other users are unaffected.</p></details>
@@ -899,7 +934,7 @@ const homePage = `<!doctype html>
       document.addEventListener('input', () => { ++updateDraftRevision; });
       window.agentUpdateSafety = () => ({
         pending: busy || loadingConversation || passwordBusy || authBusy || connectionBusy || connectionSubmitting || usageBusy || usageSubmitting || searchBusy,
-        unsaved: Boolean(searchKey.value || input.value || Array.from(document.querySelectorAll('input[type="password"], input[autocomplete="current-password"], input[autocomplete="new-password"]')).some(field => field.value) || document.querySelector('dialog[open]')),
+        unsaved: Boolean(searchBudgetDirty() || searchKey.value || input.value || Array.from(document.querySelectorAll('input[type="password"], input[autocomplete="current-password"], input[autocomplete="new-password"]')).some(field => field.value) || document.querySelector('dialog[open]')),
         revision: updateDraftRevision,
       });
       // END update reload safety
@@ -1084,6 +1119,54 @@ const homePage = `<!doctype html>
       const searchKey = searchEl('research-api-key'), searchDialog = searchEl('research-key-remove-dialog');
       let searchData = null, searchBusy = false, searchEpoch = 0, searchEditing = false;
       let searchExpectedRevision = '', searchRemoveRevision = '', searchUnknown = false;
+      let searchBudgetDraft = null, searchBudgetBase = null, searchBudgetMessage = '', searchBudgetRevision = '';
+      const searchBudgetFields = ['enabled', 'maximum', 'period', 'timezone'];
+      function searchBudgetValues(budget) {
+        return {enabled:budget.enabled,maximum:String(budget.maximum),period:budget.period,timezone:budget.timezone};
+      }
+      function searchBudgetDirty() {
+        return Boolean(searchBudgetDraft && searchBudgetBase && searchBudgetFields.some(key => searchBudgetDraft[key] !== searchBudgetBase[key]));
+      }
+      function searchBudgetTime(value, timezone) {
+        if (!Number.isFinite(Date.parse(value))) return 'unavailable';
+        try { return new Date(value).toLocaleString(undefined, {timeZone:timezone,year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}); }
+        catch (_) { return 'unavailable'; }
+      }
+      function renderSearchBudget(known) {
+        const budget = known && searchData.budget;
+        searchEl('research-usage-panel').hidden = !known;
+        if (!budget) return;
+        const dirty = searchBudgetDirty();
+        if (!dirty) { searchBudgetBase = searchBudgetValues(budget); searchBudgetDraft = {...searchBudgetBase}; searchBudgetRevision = budget.revision; }
+        for (const key of searchBudgetFields) {
+          const field = searchEl('research-budget-' + key);
+          if (key === 'enabled') field.checked = searchBudgetDraft.enabled;
+          else field.value = searchBudgetDraft[key];
+          field.disabled = searchBusy;
+        }
+        searchEl('research-budget-save').disabled = searchBusy || !searchBudgetDirty();
+        searchEl('research-budget-feedback').textContent = searchBusy ? 'Saving / refreshing…' : searchBudgetMessage || (searchBudgetDirty() ? 'Unsaved changes' : budget.enabled ? 'Cap enabled' : 'No Agent cap');
+        searchEl('research-budget-used').textContent = budget.used.toLocaleString();
+        searchEl('research-budget-denominator').textContent = budget.enabled ? 'of ' + budget.maximum.toLocaleString() + ' successful requests used' : 'successful requests used · No Agent cap';
+        const ratio = budget.used / budget.maximum, capacity = budget.used + budget.reserved;
+        const progress = searchEl('research-budget-progress');
+        progress.hidden = !budget.enabled;
+        progress.setAttribute('aria-valuemax', String(budget.maximum));
+        progress.setAttribute('aria-valuenow', String(Math.min(budget.used, budget.maximum)));
+        progress.setAttribute('aria-valuetext', budget.used.toLocaleString() + ' successful requests used of ' + budget.maximum.toLocaleString() + ', plus ' + budget.reserved.toLocaleString() + ' reserved');
+        progress.firstElementChild.style.width = Math.min(100, ratio * 100) + '%';
+        progress.firstElementChild.style.background = capacity >= budget.maximum * 0.9 ? '#dfc38e' : '';
+        searchEl('research-budget-remaining').textContent = budget.enabled ? Math.max(0, budget.maximum - capacity).toLocaleString() + ' requests available after reservations' : 'Tracking stays on when the cap is off';
+        searchEl('research-budget-percent').textContent = budget.enabled ? (ratio * 100).toLocaleString(undefined, {maximumFractionDigits:1}) + '% used' : '';
+        searchEl('research-budget-reserved').hidden = budget.reserved === 0;
+        searchEl('research-budget-reserved').textContent = budget.reserved.toLocaleString() + ' reserved · In-flight or uncertain outcomes count against the cap, not successful usage.';
+        const notice = searchEl('research-budget-notice');
+        notice.hidden = !budget.enabled || capacity < budget.maximum * 0.9;
+        notice.textContent = notice.hidden ? '' : capacity >= budget.maximum ? 'Limit reached. New Brave searches are paused. Wait for reset, raise the cap, or turn it off and save. Public-page retrieval is unaffected.' : 'You’re close to your cap. New Brave searches stop when it is reached.';
+        searchEl('research-budget-interval').textContent = (budget.period === 'day' ? 'Calendar day' : 'Calendar month') + ' · ' + searchBudgetTime(budget.start_at, budget.timezone) + ' – ' + searchBudgetTime(budget.reset_at, budget.timezone) + ' (exclusive) · ' + budget.timezone;
+        searchEl('research-budget-reset').textContent = 'Next calendar reset: ' + searchBudgetTime(budget.reset_at, budget.timezone) + ' · ' + budget.timezone;
+        searchEl('research-budget-tracking').textContent = 'Tracking started ' + searchBudgetTime(budget.tracking_started_at, budget.timezone) + '. Earlier usage and other apps are not included.';
+      }
       function clearSearchDraft() {
         searchKey.value = ''; searchKey.type = 'password';
         searchEl('research-key-show').textContent = 'Show';
@@ -1106,11 +1189,13 @@ const homePage = `<!doctype html>
         return new Date(value).toLocaleString(undefined, {year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',timeZoneName:'short'});
       }
       function renderSearchUsage(known) {
-        const panel = searchEl('research-usage-panel'), container = searchEl('research-usage-windows');
+        const container = searchEl('research-usage-windows');
         const observed = searchEl('research-usage-observed');
-        panel.hidden = !known || !searchData.configured;
+        renderSearchBudget(known);
+        const provider = searchEl('research-budget-provider');
+        provider.hidden = !known || !searchData.configured;
         container.replaceChildren(); observed.textContent = '';
-        if (panel.hidden) return;
+        if (provider.hidden) { provider.open = false; return; }
         const usage = searchData.usage;
         const valid = usage && typeof usage.observed_at === 'string' && Number.isFinite(Date.parse(usage.observed_at)) && Array.isArray(usage.windows) && usage.windows.length > 0 && usage.windows.length <= 16 && usage.windows.every(w => w && Number.isSafeInteger(w.limit) && w.limit >= 0 && Number.isSafeInteger(w.remaining) && w.remaining >= 0 && (w.limit === 0 || w.remaining <= w.limit) && Number.isSafeInteger(w.window_seconds) && w.window_seconds > 0 && typeof w.reset_at === 'string' && Number.isFinite(Date.parse(w.reset_at)));
         if (!valid) {
@@ -1124,7 +1209,7 @@ const homePage = `<!doctype html>
           const block = searchUsageNode('div', undefined, 'research-usage-window');
           block.append(searchUsageNode('h4', searchUsageWindowLabel(primary.window_seconds)));
           const number = searchUsageNode('div', undefined, 'research-usage-number');
-          number.append(searchUsageNode('strong', primary.limit === 0 ? 'Unlimited' : primary.remaining.toLocaleString()));
+          number.append(searchUsageNode('strong', primary.limit === 0 ? 'No request-count cap' : primary.remaining.toLocaleString()));
           if (primary.limit !== 0) number.append(searchUsageNode('span', 'requests remaining'));
           block.append(number);
           if (primary.limit === 0) block.append(searchUsageNode('p', 'Brave reports no request cap for this window. Other rate limits may still apply.'));
@@ -1152,7 +1237,7 @@ const homePage = `<!doctype html>
         if (others.length) {
           const details = searchUsageNode('details', undefined, 'connection-help');
           details.append(searchUsageNode('summary', 'Other rate limits (' + others.length + ')'));
-          for (const window of others) details.append(searchUsageNode('p', searchUsageWindowLabel(window.window_seconds) + ' · ' + (window.limit === 0 ? 'Unlimited' : window.remaining.toLocaleString() + ' of ' + window.limit.toLocaleString() + ' remaining') + ' in snapshot · Reset ' + searchUsageTime(window.reset_at)));
+          for (const window of others) details.append(searchUsageNode('p', searchUsageWindowLabel(window.window_seconds) + ' · ' + (window.limit === 0 ? 'No request-count cap' : window.remaining.toLocaleString() + ' of ' + window.limit.toLocaleString() + ' remaining') + ' in snapshot · Reset ' + searchUsageTime(window.reset_at)));
           container.append(details);
         }
         observed.textContent = 'Snapshot from last response · ' + searchUsageTime(usage.observed_at);
@@ -1168,18 +1253,18 @@ const homePage = `<!doctype html>
         searchEl('research-key-checked').textContent = known && searchData.configured ? 'Last verification: ' + (searchData.last_checked_at || searchData.verified_at || 'not recorded') + '. This is not a live availability guarantee.' : '';
         searchEl('research-settings-retry').hidden = known || searchBusy;
         searchEl('research-settings-card').setAttribute('aria-busy', String(searchBusy));
-        for (const node of searchEl('research-settings-card').querySelectorAll('button, input')) node.disabled = searchBusy || (!known && node.id !== 'research-settings-retry');
+        for (const node of searchEl('research-settings-card').querySelectorAll('button, input, select')) node.disabled = searchBusy || (!known && node.id !== 'research-settings-retry');
         searchEl('research-key-remove-confirm').disabled = searchBusy;
         searchEl('research-key-keep').disabled = searchBusy;
         renderSearchUsage(known);
       }
-      async function searchFetch(action, expectedRevision) {
+      async function searchFetch(action, expectedRevision, budgetPayload) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 12000);
         try {
           const response = await fetch('/api/research/settings' + (action ? '/' + action : ''), {
             method: action ? 'POST' : 'GET', cache:'no-store', signal:controller.signal,
-            ...(action ? {headers:{'Content-Type':'application/json'}, body:JSON.stringify(action === 'verify' ? {api_key:searchKey.value,expected_revision:expectedRevision} : {expected_revision:expectedRevision})} : {})
+            ...(action ? {headers:{'Content-Type':'application/json'}, body:JSON.stringify(action === 'budget' ? budgetPayload : action === 'verify' ? {api_key:searchKey.value,expected_revision:expectedRevision} : {expected_revision:expectedRevision})} : {})
           });
           const result = await response.json();
           return {response,result};
@@ -1187,6 +1272,12 @@ const homePage = `<!doctype html>
       }
       function acceptSearchSettings(data) {
         if (!data || typeof data.configured !== 'boolean' || typeof data.revision !== 'string' || typeof data.key_suffix !== 'string') throw new Error('Invalid metadata');
+        const budget = data.budget;
+        if (!budget || typeof budget.enabled !== 'boolean' || typeof budget.revision !== 'string' || !Number.isSafeInteger(budget.maximum) || budget.maximum < 1 || budget.maximum > 10000000 || !['day','month'].includes(budget.period) || typeof budget.timezone !== 'string' || !Number.isSafeInteger(budget.used) || budget.used < 0 || !Number.isSafeInteger(budget.reserved) || budget.reserved < 0 || !['tracking_started_at','start_at','reset_at'].every(key => typeof budget[key] === 'string' && Number.isFinite(Date.parse(budget[key])))) throw new Error('Invalid budget metadata');
+        new Intl.DateTimeFormat(undefined, {timeZone:budget.timezone});
+        const keepDraft = searchBudgetDirty();
+        searchBudgetBase = searchBudgetValues(budget);
+        if (!keepDraft) { searchBudgetDraft = {...searchBudgetBase}; searchBudgetRevision = budget.revision; }
         searchData = data; searchUnknown = false;
       }
       async function readSearchSettings() {
@@ -1198,6 +1289,7 @@ const homePage = `<!doctype html>
           if (epoch !== searchEpoch) return;
           if (!response.ok) throw new Error('Read failed');
           acceptSearchSettings(result.settings);
+          if (searchBudgetMessage.startsWith('Outcome unknown:')) searchBudgetMessage = 'Saved cap settings refreshed. Review them before making another change.';
           if (!searchEditing) searchExpectedRevision = searchData.revision;
         } catch (_) {
           if (epoch === searchEpoch) { searchUnknown = true; searchEl('research-key-error').textContent = 'Could not load your search settings. Retry to review the current saved key.'; }
@@ -1227,7 +1319,7 @@ const homePage = `<!doctype html>
           } else if (response.status === 422 || result.code === 'invalid_key' || response.status === 429 || response.status === 503) {
             if (!result.settings) throw new Error('Mutation outcome was not acknowledged');
             acceptSearchSettings(result.settings);
-            message = result.code === 'invalid_key' || response.status === 422 ? 'Brave rejected this key. Check it and try again. Your previously saved key has not been replaced.' : response.status === 429 ? 'Brave rate limit reached. Wait before trying again. Your saved key has not been replaced.' : 'Brave is unavailable. Try again later. Your saved key has not been replaced.';
+            message = result.code === 'budget_exhausted' ? 'Your Agent search cap is reached, including reserved requests. Wait for reset, raise the cap, or turn it off and save below. Your key is unchanged; public-page retrieval is unaffected.' : result.code === 'invalid_key' || response.status === 422 ? 'Brave rejected this key. Check it and try again. Your previously saved key has not been replaced.' : response.status === 429 ? 'Brave rate limit reached. Wait before trying again. Your saved key has not been replaced.' : 'Brave is unavailable. Try again later. Your saved key has not been replaced.';
           } else throw new Error('Ambiguous mutation');
         } catch (_) {
           // Aborting a fetch does not roll back a committed server mutation. Never replay it.
@@ -1251,6 +1343,64 @@ const homePage = `<!doctype html>
           } else if (!settingsPanel.hidden) void readSearchSettings();
         }
       }
+      for (const key of searchBudgetFields) searchEl('research-budget-' + key).addEventListener('input', () => {
+        if (searchBusy || searchUnknown || !searchBudgetDraft) return;
+        const field = searchEl('research-budget-' + key);
+        searchBudgetDraft[key] = key === 'enabled' ? field.checked : field.value;
+        searchBudgetMessage = '';
+        // Only update save feedback while typing; do not overwrite focused form controls.
+        searchEl('research-budget-save').disabled = !searchBudgetDirty();
+        searchEl('research-budget-feedback').textContent = searchBudgetDirty() ? 'Unsaved changes' : searchData.budget.enabled ? 'Cap enabled' : 'No Agent cap';
+      });
+      try {
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (timezone && timezone !== 'UTC') { const option = document.createElement('option'); option.value = timezone; searchEl('research-budget-timezones').append(option); }
+      } catch (_) {}
+      searchEl('research-budget-form').addEventListener('submit', async event => {
+        event.preventDefault();
+        if (searchBusy || searchUnknown || !searchBudgetDirty()) return;
+        const maximum = Number(searchBudgetDraft.maximum), timezone = searchBudgetDraft.timezone;
+        try {
+          if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > 10000000 || !timezone) throw new Error('Invalid cap');
+          new Intl.DateTimeFormat(undefined, {timeZone:timezone});
+        } catch (_) { searchBudgetMessage = 'Enter a whole-number maximum from 1 to 10,000,000 and a valid IANA timezone (for example UTC).'; renderSearchSettings(); return; }
+        const payload = {expected_revision:searchData.revision,expected_budget_revision:searchBudgetRevision,enabled:searchBudgetDraft.enabled,maximum,period:searchBudgetDraft.period,timezone};
+        const epoch = searchEpoch;
+        searchBusy = true; searchBudgetMessage = ''; renderSearchSettings();
+        try {
+          const {response,result} = await searchFetch('budget', payload.expected_revision, payload);
+          if (response.ok) {
+            acceptSearchSettings(result.settings);
+            searchBudgetDraft = null; searchBudgetBase = null; searchBudgetMessage = 'Cap saved. Research still needs task permission.';
+          } else if (response.status === 409) {
+            const current = await searchFetch('');
+            if (!current.response.ok) throw new Error('Reconcile failed');
+            acceptSearchSettings(current.result.settings); searchBudgetRevision = searchData.budget.revision;
+            searchBudgetMessage = 'Saved settings changed elsewhere. Your edits are kept; review the current usage and cap before choosing Save again.';
+          } else if (result.settings) {
+            acceptSearchSettings(result.settings);
+            searchBudgetMessage = 'Could not save the cap. Check the maximum and timezone, then try again. Your edits are kept.';
+          } else throw new Error('Unacknowledged');
+        } catch (_) {
+          searchUnknown = true;
+          try {
+            const current = await searchFetch('');
+            if (!current.response.ok) throw new Error('Reconcile failed');
+            acceptSearchSettings(current.result.settings);
+            const saved = searchBudgetValues(searchData.budget);
+            if (searchBudgetFields.every(key => saved[key] === searchBudgetDraft[key])) { searchBudgetDraft = null; searchBudgetBase = null; }
+            searchBudgetRevision = searchData.budget.revision;
+            searchBudgetMessage = 'The save was not acknowledged. Saved settings have been refreshed; review them before trying again. Your request was not replayed.';
+          } catch (_) {
+            searchBudgetMessage = 'Outcome unknown: the server may have saved this cap. Retry settings before making another change. Your edits are kept.';
+            searchEl('research-key-error').textContent = searchBudgetMessage;
+          }
+        } finally {
+          searchBusy = false;
+          if (epoch === searchEpoch && !settingsPanel.hidden) renderSearchSettings();
+          else if (!settingsPanel.hidden) void readSearchSettings();
+        }
+      });
       searchEl('research-key-form').addEventListener('submit', event => { event.preventDefault(); void mutateSearchSettings('verify', searchExpectedRevision); });
       searchEl('research-key-show').addEventListener('click', () => {
         const show = searchKey.type === 'password'; searchKey.type = show ? 'text' : 'password';

@@ -112,6 +112,7 @@ func (s *researchSettingsService) webWithUsage(userID string, credential researc
 	w := s.web(credential.apiKey)
 	// Copy factory-owned adapters so callbacks never cross owner/revision scopes.
 	copy := *w
+	s.trackRequests(userID, &copy)
 	copy.observeUsage = func(usage *researchUsage) { _ = s.accounts.saveResearchUsage(userID, credential.Revision, usage) }
 	return &copy
 }
