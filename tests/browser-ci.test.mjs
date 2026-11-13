@@ -20,6 +20,9 @@ test('CI browser and installer versions and archive integrity are exact pins', a
 test('release CI provisions and checks a controlled browser before app tests without dropping any gate', async () => {
   const workflow = await readFile(new URL('.github/workflows/publish-image.yml', root), 'utf8');
   const verify = workflow.slice(workflow.indexOf('  verify:'), workflow.indexOf('  publish:'));
+  assert.doesNotMatch(verify.slice(0, verify.indexOf('    steps:')), /runner\.temp/, 'runner context is unavailable in job-level env');
+  assert.match(verify, /TMPDIR=%s\\nBROWSER_ARTIFACTS=%s\\n/);
+  assert.match(verify, /actionlint\/cmd\/actionlint@v1\.7\.12/);
   assert.match(verify, /runs-on: ubuntu-22\.04/);
   assert.match(verify, /npm ci --prefix tests\/browser-tools --ignore-scripts/);
   assert.match(verify, /node tests\/browser-tools\/install\.mjs/);

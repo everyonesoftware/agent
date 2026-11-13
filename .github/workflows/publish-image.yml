@@ -19,9 +19,6 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-22.04
-    env:
-      TMPDIR: ${{ runner.temp }}
-      BROWSER_ARTIFACTS: ${{ runner.temp }}/agent-browser-diagnostics
     outputs:
       version: ${{ steps.version.outputs.value }}
     steps:
@@ -30,10 +27,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Configure isolated test storage and browser diagnostics
+        run: printf 'TMPDIR=%s\nBROWSER_ARTIFACTS=%s\n' "$RUNNER_TEMP" "$RUNNER_TEMP/agent-browser-diagnostics" >> "$GITHUB_ENV"
+
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+
+      - name: Validate release workflow syntax and expression contexts
+        # GitHub supports queue:max; actionlint 1.7.12 has not added that key yet.
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck= -pyflakes= -ignore '^unexpected key "queue" for "concurrency" section[.]' .github/workflows/publish-image.yml
 
       - name: Calculate commit-count version
         id: version
