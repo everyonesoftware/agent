@@ -74,6 +74,18 @@ const homePage = `<!doctype html>
     .settings-card label { display: block; margin: 16px 0 6px; font-size: 12px; }
     .settings-card input { display: block; width: 100%; padding: 10px 12px; color: inherit; background: #202322; border: 1px solid var(--line); border-radius: 5px; }
     .settings-card .send { margin: 16px 0 0; }
+    #memory-card { overflow-wrap: anywhere; }
+    #memory-card button, #memory-card select { min-height: 44px; }
+    #memory-card .memory-toggle { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+    #memory-enabled { width: 18px; height: 18px; margin: 0; flex: 0 0 18px; accent-color: var(--accent); }
+    #memory-content { display: block; width: 100%; max-width: 100%; min-height: 100px; resize: vertical; padding: 10px 12px; border: 1px solid var(--line); border-radius: 5px; background: #202322; color: inherit; font: inherit; }
+    #memory-category { width: 100%; background: #202322; }
+    #memory-form { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line); }
+    .memory-entry { padding: 16px 0; border-bottom: 1px solid var(--line); }
+    .memory-entry h3 { font-size: 12px; margin: 0 0 8px; }
+    .memory-fact { font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .remember-message { margin-top: 8px; min-height: 44px; font-size: 11px; }
+    #run-memory .memory-fact { font-size: 12px; }
     .connection-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 6px; }
     .connection-heading h2 { margin: 0; }
     .connection-refresh { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 4px 10px; border: 1px solid #45513f; border-radius: 20px; color: var(--accent); }
@@ -507,6 +519,25 @@ const homePage = `<!doctype html>
           <details class="connection-help"><summary>About your search key</summary><p>Get a Search API key from your Brave Search account. Agent stores it on this server for your user; it is never sent in model messages. Only its suffix is shown after saving.</p><p>Updating or removing your key stops your active research permissions; other users are unaffected.</p></details>
         </section>
         <dialog id="research-key-remove-dialog" class="connection-dialog" aria-labelledby="research-key-remove-title"><h2 id="research-key-remove-title">Remove your Brave Search key?</h2><p>This removes the key from your Agent account and stops your active research permissions. It does not revoke the key at Brave. Public-page retrieval and your ChatGPT connection are unaffected.</p><div class="dialog-actions"><button id="research-key-keep" class="reset" type="button">Keep key</button><button id="research-key-remove-confirm" class="reset danger" type="button">Remove Brave key</button></div></dialog>
+        <section class="settings-card" id="memory-card" aria-labelledby="memory-title">
+          <h2 id="memory-title">Memory</h2>
+          <p>Local storage: saved facts are stored on this Agent server for your account. When enabled, they are included in provider context for new chat requests, not public-web research. Only an explicit save or /remember command writes memory; the model cannot save facts autonomously.</p>
+          <p>Deleting or disabling memory affects future requests only: old chats and traces retain earlier context copies. No retroactive recall of old conversations.</p>
+          <label class="memory-toggle" for="memory-enabled"><input id="memory-enabled" type="checkbox" disabled> Include saved memory in new chats</label>
+          <p id="memory-status" class="connection-detail" role="status" aria-live="polite">Not loaded</p>
+          <p id="memory-error" class="menu-error" role="alert"></p>
+          <div class="research-settings-actions"><button id="memory-retry" class="reset" type="button">Refresh memory</button><button id="memory-create" class="reset" type="button" disabled>Add memory</button><button id="memory-export" class="reset" type="button" disabled>Export JSON</button></div>
+          <div id="memory-list" aria-label="Saved memories"></div>
+          <form id="memory-form" hidden aria-labelledby="memory-form-title">
+            <h3 id="memory-form-title">Save memory</h3>
+            <p class="connection-detail">Review and edit the fact before saving. Saving does not enable memory automatically.</p>
+            <label for="memory-category">Category</label><select id="memory-category"><option value="user">User</option><option value="project">Project</option></select>
+            <label for="memory-content">Fact to remember</label><textarea id="memory-content" rows="4" required></textarea>
+            <p id="memory-form-error" class="menu-error" role="alert"></p>
+            <div class="research-settings-actions"><button id="memory-save" class="send" type="submit">Save memory</button><button id="memory-cancel" class="reset" type="button">Cancel</button></div>
+          </form>
+          <p class="connection-detail">Tip: use /remember [fact] in chat to explicitly save a user fact. Skills are not implemented.</p>
+        </section>
         <section class="settings-card" aria-labelledby="password-title">
           <button class="security-toggle" id="security-toggle" type="button" aria-expanded="false" aria-controls="password-form"><h2 id="password-title">Reset password</h2><span id="security-chevron" aria-hidden="true">＋</span></button>
           <p class="security-copy">Change your Agent password, not your ChatGPT password.</p>
@@ -581,7 +612,7 @@ const homePage = `<!doctype html>
         <div class="run-feedback" id="run-feedback" hidden><p id="run-feedback-text"></p><button type="button" class="reset" id="run-retry">Retry</button></div>
         <p class="run-caption" id="run-truncation" hidden></p>
         <section role="tabpanel" id="run-view-timeline" aria-labelledby="run-tab-timeline" tabindex="0"><p class="run-caption">Execution events, not the model’s private reasoning.</p><div id="run-events"></div><p class="run-caption" id="run-tools"></p></section>
-        <section role="tabpanel" id="run-view-context" aria-labelledby="run-tab-context" tabindex="0" hidden><p class="run-caption">Server-supplied context for this turn. Dates use the server timezone.</p><dl id="run-context-values"></dl><h3>Baseline instructions</h3><div class="run-block" id="run-instructions"></div><h3>Messages included in the model context</h3><div id="run-messages"></div></section>
+        <section role="tabpanel" id="run-view-context" aria-labelledby="run-tab-context" tabindex="0" hidden><p class="run-caption">Server-supplied context for this turn. Dates use the server timezone.</p><dl id="run-context-values"></dl><h3>Baseline instructions</h3><div class="run-block" id="run-instructions"></div><h3>Memory</h3><div id="run-memory" class="run-block"></div><h3>Messages included in the model context</h3><div id="run-messages"></div></section>
         <section role="tabpanel" id="run-view-model" aria-labelledby="run-tab-model" tabindex="0" hidden><p class="run-caption">Captured provider payloads exclude authorization headers. Private reasoning is not recorded.</p><dl id="run-model-values"></dl><div class="run-block" id="run-error" hidden></div><details id="run-request"><summary>Sanitized request</summary><pre></pre></details><details id="run-response"><summary>Sanitized response</summary><pre></pre></details></section>
       </div>
       <footer class="run-footer">Private to your Agent account. Traces contain chat text; retained for up to 7 days, latest 50 runs. Older chats may have no trace.</footer>
@@ -741,7 +772,7 @@ const homePage = `<!doctype html>
         for (const button of messageList.querySelectorAll('.inspect-run')) button.setAttribute('aria-expanded', 'false');
         runOverlayState();
         runElement('events').replaceChildren(); runElement('messages').replaceChildren();
-        for (const name of ['context-values','model-values','instructions']) runElement(name).replaceChildren();
+        for (const name of ['context-values','model-values','instructions','memory']) runElement(name).replaceChildren();
         runElement('request').querySelector('pre').textContent = '';
         runElement('response').querySelector('pre').textContent = '';
         runElement('error').textContent = '';
@@ -752,6 +783,18 @@ const homePage = `<!doctype html>
         runElement('feedback').hidden = !message;
         runElement('feedback-text').textContent = message;
         runElement('retry').hidden = !retry;
+      }
+      function renderRunMemory(run) {
+        const target = runElement('memory'); target.replaceChildren();
+        const memory = run.context?.memory;
+        if (run.research) { target.append(runNode('p', 'Excluded from public-web research. Saved memory was not sent.')); return; }
+        if (!memory) { target.append(runNode('p', 'None recorded. Older runs may not capture memory.')); return; }
+        if (!memory.enabled) { target.append(runNode('p', 'Disabled. No saved memory sent.')); return; }
+        const entries = Array.isArray(memory.entries) ? memory.entries : [];
+        target.append(runNode('p', entries.length ? 'Exact saved memory sent for this run (snapshot, not current settings):' : 'Enabled · No saved memory sent.'));
+        for (const entry of entries) {
+          target.append(runNode('h3', entry.category === 'project' ? 'Project' : 'User'), runNode('div', entry.content, 'memory-fact'));
+        }
       }
       function renderRun(run) {
         const focusedEvent = document.activeElement.closest('#run-events .run-event');
@@ -788,11 +831,12 @@ const homePage = `<!doctype html>
           ['Current date', context.current_date || 'Not recorded'],
           ['Timezone', [context.timezone, context.utc_offset].filter(Boolean).join(' · ') || 'Not recorded'],
           ['Context source', 'Server clock'], ['Instructions', context.instructions_version || 'Not recorded'],
-          ['Tools', toolCount === 0 ? 'None available' : toolNames.join(', ')], ['Skills / memory', 'None loaded'],
+          ['Tools', toolCount === 0 ? 'None available' : toolNames.join(', ')], ['Skills', 'Not implemented'],
           ['Excluded before inference', typeof context.omitted_messages === 'number' ? String(context.omitted_messages) : 'Not recorded'],
           ['Excluded from capture', typeof context.capture_omitted_messages === 'number' ? String(context.capture_omitted_messages) : 'Not recorded'],
         ]);
         runElement('instructions').textContent = context.instructions || 'Not recorded';
+        renderRunMemory(run);
         const messages = runElement('messages'); messages.replaceChildren();
         for (const message of Array.isArray(context.messages) ? context.messages : []) {
           messages.append(runNode('h3', String(message.role || 'message').toUpperCase()), runNode('div', message.content, 'run-block'));
@@ -933,8 +977,8 @@ const homePage = `<!doctype html>
       let updateDraftRevision = 0;
       document.addEventListener('input', () => { ++updateDraftRevision; });
       window.agentUpdateSafety = () => ({
-        pending: busy || loadingConversation || passwordBusy || authBusy || connectionBusy || connectionSubmitting || usageBusy || usageSubmitting || searchBusy,
-        unsaved: Boolean(searchBudgetDirty() || searchKey.value || input.value || Array.from(document.querySelectorAll('input[type="password"], input[autocomplete="current-password"], input[autocomplete="new-password"]')).some(field => field.value) || document.querySelector('dialog[open]')),
+        pending: busy || loadingConversation || passwordBusy || authBusy || connectionBusy || connectionSubmitting || usageBusy || usageSubmitting || searchBusy || memoryBusy,
+        unsaved: Boolean(!memoryEl('form').hidden || searchBudgetDirty() || searchKey.value || input.value || Array.from(document.querySelectorAll('input[type="password"], input[autocomplete="current-password"], input[autocomplete="new-password"]')).some(field => field.value) || document.querySelector('dialog[open]')),
         revision: updateDraftRevision,
       });
       // END update reload safety
@@ -1435,10 +1479,164 @@ const homePage = `<!doctype html>
       }
       window.addEventListener('pagehide', clearSearchDraft);
 
+      // Account-scoped, explicit memory actions only. Never persist drafts in browser storage.
+      const memoryEl = id => document.getElementById('memory-' + id);
+      let memoryEpoch = 0, memoryBusy = false, memoryData = null, memoryEditID = '', memoryOrigin = null;
+      let memoryController = null;
+      function memoryControls() {
+        memoryEl('card').setAttribute('aria-busy', String(memoryBusy));
+        for (const control of memoryEl('card').querySelectorAll('button, input, select, textarea')) {
+          control.disabled = memoryBusy || (!memoryData && !['memory-retry','memory-content','memory-category','memory-cancel'].includes(control.id));
+        }
+      }
+      function closeMemoryForm(restoreFocus = true) {
+        memoryEl('form').reset(); memoryEl('form').hidden = true; memoryEditID = '';
+        memoryEl('form-error').textContent = '';
+        if (restoreFocus) (memoryOrigin?.isConnected && memoryOrigin.getClientRects().length ? memoryOrigin : memoryEl('create')).focus();
+        memoryOrigin = null;
+      }
+      function resetMemory() {
+        ++memoryEpoch;
+        if (memoryController) memoryController.abort();
+        memoryController = null; memoryBusy = false; memoryData = null;
+        closeMemoryForm(false); memoryEl('list').replaceChildren(); memoryEl('enabled').checked = false;
+        memoryEl('error').textContent = ''; memoryEl('status').textContent = 'Not loaded'; memoryControls();
+      }
+      function openMemoryForm(entry, origin) {
+        closeMemoryForm(false); memoryOrigin = origin; memoryEditID = entry?.id || '';
+        memoryEl('form-title').textContent = memoryEditID ? 'Edit memory' : 'Save memory';
+        memoryEl('category').value = entry?.category === 'project' ? 'project' : 'user';
+        memoryEl('content').value = entry?.content || '';
+        memoryEl('form').hidden = false; memoryControls();
+        memoryEl('content').focus(); memoryEl('form').scrollIntoView({block:'nearest'});
+      }
+      function renderMemory() {
+        const list = memoryEl('list'); list.replaceChildren();
+        memoryEl('enabled').checked = Boolean(memoryData?.enabled);
+        if (!memoryData) { memoryControls(); return; }
+        memoryEl('status').textContent = (memoryData.enabled ? 'Enabled' : 'Disabled') + ' · ' + memoryData.entries.length + ' saved memories';
+        if (!memoryData.entries.length) list.append(runNode('p', 'No saved memories.', 'connection-detail'));
+        for (const entry of memoryData.entries) {
+          const row = runNode('article', undefined, 'memory-entry');
+          const heading = runNode('h3', entry.category === 'project' ? 'Project' : 'User');
+          const body = runNode('p', entry.content, 'memory-fact');
+          const updated = runNode('p', entry.updated_at ? 'Updated: ' + entry.updated_at : '', 'connection-detail');
+          const actions = runNode('div', undefined, 'research-settings-actions');
+          const edit = runNode('button', 'Edit', 'reset'), remove = runNode('button', 'Delete', 'reset danger');
+          edit.type = remove.type = 'button'; edit.dataset.memoryEdit = entry.id; remove.dataset.memoryDelete = entry.id;
+          edit.setAttribute('aria-label', 'Edit ' + entry.category + ' memory: ' + entry.content);
+          remove.setAttribute('aria-label', 'Delete ' + entry.category + ' memory: ' + entry.content);
+          edit.addEventListener('click', () => openMemoryForm(entry, edit));
+          remove.addEventListener('click', () => {
+            if (memoryBusy) return;
+            const confirm = runNode('button', 'Confirm delete', 'reset danger'); confirm.type = 'button'; confirm.dataset.memoryConfirm = entry.id;
+            const cancel = runNode('button', 'Keep memory', 'reset'); cancel.type = 'button';
+            confirm.addEventListener('click', () => { void mutateMemory('/api/memories/' + encodeURIComponent(entry.id), 'DELETE', undefined, 'delete', entry.id); });
+            cancel.addEventListener('click', () => { actions.replaceChildren(edit, remove); remove.focus(); });
+            actions.replaceChildren(runNode('span', 'Delete this memory?'), confirm, cancel); confirm.focus();
+          });
+          actions.append(edit, remove); row.append(heading, body, updated, actions); list.append(row);
+        }
+        memoryControls();
+      }
+      async function memoryRequest(path, method, body, signal) {
+        const response = await fetch(path, {method, cache:'no-store', signal, headers:body === undefined ? {} : {'Content-Type':'application/json'}, body:body === undefined ? undefined : JSON.stringify(body)});
+        const result = await response.json();
+        if (!response.ok) throw new Error(typeof result.error === 'string' ? result.error : 'Memory request failed.');
+        return result;
+      }
+      function validMemoryData(data) { return data && typeof data.enabled === 'boolean' && Array.isArray(data.entries); }
+      async function readMemory() {
+        if (memoryBusy || settingsPanel.hidden || chatApp.hidden) return;
+        const epoch = memoryEpoch, controller = new AbortController(); memoryController = controller;
+        memoryBusy = true; memoryEl('error').textContent = ''; memoryEl('status').textContent = 'Loading memory…'; memoryControls();
+        const timer = setTimeout(() => controller.abort(), 15000);
+        try {
+          const data = await memoryRequest('/api/memories', 'GET', undefined, controller.signal);
+          if (epoch !== memoryEpoch) return;
+          if (!validMemoryData(data)) throw new Error('Invalid memory response.');
+          memoryData = data; renderMemory();
+        } catch (_) {
+          if (epoch === memoryEpoch) {
+            memoryData = null; memoryEl('list').replaceChildren(); memoryEl('status').textContent = 'Memory unavailable';
+            memoryEl('error').textContent = 'Could not load saved memory. Refresh memory to try again.';
+          }
+        } finally {
+          clearTimeout(timer);
+          if (epoch === memoryEpoch) {
+            memoryBusy = false; memoryController = null; memoryControls();
+            if (!memoryEl('form').hidden && document.activeElement.id === 'back-to-chat') memoryEl('content').focus();
+          }
+        }
+      }
+      async function mutateMemory(path, method, body, action, id) {
+        if (memoryBusy) return;
+        const epoch = memoryEpoch, controller = new AbortController(); memoryController = controller;
+        const error = memoryEl(action === 'save' ? 'form-error' : 'error');
+        memoryBusy = true; error.textContent = ''; memoryControls();
+        const timer = setTimeout(() => controller.abort(), 15000);
+        let acknowledged = false;
+        try {
+          const result = await memoryRequest(path, method, body, controller.signal);
+          if (epoch !== memoryEpoch) return;
+          acknowledged = true;
+          const data = await memoryRequest('/api/memories', 'GET', undefined, controller.signal);
+          if (epoch !== memoryEpoch) return;
+          if (!validMemoryData(data)) throw new Error('Could not verify memory.');
+          const saved = action === 'save' ? data.entries.find(entry => entry.id === result.entry?.id) : null;
+          if ((action === 'save' && (!saved || saved.content !== body.content || saved.category !== body.category)) ||
+              (action === 'delete' && data.entries.some(entry => entry.id === id)) ||
+              (action === 'toggle' && data.enabled !== body.enabled)) throw new Error('Change could not be verified.');
+          memoryData = data;
+          if (action === 'save' || (action === 'delete' && memoryEditID === id)) closeMemoryForm(false);
+          renderMemory(); memoryEl('status').textContent += ' · ' + (action === 'save' ? 'Memory saved.' : action === 'delete' ? 'Memory deleted.' : 'Setting saved.');
+          (action === 'save' || action === 'delete' ? memoryEl('create') : memoryEl('enabled')).focus();
+        } catch (failure) {
+          if (epoch === memoryEpoch) {
+            // Never replay an ambiguous write; force a fresh read before another save.
+            memoryData = null; memoryEl('list').replaceChildren(); memoryEl('enabled').checked = false;
+            memoryEl('status').textContent = 'Refresh required';
+            error.textContent = (acknowledged ? 'The change was accepted but could not be verified. ' : 'The request failed or its outcome is unknown. ') + 'Refresh memory before trying again. Your draft is kept; the request was not replayed.';
+          }
+        } finally {
+          clearTimeout(timer);
+          if (epoch === memoryEpoch) { memoryBusy = false; memoryController = null; memoryControls(); }
+        }
+      }
+      memoryEl('retry').addEventListener('click', () => { void readMemory(); });
+      memoryEl('create').addEventListener('click', event => openMemoryForm(null, event.currentTarget));
+      memoryEl('cancel').addEventListener('click', () => closeMemoryForm());
+      memoryEl('form').addEventListener('submit', event => {
+        event.preventDefault(); if (memoryBusy || !memoryData) return;
+        const content = memoryEl('content').value.trim();
+        if (!content) { memoryEl('form-error').textContent = 'Enter a fact to remember.'; memoryEl('content').focus(); return; }
+        void mutateMemory('/api/memories' + (memoryEditID ? '/' + encodeURIComponent(memoryEditID) : ''), memoryEditID ? 'PUT' : 'POST', {category:memoryEl('category').value,content}, 'save');
+      });
+      memoryEl('enabled').addEventListener('change', () => {
+        if (!memoryData || memoryBusy) return;
+        void mutateMemory('/api/memory-settings', 'PUT', {enabled:memoryEl('enabled').checked}, 'toggle');
+      });
+      memoryEl('export').addEventListener('click', async () => {
+        if (memoryBusy || !memoryData) return;
+        const epoch = memoryEpoch, controller = new AbortController(); memoryController = controller;
+        memoryBusy = true; memoryEl('error').textContent = ''; memoryControls();
+        const timer = setTimeout(() => controller.abort(), 15000);
+        try {
+          const response = await fetch('/api/memories/export', {cache:'no-store',signal:controller.signal});
+          if (!response.ok) throw new Error('export');
+          const blob = await response.blob(); if (epoch !== memoryEpoch) return;
+          const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = 'agent-memories.json';
+          document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+          memoryEl('status').textContent = 'Memory export downloaded.';
+        } catch (_) { if (epoch === memoryEpoch) memoryEl('error').textContent = 'Memory export failed. Try again.'; }
+        finally { clearTimeout(timer); if (epoch === memoryEpoch) { memoryBusy = false; memoryController = null; memoryControls(); } }
+      });
+      window.addEventListener('pagehide', resetMemory);
+
       function showSettings(open, updateURL = true) {
         if (researchFlow) return;
         if (open) closeRunInspector(false);
-        if (!open) { stopUsage(); leaveSearchSettings(); }
+        if (!open) { stopUsage(); leaveSearchSettings(); resetMemory(); }
         if (updateURL && (window.location.hash === '#settings') !== open) {
           const url = new URL(window.location.href);
           url.hash = open ? 'settings' : '';
@@ -1455,7 +1653,7 @@ const homePage = `<!doctype html>
         closeAccount(false);
         setSidebar(false, false);
         if (!passwordBusy) { passwordForm.reset(); passwordStatus.textContent = ''; }
-        if (open) { void readSearchSettings(); document.getElementById('back-to-chat').focus(); if (!connectionBusy) refreshConnectionState(); }
+        if (open) { void readSearchSettings(); void readMemory(); document.getElementById('back-to-chat').focus(); if (!connectionBusy) refreshConnectionState(); }
         else input.focus();
       }
       settingsButton.addEventListener('click', function () { showSettings(true); });
@@ -1742,6 +1940,7 @@ const homePage = `<!doctype html>
       }
 
       async function requireSignIn() {
+        resetMemory();
         try {
           const response = await fetch('/api/auth/me', { cache: 'no-store' });
           if (!response.ok) throw new Error('signed out');
@@ -1761,6 +1960,7 @@ const homePage = `<!doctype html>
       document.getElementById('logout-button').addEventListener('click', async function () {
         if (researchFlow) return;
         if (searchBusy) return;
+        resetMemory();
         leaveSearchSettings();
         const button = this;
         const error = document.getElementById('logout-error');
@@ -1912,6 +2112,17 @@ const homePage = `<!doctype html>
         if (role === 'assistant') renderMessageText(text, content);
         else text.textContent = content;
         bubble.append(sender, text);
+        if (role === 'user') {
+          const remember = document.createElement('button');
+          remember.type = 'button'; remember.className = 'reset remember-message'; remember.textContent = 'Remember';
+          remember.setAttribute('aria-label', 'Review this message and save as memory');
+          remember.addEventListener('click', () => {
+            if (researchFlow) return;
+            showSettings(true);
+            openMemoryForm({category:'user',content}, remember);
+          });
+          bubble.append(remember);
+        }
         messageList.appendChild(bubble);
         messageList.scrollTop = messageList.scrollHeight;
         return bubble;

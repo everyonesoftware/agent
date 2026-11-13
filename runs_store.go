@@ -21,16 +21,17 @@ var runIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F
 var errRunExists = errors.New("run already exists")
 
 type RunContext struct {
-	CurrentDate            string        `json:"current_date"`
-	Timezone               string        `json:"timezone"`
-	UTCOffset              string        `json:"utc_offset"`
-	InstructionsVersion    string        `json:"instructions_version"`
-	Instructions           string        `json:"instructions"`
-	Messages               []chatMessage `json:"messages"`
-	OmittedMessages        int           `json:"omitted_messages"`
-	CaptureOmittedMessages int           `json:"capture_omitted_messages"`
-	Truncated              bool          `json:"truncated"`
-	Tools                  []any         `json:"tools"`
+	Memory                 *MemorySnapshot `json:"memory,omitempty"`
+	CurrentDate            string          `json:"current_date"`
+	Timezone               string          `json:"timezone"`
+	UTCOffset              string          `json:"utc_offset"`
+	InstructionsVersion    string          `json:"instructions_version"`
+	Instructions           string          `json:"instructions"`
+	Messages               []chatMessage   `json:"messages"`
+	OmittedMessages        int             `json:"omitted_messages"`
+	CaptureOmittedMessages int             `json:"capture_omitted_messages"`
+	Truncated              bool            `json:"truncated"`
+	Tools                  []any           `json:"tools"`
 }
 type RunEvent struct {
 	Name   string    `json:"name"`

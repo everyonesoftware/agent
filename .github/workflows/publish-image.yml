@@ -53,6 +53,9 @@ jobs:
       - name: Test browser UI
         run: node tests/ui.mjs
 
+      - name: Test memory controls and context disclosure
+        run: node tests/memory-ui.mjs
+
       - name: Verify private Brave settings and research integration
         run: AGENT_SETTINGS_BROWSER=1 go test -run '^TestResearchSettingsBrowser$' -count=1 -v .
 
@@ -63,6 +66,11 @@ jobs:
 
       - name: Verify Run Inspector against the production server
         run: node tests/run-inspector-browser.mjs "$RUNNER_TEMP/agent-pwa-a"
+
+      - name: Verify account memory against the production server
+        env:
+          MEMORY_SCRATCH: ${{ runner.temp }}/agent-memory
+        run: node tests/memory-browser.mjs "$RUNNER_TEMP/agent-pwa-a"
 
       - name: Verify task-scoped research consent against the production server
         run: node tests/research-browser.mjs "$RUNNER_TEMP/agent-pwa-a"

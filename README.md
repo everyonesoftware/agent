@@ -239,6 +239,61 @@ ChatGPT account is eligible for function calling or that a Brave credential work
 Provider capability/authorization errors are surfaced rather than silently
 switching to a different account or billing path.
 
+## Explicit account memory
+
+In **Settings → Memory**, add, review, edit, delete, or export saved facts in the
+**User** and **Project** categories. Both categories belong to your Agent account
+and apply to ordinary chats across conversations; Project is a label, not a
+separate project-access boundary. The **Remember** action on your own messages
+opens an editable draft that you must explicitly save. Alternatively, send
+`/remember [fact]` to save that exact fact as User memory on the server without
+model inference. The model cannot autonomously write memory, and ordinary
+natural-language requests do not implicitly save facts.
+
+Memory is enabled by default. **Include saved memory in new chats** controls
+whether saved entries are sent to your selected model provider on subsequent
+ordinary chat requests, including turns in an existing conversation. Disabling
+does not delete entries or prevent deliberate edits. Public-web research excludes
+saved memory and does not permit `/remember` writes. This does not remove private
+information you explicitly put in a research prompt.
+
+Saved facts persist in the local account SQLite database across restarts, with
+the same account isolation and plaintext-at-rest protections as conversations.
+Do not save secrets. There is no automatic extraction or retroactive recall of
+old chats. Deleting or disabling memory affects future memory injection only:
+earlier messages, exports, and retained traces may still contain previous copies.
+Run Inspector's **Context → Memory** shows the exact memory snapshot included
+for that ordinary chat, or its disabled/empty state; research explicitly shows
+memory was excluded. `/remember` records a local `memory_save` lifecycle event,
+not a fabricated provider request or model-selected function call.
+
+Each account supports at most 32 entries, 1024 UTF-8 bytes per trimmed fact, and
+a 12 KiB encoded snapshot including metadata. Explicit saves are rejected rather
+than silently evicting older entries. Capacity conflicts return 409; malformed
+input returns 400; unavailable local memory storage returns 503 on saves.
+
+Authenticated no-store routes are `GET /api/memories`, `POST /api/memories`,
+`PUT /api/memories/{id}`, `DELETE /api/memories/{id}`,
+`PUT /api/memory-settings`, and `GET /api/memories/export`. Create/update bodies
+are `{ "category": "user", "content": "A fact" }`; settings accepts
+`{ "enabled": false }`. Export downloads `memories.json` containing the current
+enabled state and entries, never another account's memory.
+
+Verification uses a real production server, isolated SQLite accounts and headless
+Chromium, with only the model HTTP endpoint replaced by a local fixture:
+
+```sh
+go build -o agent-memory-test .
+node tests/memory-ui.mjs
+node tests/memory-browser.mjs ./agent-memory-test
+```
+
+The browser check covers explicit save, fresh-chat wire/context disclosure,
+editing, deletion, export, disable/re-enable, account isolation, and server restart.
+It performs no live model inference or production-account mutation. Optional
+`MEMORY_SCRATCH`, `MEMORY_ARTIFACTS`, and `UI_SCREENSHOTS` paths keep test storage
+and desktop/phone evidence in a chosen scratch directory.
+
 ## Run Inspector and trusted runtime context
 
 Each chat turn prepends a server-owned system message with the current server date,

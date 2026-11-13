@@ -43,7 +43,7 @@ test('installable metadata and Settings update controls are embedded in the real
 test('Web app updates is the first settings card', () => {
   const settings = page.slice(page.indexOf('<section class="settings-panel"'), page.indexOf('<div class="chat-layout"'));
   const cards = [...settings.matchAll(/<section class="settings-card"[^>]*aria-labelledby="([^"]+)"/g)].map(match => match[1]);
-  assert.deepEqual(cards, ['pwa-title', 'connection-title', 'research-settings-title', 'password-title', 'signout-title']);
+  assert.deepEqual(cards, ['pwa-title', 'connection-title', 'research-settings-title', 'memory-title', 'password-title', 'signout-title']);
 });
 test('checks compare build IDs even when the version is unchanged, and Later never reloads', async () => {
   const f=fixture(); await settle(); assert.equal(f.registrations,1);
@@ -143,12 +143,17 @@ test('real page safety bridge reads live chat, request, password and dialog stat
   const budgetDirty=page.match(/      function searchBudgetDirty\(\) \{[\s\S]*?\n      \}/);
   assert.ok(budgetFields && budgetDirty,'include the real budget draft check rather than a stub');
   const context={window:{},document:Object.assign(new Events(),{querySelectorAll:selector=>{context.passwordSelector=selector;return context.passwords;},querySelector:()=>context.dialog}),input:{value:''},searchKey:{value:''},passwords:[],dialog:null,
-    busy:false,loadingConversation:false,passwordBusy:false,authBusy:false,connectionBusy:false,connectionSubmitting:false,usageBusy:false,usageSubmitting:false,searchBusy:false,searchBudgetDraft:null,searchBudgetBase:null};
+    busy:false,loadingConversation:false,passwordBusy:false,authBusy:false,connectionBusy:false,connectionSubmitting:false,usageBusy:false,usageSubmitting:false,searchBusy:false,searchBudgetDraft:null,searchBudgetBase:null,memoryBusy:false,memoryForm:{hidden:true},memoryEl:id=>{assert.equal(id,'form');return context.memoryForm;}};
   vm.runInNewContext('const searchBudgetFields = '+budgetFields[1]+';\n'+budgetDirty[0]+'\n'+match[1],context);
   const safety=()=>context.window.agentUpdateSafety();
   assert.equal(safety().pending,false); assert.equal(safety().unsaved,false);
   assert.match(context.passwordSelector,/autocomplete/, 'revealed password fields must remain guarded');
-  for(const name of ['busy','loadingConversation','passwordBusy','authBusy','connectionBusy','connectionSubmitting','usageBusy','usageSubmitting','searchBusy']) {context[name]=true; assert.equal(safety().pending,true,name); context[name]=false;}
+  for(const name of ['busy','loadingConversation','passwordBusy','authBusy','connectionBusy','connectionSubmitting','usageBusy','usageSubmitting','searchBusy','memoryBusy']) {context[name]=true; assert.equal(safety().pending,true,name); context[name]=false;}
+  context.memoryForm={hidden:false,value:'private memory draft'};
+  assert.equal(safety().unsaved,true,'open memory draft guards reload');
+  assert.ok(!JSON.stringify(safety()).includes(context.memoryForm.value),'memory draft never leaves safety bridge');
+  context.memoryForm.hidden=true;
+  assert.equal(safety().unsaved,false,'closed memory draft releases reload guard');
   context.input.value='private draft'; assert.equal(safety().unsaved,true); context.input.value='';
   context.searchKey.value='synthetic-brave-key'; assert.equal(safety().unsaved,true); assert.ok(!JSON.stringify(safety()).includes(context.searchKey.value)); context.searchKey.value='';
   context.searchBudgetBase={enabled:false,maximum:'1000',period:'month',timezone:'UTC'};

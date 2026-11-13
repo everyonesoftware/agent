@@ -98,7 +98,7 @@ try{
  mode='';await click('research-settings-retry');await settled();
  ok(await js("document.querySelector('#research-budget-maximum').value==='2100'"),'Explicit metadata retry preserves cap draft');
  await editBudget('research-budget-maximum','2000');
- ok(await js("Array.from(document.querySelectorAll('.settings-content > .settings-card')).map(e=>e.querySelector('h2').textContent).join('|')==='Web app updates|ChatGPT connection|Web research|Reset password|Sign out'"),'Card order preserves existing settings');
+ ok(await js("Array.from(document.querySelectorAll('.settings-content > .settings-card')).map(e=>e.querySelector('h2').textContent).join('|')==='Web app updates|ChatGPT connection|Web research|Memory|Reset password|Sign out'"),'Card order includes Memory and preserves existing settings');
  await fill();await click('research-key-show');ok(await js("document.querySelector('#research-api-key').type==='text' && window.agentUpdateSafety().unsaved"),'Shown candidate remains an unsaved draft');
  for(const width of [1280,390,320]){
   await cdp('Emulation.setDeviceMetricsOverride',{width,height:850,deviceScaleFactor:1,mobile:width<600});

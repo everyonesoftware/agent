@@ -50,7 +50,7 @@ func newAccountStore(path string) (*accountStore, error) {
 	if err := file.Close(); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", path+"?_foreign_keys=on&_journal_mode=DELETE&_busy_timeout=5000")
+	db, err := sql.Open("sqlite", path+"?_pragma=foreign_keys(1)&_pragma=journal_mode(DELETE)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
 	}
@@ -70,6 +70,10 @@ CREATE INDEX IF NOT EXISTS messages_conversation ON messages(user_id, conversati
 		return nil, err
 	}
 	if err = migrateRuns(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err = migrateMemory(db); err != nil {
 		db.Close()
 		return nil, err
 	}

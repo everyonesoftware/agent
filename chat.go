@@ -40,11 +40,6 @@ func chatHandlerWithStore(provider modelProvider, accounts *accountStore) http.H
 }
 func chatHandlerWithResearch(provider modelProvider, accounts *accountStore, research *researchService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !provider.configured() {
-			writeChatError(w, http.StatusServiceUnavailable, "Connect ChatGPT from a browser on the Agent host, or configure LLM_MODEL and provider settings.")
-			return
-		}
-
 		r.Body = http.MaxBytesReader(w, r.Body, maxChatRequestBytes)
 		decoder := json.NewDecoder(r.Body)
 		decoder.DisallowUnknownFields()
@@ -107,8 +102,30 @@ func chatHandlerWithResearch(provider modelProvider, accounts *accountStore, res
 			}
 			defer func() { research.finish(task, researchErr) }()
 		}
+		rememberContent, remember := explicitMemoryCommand(request.Messages[len(request.Messages)-1].Content)
+		if remember && (accounts == nil || task != nil || requestIsCrossSite(r)) {
+			writeChatError(w, http.StatusForbidden, "Memory saves require an explicit local chat action, outside public-web research.")
+			return
+		}
+		if !remember && !provider.configured() {
+			writeChatError(w, http.StatusServiceUnavailable, "Connect ChatGPT from a browser on the Agent host, or configure LLM_MODEL and provider settings.")
+			return
+		}
 		now := time.Now()
 		messages := append([]chatMessage{{Role: "system", Content: instructionsAt(now)}}, request.Messages...)
+		var memory *MemorySnapshot
+		if accounts != nil && task == nil && !remember {
+			snapshot, err := accounts.memorySnapshot(user)
+			if err != nil {
+				writeChatError(w, 500, "Memory could not be loaded. No model request was sent; try again.")
+				return
+			}
+			if !snapshot.Enabled {
+				snapshot.Entries = []MemoryEntry{}
+			}
+			memory = &snapshot
+			messages[0].Content += memoryInstructions(snapshot)
+		}
 		if task != nil {
 			messages = []chatMessage{{Role: "system", Content: researchInstructions(now, task.SearchAvailable)}, request.Messages[len(request.Messages)-1]}
 		}
@@ -121,7 +138,15 @@ func chatHandlerWithResearch(provider modelProvider, accounts *accountStore, res
 				writeChatError(w, 409, "Run ID already exists.")
 				return
 			}
+			// Unlike inference, a local save has a durable side effect. Reserve
+			// its run ID first so retries cannot bypass duplicate-write protection.
+			if remember && captureErr != nil {
+				writeChatError(w, http.StatusServiceUnavailable, "Memory was not saved because its run could not be recorded. Try again later.")
+				return
+			}
 			if capture != nil {
+				capture.run.Context.Memory = memory
+				capture.persist()
 				ctx = context.WithValue(ctx, runContextKey{}, capture)
 				w.Header().Set("X-Agent-Run-ID", capture.run.ID)
 			}
@@ -138,7 +163,21 @@ func chatHandlerWithResearch(provider modelProvider, accounts *accountStore, res
 		}
 		var reply string
 		var err error
-		if task != nil {
+		if remember {
+			_, err = accounts.saveMemory(user, "user", rememberContent)
+			if err == nil {
+				reply = "Saved to your local user memory. Manage it in Memory settings. When memory is enabled, it is included in future normal chats sent to your model provider, but not public-web research."
+				if capture != nil {
+					capture.run.Events = append(capture.run.Events, RunEvent{"memory_save", "Explicit /remember command saved local user memory; no model request sent", time.Now(), "completed"})
+				}
+			} else {
+				if capture != nil {
+					capture.finish("", err)
+				}
+				memoryHTTPError(w, err)
+				return
+			}
+		} else if task != nil {
 			reply, err = research.run(ctx, task, provider, messages, request.Model)
 			researchErr = err
 		} else {
