@@ -36,6 +36,7 @@ func newServerWithResearchWebFactory(factory func(string) *researchWeb) http.Han
 		mux.Handle("GET /api/auth/me", accounts.middleware(http.HandlerFunc(accounts.meHandler)))
 		mux.Handle("POST /api/auth/password", accounts.middleware(http.HandlerFunc(accounts.passwordChangeHandler)))
 		registerMemoryRoutes(mux, accounts)
+		registerMemorySuggestionRoutes(mux, accounts, provider)
 		research := newAccountResearchService(accounts)
 		research.settings.webFactory = factory
 		research.register(mux, accounts)

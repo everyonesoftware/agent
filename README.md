@@ -286,11 +286,21 @@ switching to a different account or billing path.
 In **Settings → Memory**, add, review, edit, delete, or export saved facts in the
 **User** and **Project** categories. Both categories belong to your Agent account
 and apply to ordinary chats across conversations; Project is a label, not a
-separate project-access boundary. The **Remember** action on your own messages
-opens an editable draft that you must explicitly save. Alternatively, send
+separate project-access boundary. The **⋯** menu beside **You** offers
+**Suggest memories…** without leaving the conversation. Choosing it sends only
+that message and extraction instructions to your selected model provider—not
+earlier chat history or saved memories. Suggestions are proposals, not saved
+facts: review and edit the unchecked items, select the ones you want, and/or add
+your own text under **Something else?**, then explicitly save. Empty results and
+analysis failures still allow a manual entry. Existing exact matches are marked
+as already remembered; other wording may still need your review. No automatic
+analysis runs when messages are displayed. Selected entries are saved atomically;
+the inline **Undo** removes only entries created by that save and refuses to
+delete an entry edited afterward, including edits in another tab. Alternatively, send
 `/remember [fact]` to save that exact fact as User memory on the server without
 model inference. The model cannot autonomously write memory, and ordinary
-natural-language requests do not implicitly save facts.
+natural-language requests do not implicitly save facts. Model-generated
+suggestions can be incomplete or incorrect; they never authorize a memory write.
 
 Memory is enabled by default. **Include saved memory in new chats** controls
 whether saved entries are sent to your selected model provider on subsequent
@@ -301,8 +311,10 @@ information you explicitly put in a research prompt.
 
 Saved facts persist in the local account SQLite database across restarts, with
 the same account isolation and plaintext-at-rest protections as conversations.
-Do not save secrets. There is no automatic extraction or retroactive recall of
-old chats. Deleting or disabling memory affects future memory injection only:
+Do not save secrets. Extraction runs only when you choose **Suggest memories…**;
+there is no background extraction or retroactive recall of old chats. Disabling
+memory injection does not block an explicit suggestion request, which still
+sends the selected message to your provider. Deleting or disabling memory affects future memory injection only:
 earlier messages, exports, and retained traces may still contain previous copies.
 Run Inspector's **Context → Memory** shows the exact memory snapshot included
 for that ordinary chat, or its disabled/empty state; research explicitly shows

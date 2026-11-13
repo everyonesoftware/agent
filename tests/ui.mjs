@@ -723,7 +723,7 @@ try {
   ok(!(await js("!!document.querySelector('#conversation-list img')")), 'Conversation titles are text, not injected HTML');
   await session('A quieter week');
   await expectEventually("document.querySelector('#messages').textContent.includes('Leave two evenings open.')", 'Saved conversation did not load');
-  ok(await js("document.querySelector('.message.assistant .sender').textContent==='Agent' && document.querySelector('.message.user .sender').textContent==='You'"), 'Saved messages display Agent without changing the user label');
+  ok(await js("document.querySelector('.message.assistant .sender').textContent==='Agent' && document.querySelector('.message.user .sender').firstChild.textContent==='You' && !!document.querySelector('.message.user .sender .message-actions-toggle')"), 'Saved messages display Agent and preserve You beside the compact action menu');
   ok(await js("document.querySelector('#conversation-title').textContent==='A quieter week' && !!document.querySelector('#conversation-list [aria-current=\"true\"]')"), 'Saved-session selection updates title and current row');
   await js("const search=document.querySelector('#conversation-search');search.value='dinner';search.dispatchEvent(new Event('input'))");
   ok(await js("Array.from(document.querySelectorAll('#conversation-list button')).filter(b=>b.getClientRects().length).length===1"), 'Session search filters the sidebar');

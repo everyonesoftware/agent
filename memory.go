@@ -22,8 +22,9 @@ const (
 )
 
 var (
-	errMemoryInput = errors.New("Use category user or project and nonempty memory content of at most 1024 UTF-8 bytes.")
-	errMemoryLimit = errors.New("Memory is full. Keep at most 32 entries and a 12 KiB encoded snapshot; edit or delete an entry first.")
+	errMemoryInput   = errors.New("Use category user or project and nonempty memory content of at most 1024 UTF-8 bytes.")
+	errMemoryLimit   = errors.New("Memory is full. Keep at most 32 entries and a 12 KiB encoded snapshot; edit or delete an entry first.")
+	errMemoryChanged = errors.New("Memory entry changed. Refresh before trying to undo.")
 )
 
 type MemoryEntry struct {
@@ -225,11 +226,26 @@ func memoryAffected(result sql.Result) error {
 }
 
 func (s *accountStore) deleteMemory(user authUser, id string) error {
+	return s.deleteMemoryRevision(user, id, "")
+}
+
+// An empty revision preserves legacy unconditional Settings deletes. Compare
+// under the writer lock so no edit can commit between checking and deleting.
+func (s *accountStore) deleteMemoryRevision(user authUser, id, revision string) error {
 	tx, err := s.memoryWriteTx(user)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if revision != "" {
+		var current string
+		if err := tx.QueryRow(`SELECT updated_at FROM memory_entries WHERE id=? AND user_id=?`, id, user.ID).Scan(&current); err != nil {
+			return err
+		}
+		if current != revision {
+			return errMemoryChanged
+		}
+	}
 	result, err := tx.Exec(`DELETE FROM memory_entries WHERE id=? AND user_id=?`, id, user.ID)
 	if err != nil {
 		return err
@@ -282,6 +298,8 @@ func memoryHTTPError(w http.ResponseWriter, err error) {
 		writeChatError(w, http.StatusBadRequest, errMemoryInput.Error())
 	case errors.Is(err, errMemoryLimit):
 		writeChatError(w, http.StatusConflict, errMemoryLimit.Error())
+	case errors.Is(err, errMemoryChanged):
+		writeChatError(w, http.StatusPreconditionFailed, errMemoryChanged.Error())
 	case errors.Is(err, sql.ErrNoRows):
 		writeChatError(w, http.StatusNotFound, "Memory entry not found.")
 	default:
@@ -330,7 +348,12 @@ func (s *accountStore) memoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodDelete {
-		if err := s.deleteMemory(user, r.PathValue("id")); err != nil {
+		revision, valid := memoryDeleteRevision(r.Header)
+		if !valid {
+			writeChatError(w, http.StatusBadRequest, "If-Match must be one quoted memory updated_at timestamp.")
+			return
+		}
+		if err := s.deleteMemoryRevision(user, r.PathValue("id"), revision); err != nil {
 			memoryHTTPError(w, err)
 			return
 		}
@@ -358,4 +381,29 @@ func (s *accountStore) memoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeChatJSON(w, status, map[string]MemoryEntry{"entry": entry})
+}
+
+// Only a single strong, quoted timestamp is supported, not wildcard/weak/list
+// validators. Keep the original opaque value; equivalent instants are not the
+// same revision. An explicitly empty header is invalid, not unconditional.
+func memoryDeleteRevision(header http.Header) (string, bool) {
+	values := header.Values("If-Match")
+	if len(values) == 0 {
+		return "", true
+	}
+	if len(values) != 1 {
+		return "", false
+	}
+	var revision string
+	if json.Unmarshal([]byte(values[0]), &revision) != nil || revision == "" {
+		return "", false
+	}
+	quoted, _ := json.Marshal(revision)
+	if string(quoted) != values[0] {
+		return "", false
+	}
+	if _, err := time.Parse(time.RFC3339Nano, revision); err != nil {
+		return "", false
+	}
+	return revision, true
 }

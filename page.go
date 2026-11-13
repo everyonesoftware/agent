@@ -84,7 +84,28 @@ const homePage = `<!doctype html>
     .memory-entry { padding: 16px 0; border-bottom: 1px solid var(--line); }
     .memory-entry h3 { font-size: 12px; margin: 0 0 8px; }
     .memory-fact { font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .remember-message { margin-top: 8px; min-height: 44px; font-size: 11px; }
+    .message.user .sender { position: relative; gap: 4px; }
+    .message-actions-toggle { width: 44px; height: 44px; margin: -10px 0; flex: 0 0 44px; color: var(--muted); font-size: 20px; }
+    .message-actions-toggle:hover { color: var(--accent); background: var(--field); }
+    .message-action-menu { position: absolute; z-index: 15; top: calc(100% + 10px); right: 0; width: 210px; max-width: calc(100vw - 70px); padding: 5px; background: #252a27; border: 1px solid var(--line); border-radius: 7px; box-shadow: 0 8px 24px #0005; }
+    .message-action-menu button { display: block; width: 100%; min-height: 44px; padding: 9px; text-align: left; font-size: 12px; }
+    .message-action-menu button:hover { background: var(--field); }
+    #memory-suggestion-dialog { width: min(560px, calc(100vw - 32px)); max-width: calc(100vw - 32px); max-height: calc(100dvh - 40px); padding: 22px; overflow-y: auto; overflow-wrap: anywhere; color: #e1e6e2; background: #252a27; border: 1px solid var(--line); border-radius: 10px; }
+    #memory-suggestion-dialog::backdrop { background: #0008; }
+    #memory-suggestion-dialog h2 { margin: 0 0 10px; font-size: 18px; font-weight: 500; }
+    #memory-suggestion-dialog p, #memory-suggestion-dialog label { font-size: 12px; }
+    #memory-suggestion-dialog textarea { width: 100%; min-width: 0; max-width: 100%; min-height: 76px; resize: vertical; padding: 10px; border: 1px solid var(--line); border-radius: 5px; background: #202322; color: inherit; font: inherit; font-size: 13px; }
+    .memory-suggestion-row { display: grid; grid-template-columns: 44px minmax(0, 1fr); margin: 14px 0; }
+    .memory-suggestion-choice { display: grid; place-items: center; min-height: 44px; align-self: start; }
+    .memory-suggestion-select { width: 18px; height: 18px; accent-color: var(--accent); }
+    .memory-suggestion-row small { grid-column: 2; color: var(--muted); font-size: 11px; }
+    .memory-suggestion-actions { position: sticky; bottom: -22px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 14px 0; background: #252a27; }
+    .memory-suggestion-actions button, .memory-saved-confirmation button { min-height: 44px; }
+    .memory-saved-confirmation { margin-top: 12px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+    @media (max-width: 640px) {
+      #memory-suggestion-dialog { position: fixed; inset: auto 0 0; margin: 0; width: 100%; max-width: 100%; max-height: 85dvh; border-radius: 14px 14px 0 0; padding: 20px 16px max(20px, env(safe-area-inset-bottom)); }
+      .memory-suggestion-actions { bottom: -20px; padding-bottom: max(14px, env(safe-area-inset-bottom)); }
+    }
     #run-memory .memory-fact { font-size: 12px; }
     .connection-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 6px; }
     .connection-heading h2 { margin: 0; }
@@ -620,6 +641,17 @@ const homePage = `<!doctype html>
     </div>
     </div>
   </main>
+  <dialog id="memory-suggestion-dialog" aria-labelledby="memory-suggestion-title" aria-describedby="memory-suggestion-disclosure">
+    <h2 id="memory-suggestion-title">Suggest memories</h2>
+    <p id="memory-suggestion-disclosure">Uses your selected model to analyze this message. Nothing is saved until you confirm.</p>
+    <p class="connection-detail">Review and edit suggestions, then select what to save. Saving does not enable memory automatically.</p>
+    <p id="memory-suggestion-status" role="status" aria-live="polite"></p>
+    <div id="memory-suggestion-list"></div>
+    <label for="memory-suggestion-custom">Something else?</label>
+    <textarea id="memory-suggestion-custom" rows="3" placeholder="Optional fact to remember"></textarea>
+    <p id="memory-suggestion-error" class="menu-error" role="alert"></p>
+    <div class="memory-suggestion-actions"><button id="memory-suggestion-retry" class="reset" type="button" hidden>Retry analysis</button><button id="memory-suggestion-cancel" class="reset" type="button">Cancel</button><button id="memory-suggestion-save" class="send" type="button">Save selected</button></div>
+  </dialog>
   <dialog class="connection-dialog" id="disconnect-dialog" aria-labelledby="disconnect-title" aria-describedby="disconnect-description">
     <form id="connection-confirm-form">
     <h2 id="disconnect-title">Disconnect ChatGPT?</h2>
@@ -977,8 +1009,8 @@ const homePage = `<!doctype html>
       let updateDraftRevision = 0;
       document.addEventListener('input', () => { ++updateDraftRevision; });
       window.agentUpdateSafety = () => ({
-        pending: busy || loadingConversation || passwordBusy || authBusy || connectionBusy || connectionSubmitting || usageBusy || usageSubmitting || searchBusy || memoryBusy,
-        unsaved: Boolean(!memoryEl('form').hidden || searchBudgetDirty() || searchKey.value || input.value || Array.from(document.querySelectorAll('input[type="password"], input[autocomplete="current-password"], input[autocomplete="new-password"]')).some(field => field.value) || document.querySelector('dialog[open]')),
+        pending: busy || loadingConversation || passwordBusy || authBusy || connectionBusy || connectionSubmitting || usageBusy || usageSubmitting || searchBusy || memoryBusy || memorySuggestionBusy,
+        unsaved: Boolean(memorySuggestionState || !memoryEl('form').hidden || searchBudgetDirty() || searchKey.value || input.value || Array.from(document.querySelectorAll('input[type="password"], input[autocomplete="current-password"], input[autocomplete="new-password"]')).some(field => field.value) || document.querySelector('dialog[open]')),
         revision: updateDraftRevision,
       });
       // END update reload safety
@@ -1480,6 +1512,212 @@ const homePage = `<!doctype html>
       window.addEventListener('pagehide', clearSearchDraft);
 
       // Account-scoped, explicit memory actions only. Never persist drafts in browser storage.
+      const suggestionEl = id => document.getElementById('memory-suggestion-' + id);
+      let memorySuggestionState = null, memorySuggestionBusy = false, memorySuggestionEpoch = 0;
+      // An interrupted write still requires a fresh read after dismiss/reopen.
+      let memorySuggestionNeedsRefresh = false;
+      let memorySuggestionController = null, messageMenu = null, messageMenuOrigin = null, messageMenuSequence = 0;
+      function closeMessageMenu(restore = false) {
+        if (messageMenu) messageMenu.hidden = true;
+        if (messageMenuOrigin) { messageMenuOrigin.setAttribute('aria-expanded', 'false'); if (restore && messageMenuOrigin.isConnected) messageMenuOrigin.focus(); }
+        messageMenu = null; messageMenuOrigin = null;
+      }
+      document.addEventListener('click', event => {
+        if (messageMenu && !messageMenu.contains(event.target) && event.target !== messageMenuOrigin) closeMessageMenu();
+      });
+      document.addEventListener('keydown', event => {
+        if (!messageMenu) return;
+        if (event.key === 'Escape') { event.preventDefault(); closeMessageMenu(true); }
+        else if (['ArrowDown','ArrowUp','Home','End'].includes(event.key)) {
+          event.preventDefault(); const items = Array.from(messageMenu.querySelectorAll('button:not(:disabled)'));
+          const index = items.indexOf(document.activeElement);
+          const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length;
+          items[next]?.focus();
+        } else if (event.key === 'Tab') closeMessageMenu();
+      });
+      function closeMemorySuggestions(restore = true) {
+        const origin = memorySuggestionState?.origin;
+        ++memorySuggestionEpoch; memorySuggestionController?.abort(); memorySuggestionController = null;
+        memorySuggestionState = null; memorySuggestionBusy = false;
+        if (suggestionEl('dialog').open) suggestionEl('dialog').close();
+        suggestionEl('list').replaceChildren(); suggestionEl('custom').value = '';
+        suggestionEl('error').textContent = ''; suggestionEl('status').textContent = '';
+        closeMessageMenu();
+        if (restore) (origin?.isConnected && origin.getClientRects().length ? origin : input).focus();
+      }
+      function suggestionControls() {
+        const state = memorySuggestionState;
+        suggestionEl('dialog').setAttribute('aria-busy', String(memorySuggestionBusy));
+        suggestionEl('save').disabled = memorySuggestionBusy || !state || state.refreshRequired || !selectedMemoryEntries().some(entry => entry.content !== state.existingCustom);
+        suggestionEl('retry').disabled = memorySuggestionBusy;
+        if (state?.refreshRequired) { suggestionEl('retry').hidden = false; suggestionEl('retry').textContent = 'Refresh saved memory'; }
+        if (state?.refreshRequired && !memorySuggestionBusy) suggestionEl('status').textContent = 'A previous save has an unknown outcome. Refresh saved memory before saving again.';
+        for (const row of state?.rows || []) { row.select.disabled = memorySuggestionBusy || row.saved; row.text.disabled = memorySuggestionBusy || row.saved; }
+        // The optional custom draft stays editable even during analysis and retry.
+        suggestionEl('custom').disabled = Boolean(memorySuggestionBusy && state?.writing);
+      }
+      function renderMemorySuggestions(suggestions) {
+        const state = memorySuggestionState; if (!state) return;
+        state.rows = []; suggestionEl('list').replaceChildren();
+        for (const [index, item] of suggestions.entries()) {
+          const row = runNode('div', undefined, 'memory-suggestion-row');
+          const choice = runNode('label', undefined, 'memory-suggestion-choice');
+          const select = document.createElement('input'); select.type = 'checkbox'; select.className = 'memory-suggestion-select'; select.checked = false;
+          select.setAttribute('aria-label', 'Save suggestion ' + (index + 1));
+          const text = document.createElement('textarea'); text.className = 'memory-suggestion-text'; text.value = item.content; text.rows = 3;
+          text.setAttribute('aria-label', 'Suggested memory ' + (index + 1));
+          const label = runNode('small', item.already_saved ? 'Already saved' : 'Edit, then select to save');
+          select.addEventListener('change', suggestionControls);
+          text.addEventListener('input', suggestionControls);
+          choice.append(select); row.append(choice, text, label); suggestionEl('list').append(row);
+          state.rows.push({select, text, label, saved:item.already_saved});
+        }
+        suggestionControls();
+      }
+      async function analyzeMemorySuggestions() {
+        const state = memorySuggestionState; if (!state || memorySuggestionBusy || researchFlow) return;
+        const epoch = memorySuggestionEpoch, controller = new AbortController(); memorySuggestionController = controller;
+        memorySuggestionBusy = true; state.writing = false;
+        suggestionEl('status').textContent = 'Analyzing this message…'; suggestionEl('error').textContent = ''; suggestionEl('retry').hidden = true; suggestionControls();
+        const timer = setTimeout(() => controller.abort(), 60000);
+        try {
+          // Only the clicked message and the model selected when opened leave the UI.
+          const result = await memoryRequest('/api/memory-suggestions', 'POST', {message:state.message,model:state.model}, controller.signal);
+          if (epoch !== memorySuggestionEpoch) return;
+          if (!Array.isArray(result.suggestions) || result.suggestions.some(item => typeof item.content !== 'string' || !item.content.trim() || typeof item.already_saved !== 'boolean')) throw new Error('Invalid suggestions.');
+          renderMemorySuggestions(result.suggestions);
+          suggestionEl('status').textContent = result.suggestions.length ? 'Select any facts you want to save. Nothing is selected yet.' : 'No lasting facts found in this message. You can add your own below.';
+        } catch (_) {
+          if (epoch !== memorySuggestionEpoch) return;
+          suggestionEl('status').textContent = 'Analysis unavailable. You can still add your own fact.';
+          suggestionEl('error').textContent = 'Could not analyze this message. Your custom draft is kept. Retry analysis or enter a fact yourself.';
+          suggestionEl('retry').textContent = 'Retry analysis'; suggestionEl('retry').hidden = false;
+        } finally {
+          clearTimeout(timer);
+          if (epoch === memorySuggestionEpoch) { memorySuggestionBusy = false; memorySuggestionController = null; suggestionControls(); }
+        }
+      }
+      function openMemorySuggestions(message, origin, bubble) {
+        if (researchFlow || !settingsPanel.hidden || chatApp.hidden || memorySuggestionBusy) return;
+        closeMemorySuggestions(false);
+        memorySuggestionState = {message, model:modelSelect.value, origin, bubble, rows:[], refreshRequired:memorySuggestionNeedsRefresh, writing:false};
+        suggestionEl('retry').hidden = true; suggestionControls();
+        suggestionEl('dialog').showModal(); suggestionEl('cancel').focus();
+        if (!modelSelect.value) { suggestionEl('status').textContent = 'Select a model to analyze messages. You can still add a custom fact.'; return; }
+        void analyzeMemorySuggestions();
+      }
+      function selectedMemoryEntries() {
+        const contents = (memorySuggestionState?.rows || []).filter(row => !row.saved && row.select.checked).map(row => row.text.value.trim());
+        const custom = suggestionEl('custom').value.trim(); if (custom) contents.push(custom);
+        return Array.from(new Set(contents.filter(Boolean))).map(content => ({category:'user',content}));
+      }
+      function suggestedMemoryKey(content) { return content.trim().replace(/\s+/g, ' ').toLowerCase(); }
+      async function refreshMemorySuggestionOutcome() {
+        const state = memorySuggestionState; if (!state || memorySuggestionBusy) return;
+        const epoch = memorySuggestionEpoch, controller = new AbortController(); memorySuggestionController = controller;
+        memorySuggestionBusy = true; suggestionControls();
+        const timer = setTimeout(() => controller.abort(), 15000);
+        try {
+          const data = await memoryRequest('/api/memories', 'GET', undefined, controller.signal);
+          if (epoch !== memorySuggestionEpoch) return;
+          if (!validMemoryData(data)) throw new Error('Invalid memory.');
+          for (const row of state.rows) {
+            if (data.entries.some(entry => suggestedMemoryKey(entry.content) === suggestedMemoryKey(row.text.value))) { row.saved = true; row.select.checked = false; row.label.textContent = 'Already saved'; }
+          }
+          const custom = suggestionEl('custom').value.trim();
+          if (custom && data.entries.some(entry => suggestedMemoryKey(entry.content) === suggestedMemoryKey(custom))) {
+            // Keep the draft visible, but exclude the verified existing fact on subsequent saves.
+            state.existingCustom = custom;
+          } else state.existingCustom = '';
+          state.refreshRequired = false; memorySuggestionNeedsRefresh = false; suggestionEl('retry').hidden = true;
+          suggestionEl('error').textContent = '';
+          suggestionEl('status').textContent = 'Saved memory refreshed. Existing facts are excluded. Review before saving again; the previous request was not replayed. Undo is unavailable for an unverified save.';
+        } catch (_) { if (epoch === memorySuggestionEpoch) suggestionEl('error').textContent = 'Could not refresh saved memory. Refresh is required before another save.'; }
+        finally { clearTimeout(timer); if (epoch === memorySuggestionEpoch) { memorySuggestionBusy = false; memorySuggestionController = null; suggestionControls(); } }
+      }
+      async function saveMemorySuggestions() {
+        const state = memorySuggestionState; if (!state || memorySuggestionBusy || state.refreshRequired || researchFlow) return;
+        const entries = selectedMemoryEntries().filter(entry => entry.content !== state.existingCustom);
+        if (!entries.length) { suggestionEl('error').textContent = 'Select a suggestion or enter a new fact in Something else?'; return; }
+        const epoch = memorySuggestionEpoch, controller = new AbortController(); memorySuggestionController = controller;
+        memorySuggestionBusy = true; state.writing = true; suggestionEl('error').textContent = ''; suggestionEl('status').textContent = 'Saving and verifying…'; suggestionControls();
+        memorySuggestionNeedsRefresh = true;
+        const timer = setTimeout(() => controller.abort(), 15000);
+        try {
+          const result = await memoryRequest('/api/memories/batch', 'POST', {entries}, controller.signal);
+          if (epoch !== memorySuggestionEpoch) return;
+          if (!Array.isArray(result.entries) || !Array.isArray(result.created_ids) || result.created_ids.some(id => typeof id !== 'string')) throw new Error('Invalid save response.');
+          const data = await memoryRequest('/api/memories', 'GET', undefined, controller.signal);
+          if (epoch !== memorySuggestionEpoch) return;
+          if (!validMemoryData(data) || entries.some(target => !result.entries.some(saved => suggestedMemoryKey(saved.content) === suggestedMemoryKey(target.content) && data.entries.some(current => current.id === saved.id && current.category === saved.category && current.content === saved.content))) || result.created_ids.some(id => !result.entries.some(entry => entry.id === id && entries.some(target => target.category === entry.category && target.content === entry.content)))) throw new Error('Save could not be verified.');
+          const bubble = state.bubble, origin = state.origin;
+          const created = result.entries.filter(entry => result.created_ids.includes(entry.id));
+          memorySuggestionNeedsRefresh = false;
+          closeMemorySuggestions(false);
+          showMemorySavedConfirmation(bubble, created, result.entries.length);
+          if (origin.isConnected) origin.focus();
+        } catch (_) {
+          if (epoch !== memorySuggestionEpoch) return;
+          state.refreshRequired = true;
+          suggestionEl('status').textContent = 'Refresh required';
+          suggestionEl('error').textContent = 'The save failed or its outcome could not be verified. Your draft is kept. Refresh saved memory before saving again; this request will not be replayed.';
+          suggestionEl('retry').textContent = 'Refresh saved memory'; suggestionEl('retry').hidden = false;
+        } finally { clearTimeout(timer); if (epoch === memorySuggestionEpoch) { memorySuggestionBusy = false; state.writing = false; memorySuggestionController = null; suggestionControls(); } }
+      }
+      function showMemorySavedConfirmation(bubble, created, count) {
+        if (!bubble.isConnected) return;
+        const row = runNode('div', undefined, 'memory-saved-confirmation'); row.setAttribute('role', 'status');
+        const alreadySaved = count - created.length;
+        const status = runNode('span', created.length ? created.length + (created.length === 1 ? ' memory saved. ' : ' memories saved. ') + (alreadySaved ? alreadySaved + ' already remembered. ' : '') : 'Already remembered. No new memories saved. '); row.append(status);
+        if (created.length) {
+          const undo = runNode('button', 'Undo', 'reset'); undo.type = 'button'; undo.dataset.memoryUndo = '';
+          let refreshRequired = false;
+          undo.addEventListener('click', async () => {
+            if (memorySuggestionBusy || researchFlow || !settingsPanel.hidden) return;
+            const epoch = memorySuggestionEpoch, controller = new AbortController(); memorySuggestionController = controller;
+            memorySuggestionBusy = true; undo.disabled = true;
+            const timer = setTimeout(() => controller.abort(), 15000);
+            try {
+              // Check exact original targets first: never remove a subsequently edited fact.
+              let data = await memoryRequest('/api/memories', 'GET', undefined, controller.signal);
+              if (epoch !== memorySuggestionEpoch) return;
+              if (!validMemoryData(data)) throw new Error('Invalid memory.');
+              if (refreshRequired) {
+                refreshRequired = false; status.textContent = 'Memory refreshed. Review before undoing remaining created facts. '; undo.textContent = 'Undo';
+                if (created.every(target => !data.entries.some(entry => entry.id === target.id))) { status.textContent = 'Save undone.'; undo.remove(); }
+                return;
+              }
+              for (const target of created) {
+                const current = data.entries.find(entry => entry.id === target.id);
+                if (!current) continue;
+                if (!target.updated_at || current.updated_at !== target.updated_at || current.category !== target.category || current.content !== target.content) throw new Error('Memory changed.');
+                await memoryRequest('/api/memories/' + encodeURIComponent(target.id), 'DELETE', undefined, controller.signal, {'If-Match':JSON.stringify(target.updated_at)});
+                if (epoch !== memorySuggestionEpoch) return;
+              }
+              data = await memoryRequest('/api/memories', 'GET', undefined, controller.signal);
+              if (epoch !== memorySuggestionEpoch) return;
+              if (!validMemoryData(data) || created.some(target => data.entries.some(entry => entry.id === target.id))) throw new Error('Undo not verified.');
+              status.textContent = 'Save undone. Previously saved facts were kept.'; undo.remove();
+            } catch (_) {
+              if (epoch !== memorySuggestionEpoch) return;
+              refreshRequired = true; status.textContent = 'Undo outcome unknown or a fact changed. Refresh before trying again. '; undo.textContent = 'Refresh memory';
+            } finally { clearTimeout(timer); if (epoch === memorySuggestionEpoch) { memorySuggestionBusy = false; memorySuggestionController = null; undo.disabled = false; } }
+          }); row.append(undo);
+        }
+        bubble.append(row);
+      }
+      suggestionEl('custom').addEventListener('input', suggestionControls);
+      suggestionEl('save').addEventListener('click', () => { void saveMemorySuggestions(); });
+      suggestionEl('retry').addEventListener('click', () => { if (memorySuggestionState?.refreshRequired) void refreshMemorySuggestionOutcome(); else void analyzeMemorySuggestions(); });
+      suggestionEl('cancel').addEventListener('click', () => closeMemorySuggestions());
+      suggestionEl('dialog').addEventListener('cancel', event => { event.preventDefault(); closeMemorySuggestions(); });
+      suggestionEl('dialog').addEventListener('keydown', event => {
+        if (event.key !== 'Tab') return;
+        const controls = Array.from(suggestionEl('dialog').querySelectorAll('button:not(:disabled), textarea:not(:disabled), input:not(:disabled)')).filter(node => node.getClientRects().length);
+        const first = controls[0], last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      });
       const memoryEl = id => document.getElementById('memory-' + id);
       let memoryEpoch = 0, memoryBusy = false, memoryData = null, memoryEditID = '', memoryOrigin = null;
       let memoryController = null;
@@ -1496,6 +1734,7 @@ const homePage = `<!doctype html>
         memoryOrigin = null;
       }
       function resetMemory() {
+        closeMemorySuggestions(false);
         ++memoryEpoch;
         if (memoryController) memoryController.abort();
         memoryController = null; memoryBusy = false; memoryData = null;
@@ -1539,8 +1778,8 @@ const homePage = `<!doctype html>
         }
         memoryControls();
       }
-      async function memoryRequest(path, method, body, signal) {
-        const response = await fetch(path, {method, cache:'no-store', signal, headers:body === undefined ? {} : {'Content-Type':'application/json'}, body:body === undefined ? undefined : JSON.stringify(body)});
+      async function memoryRequest(path, method, body, signal, headers = {}) {
+        const response = await fetch(path, {method, cache:'no-store', signal, headers:{...(body === undefined ? {} : {'Content-Type':'application/json'}),...headers}, body:body === undefined ? undefined : JSON.stringify(body)});
         const result = await response.json();
         if (!response.ok) throw new Error(typeof result.error === 'string' ? result.error : 'Memory request failed.');
         return result;
@@ -1635,6 +1874,7 @@ const homePage = `<!doctype html>
 
       function showSettings(open, updateURL = true) {
         if (researchFlow) return;
+        closeMemorySuggestions(false);
         if (open) closeRunInspector(false);
         if (!open) { stopUsage(); leaveSearchSettings(); resetMemory(); }
         if (updateURL && (window.location.hash === '#settings') !== open) {
@@ -2113,15 +2353,24 @@ const homePage = `<!doctype html>
         else text.textContent = content;
         bubble.append(sender, text);
         if (role === 'user') {
-          const remember = document.createElement('button');
-          remember.type = 'button'; remember.className = 'reset remember-message'; remember.textContent = 'Remember';
-          remember.setAttribute('aria-label', 'Review this message and save as memory');
-          remember.addEventListener('click', () => {
-            if (researchFlow) return;
-            showSettings(true);
-            openMemoryForm({category:'user',content}, remember);
+          const toggle = runNode('button', '⋯', 'message-actions-toggle'); toggle.type = 'button';
+          toggle.setAttribute('aria-label', 'Message actions'); toggle.setAttribute('aria-haspopup', 'menu'); toggle.setAttribute('aria-expanded', 'false');
+          const menu = runNode('div', undefined, 'message-action-menu'); menu.hidden = true; menu.setAttribute('role', 'menu');
+          menu.id = 'message-actions-' + (++messageMenuSequence); toggle.setAttribute('aria-controls', menu.id);
+          const copy = runNode('button', 'Copy'); copy.type = 'button'; copy.setAttribute('role', 'menuitem');
+          const suggest = runNode('button', 'Suggest memories…'); suggest.type = 'button'; suggest.dataset.suggestMemory = ''; suggest.setAttribute('role', 'menuitem');
+          copy.addEventListener('click', async () => {
+            try { await navigator.clipboard.writeText(content); closeMessageMenu(true); }
+            catch (_) { copy.textContent = 'Copy failed — try again'; }
           });
-          bubble.append(remember);
+          suggest.addEventListener('click', () => { closeMessageMenu(); openMemorySuggestions(content, toggle, bubble); });
+          toggle.addEventListener('click', () => {
+            if (messageMenu === menu) { closeMessageMenu(true); return; }
+            closeMessageMenu(); messageMenu = menu; messageMenuOrigin = toggle; menu.hidden = false;
+            suggest.disabled = researchFlow || memorySuggestionBusy; toggle.setAttribute('aria-expanded', 'true'); copy.focus();
+          });
+          toggle.addEventListener('keydown', event => { if (event.key === 'ArrowDown') { event.preventDefault(); if (menu.hidden) toggle.click(); else copy.focus(); } });
+          menu.append(copy, suggest); sender.append(toggle, menu);
         }
         messageList.appendChild(bubble);
         messageList.scrollTop = messageList.scrollHeight;
@@ -2693,6 +2942,7 @@ const homePage = `<!doctype html>
         if (optedIn) {
           researchModelWasDisabled = modelSelect.disabled;
           researchFlow = true;
+          closeMemorySuggestions(false);
           busy = true;
           setInteractionState();
           input.disabled = true;
