@@ -1292,7 +1292,7 @@ const homePage = `<!doctype html>
           void refreshSearchMetadata();
           if (historyDialog.open && !historyController) void usageHistoryRead();
           startUsageMonitor();
-        },30000);
+        },60000);
       }
       document.addEventListener('visibilitychange',()=>{
         if(document.hidden){stopUsageMonitor();abortUsageHistory();}
@@ -1349,7 +1349,7 @@ const homePage = `<!doctype html>
       function usagePoll() {
         clearTimeout(usageTimer);
         if (usageVisible()) {
-          usageTimer = setTimeout(() => { void usageRequest('status',undefined,true); }, ['pending','checking'].includes(usageData?.state) ? 2000 : 30000);
+          usageTimer = setTimeout(() => { void usageRequest('status',undefined,true); }, ['pending','checking'].includes(usageData?.state) ? 2000 : 60000);
         }
       }
       function usageDate(value) {
