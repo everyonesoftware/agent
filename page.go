@@ -402,20 +402,20 @@ const homePage = `<!doctype html>
     #usage-history-dialog::backdrop { background:#0009; }
     #usage-history-dialog h2 { margin:0; font-size:18px; font-weight:500; }
     #usage-history-dialog p { margin:0; }
-    #usage-history-scope { margin-top:5px!important; font-size:12px; color:var(--muted); }
-    .history-top { gap:14px; align-items:center; }
+    #usage-history-scope { font-size:11px; color:var(--muted); }
+    .history-top { gap:14px; align-items:center; flex-wrap:nowrap; }
     .history-top > div:first-child { min-width:0; }
     .history-popup-actions { display:flex; align-items:center; gap:12px; margin-left:auto; flex-shrink:0; }
     .history-popup-actions label { display:flex; align-items:center; gap:8px; color:var(--muted); white-space:nowrap; font-size:11px; }
     #usage-history-dialog button, #usage-history-dialog select { min-height:36px; padding:6px 11px; border:1px solid #394139; border-radius:5px; background:transparent; color:inherit; }
     #usage-history-dialog select option { background:var(--field); }
     #usage-history-dialog button:hover { background:#b4d6a314; }
-    #usage-history-dialog button:focus-visible, #usage-history-chart:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
-    #usage-history-window-label { display:block; margin-top:12px; font-size:11px; color:var(--muted); }
+    #usage-history-dialog button:focus-visible, #usage-history-dialog summary:focus-visible, #usage-history-dialog select:focus-visible, #usage-history-chart:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+    #usage-history-window-label { display:block; margin-top:10px; font-size:11px; color:var(--muted); }
+    #usage-history-window-label[hidden] { display:none; }
     #usage-history-window { margin-left:8px; }
     .history-headline { display:flex; align-items:baseline; gap:10px; margin-top:23px; }
     .history-headline strong { font-size:26px; font-weight:500; font-variant-numeric:tabular-nums; }
-    .history-headline small { color:var(--muted); font-size:11px; }
     .history-headline > span { margin-left:auto; font-size:11px; color:#c6ad7d; text-align:right; }
     #usage-history-message { font-size:11px; color:var(--muted); margin-top:8px!important; }
     #usage-history-message:empty { display:none; }
@@ -424,11 +424,19 @@ const homePage = `<!doctype html>
     #usage-history-tooltip { position:absolute; top:7px; z-index:2; width:218px; max-width:calc(100% - 8px); padding:10px 30px 10px 12px; border:1px solid #394139; border-radius:6px; background:var(--field); box-shadow:0 6px 22px #0003; pointer-events:none; font-size:11px; line-height:1.6; }
     #usage-history-tooltip.pinned { border-color:var(--accent); }
     #usage-history-unpin { position:absolute; top:3px; right:3px; min-height:28px!important; padding:0 6px!important; border:0!important; pointer-events:auto; }
-    .history-bottom { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; border-top:1px solid var(--line); padding-top:17px; margin-top:16px; }
+    .history-bottom { display:flex; justify-content:space-between; align-items:center; gap:16px; border-top:1px solid var(--line); padding-top:8px; margin-top:8px; }
+    .history-forecast { position:relative; display:flex; align-items:center; gap:6px; min-width:0; }
+    #usage-history-details summary { display:flex; align-items:center; justify-content:center; width:28px; height:28px; cursor:pointer; list-style:none; color:var(--muted); border:1px solid #566151; border-radius:50%; font-size:12px; }
+    #usage-history-details summary::-webkit-details-marker { display:none; }
+    #usage-history-details[open] summary { color:var(--accent); border-color:var(--accent); }
+    .history-details-body { position:absolute; z-index:3; bottom:calc(100% + 8px); left:0; width:min(320px,calc(100vw - 72px)); max-height:min(280px,60dvh); overflow:auto; padding:14px; background:var(--field); border:1px solid #394139; border-radius:6px; box-shadow:0 6px 22px #0005; }
+    #usage-history-dialog:has(#usage-history-plot:empty) .history-forecast:has(details[open]) { display:block; }
+    #usage-history-dialog:has(#usage-history-plot:empty) .history-details-body { position:static; margin-top:8px; }
     #usage-history-estimate { color:var(--accent); font-size:14px; }
-    #usage-history-rate, #usage-history-note { color:var(--muted); font-size:11px; line-height:1.6; }
+    #usage-history-rate, #usage-history-note, .history-assumptions { color:var(--muted); font-size:11px; line-height:1.6; }
+    #usage-history-dialog .history-assumptions { margin-top:8px; }
     #usage-history-rate { margin-top:5px!important; }
-    #usage-history-note { margin-top:15px!important; }
+    #usage-history-note { margin-top:8px!important; }
     .history-legend { display:flex; align-items:center; gap:15px; color:var(--muted); font-size:11px; white-space:nowrap; }
     .history-legend span { display:inline-flex; align-items:center; gap:6px; }
     .history-legend i { width:20px; border-top:2px solid var(--accent); }
@@ -436,16 +444,18 @@ const homePage = `<!doctype html>
     @media(max-width:600px) {
       #usage-history-dialog { width:calc(100% - 20px); max-height:calc(100dvh - 20px); padding:17px; }
       #usage-history-dialog h2 { font-size:16px; }
-      #usage-history-scope { font-size:10px; }
-      .history-top { gap:8px; align-items:flex-start; }
+      .history-top { gap:6px; }
       .history-popup-actions { gap:6px; }
       .history-popup-actions label { gap:4px; font-size:10px; }
+      .history-range-label { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
       #usage-history-dialog button, #usage-history-dialog select { min-height:44px; padding:5px 8px; }
-      #usage-history-range { max-width:108px; font-size:11px; }
+      #usage-history-range { width:90px; max-width:90px; font-size:11px; }
+      #usage-history-close { width:44px; flex-shrink:0; }
+      #usage-history-details summary { width:44px; height:44px; }
       .history-headline { flex-wrap:wrap; gap:7px; margin-top:18px; }
       .history-headline strong { font-size:24px; }
-      .history-headline small { font-size:10px; }
-      .history-bottom { flex-direction:column; gap:13px; }
+      .history-bottom { flex-direction:column; align-items:flex-start; gap:4px; }
+      .history-forecast { width:100%; }
     }
   </style>
 </head>
@@ -719,14 +729,12 @@ const homePage = `<!doctype html>
     <form id="usage-confirm-form"><h2 id="usage-dialog-title">Disconnect usage account?</h2><p id="usage-dialog-account"></p><p id="usage-dialog-description">Remove this usage connection from Agent. Your conversation connection and saved chats are kept. Remote revocation is not guaranteed.</p><label for="usage-password">Agent password</label><input id="usage-password" type="password" autocomplete="current-password" maxlength="72" required><p id="usage-confirm-error" class="menu-error" role="alert" hidden></p><div class="dialog-actions"><button class="reset" id="usage-dialog-cancel" type="button" autofocus>Cancel</button><button class="reset danger" id="usage-confirm" type="submit">Disconnect usage account</button></div></form>
   </dialog>
   <dialog id="usage-history-dialog" aria-labelledby="usage-history-title">
-    <header class="history-top"><div><h2 id="usage-history-title">Usage history</h2><p id="usage-history-scope"></p></div><div class="history-popup-actions"><label>History <select id="usage-history-range"><option value="24h">24 hours</option><option value="week">1 week</option><option value="period">Entire period</option></select></label><button id="usage-history-close" type="button" aria-label="Close usage history">×</button></div></header>
-    <label id="usage-history-window-label" hidden>Allowance window <select id="usage-history-window"></select></label>
-    <div class="history-headline"><strong id="usage-history-value">Unavailable</strong><small>current remaining</small><span id="usage-history-reset"></span></div>
+    <header class="history-top"><div><h2 id="usage-history-title">Usage history</h2></div><div class="history-popup-actions"><label><span class="history-range-label">History</span><select id="usage-history-range"><option value="24h">24 hours</option><option value="week">1 week</option><option value="period">Entire period</option></select></label><button id="usage-history-close" type="button" aria-label="Close usage history">×</button></div></header>
+    <div class="history-headline"><strong id="usage-history-value">Unavailable</strong><span id="usage-history-reset"></span></div>
     <p id="usage-history-message" role="status"></p>
     <div id="usage-history-chart-wrap"><div id="usage-history-plot"></div><div id="usage-history-tooltip" role="status" hidden><span id="usage-history-tip-text"></span><button id="usage-history-unpin" type="button" aria-label="Unpin selected point" hidden>×</button></div></div>
     <p id="usage-history-instructions" class="visually-hidden">Hover to inspect. Click or tap to pin. Drag to explore. Use arrow keys, Home and End to select points; Enter or Space to pin; Escape to clear selection.</p>
-    <div class="history-bottom"><div><p id="usage-history-estimate"></p><p id="usage-history-rate"></p></div><div class="history-legend"><span><i></i>Recorded</span><span><i class="projected"></i>Projected</span></div></div>
-    <p id="usage-history-note" title="Forecast assumes your last hour’s pace continues and stops at reset or depletion.">Estimates only.</p>
+    <div class="history-bottom"><div class="history-forecast"><p id="usage-history-estimate"></p><details id="usage-history-details"><summary id="usage-history-details-toggle" aria-label="Forecast details">i</summary><div class="history-details-body"><p id="usage-history-scope" hidden></p><label id="usage-history-window-label" hidden>Allowance window <select id="usage-history-window"></select></label><p id="usage-history-rate"></p><p id="usage-history-note">Estimates only.</p><p class="history-assumptions">Forecast assumes your last hour’s pace continues and stops at reset or depletion.</p></div></details></div><div class="history-legend"><span><i></i>Recorded</span><span><i class="projected"></i>Projected</span></div></div>
     <div id="usage-history-selection" class="visually-hidden" aria-live="polite"></div>
   </dialog>
   <script>
@@ -1216,6 +1224,7 @@ const homePage = `<!doctype html>
       function abortUsageHistory() { ++historyEpoch; historyController?.abort(); historyController=null; }
       function usageHistoryClose(restore = true) {
         abortUsageHistory(); historyClearSelection(); historyData=null; historyView=null; historyProvider='';
+        historyEl('details').open=false;
         if (historyDialog.open) historyDialog.close();
         const origin=historyOrigin; historyOrigin=null;
         if (restore && origin) origin.focus({preventScroll:true});
@@ -1254,6 +1263,7 @@ const homePage = `<!doctype html>
       for (const provider of ['chatgpt','brave']) historyEl('open-'+provider)?.addEventListener('click',()=>{void usageHistoryOpen(provider,historyEl('open-'+provider));});
       historyEl('close')?.addEventListener('click',()=>usageHistoryClose());
       historyEl('unpin')?.addEventListener('click',historyClearSelection);
+      historyEl('details')?.addEventListener('keydown',event=>{if(event.key==='Escape' && historyEl('details').open){event.preventDefault();event.stopPropagation();historyEl('details').open=false;historyEl('details-toggle').focus({preventScroll:true});}});
       historyEl('range')?.addEventListener('change',()=>{historyClearSelection();historyData=null;historyEl('plot').innerHTML='';return usageHistoryRead();});
       historyEl('window')?.addEventListener('change',()=>{historyWindow=historyEl('window').value;historyClearSelection();historyData=null;historyEl('plot').innerHTML='';return usageHistoryRead();});
       historyDialog?.addEventListener('cancel',event=>{event.preventDefault();if(historySelection)historyClearSelection();else usageHistoryClose();});

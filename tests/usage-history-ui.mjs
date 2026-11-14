@@ -12,6 +12,10 @@ const html = source.slice(source.indexOf('`') + 1, source.lastIndexOf('`'));
 assert.match(html, /id="usage-history-open-chatgpt"[^>]*aria-haspopup="dialog"/, 'Allowance needs a usage-history trigger');
 assert.match(html, /id="usage-history-open-brave"[^>]*aria-haspopup="dialog"/, 'Brave usage needs its own history trigger');
 assert.match(html, /<dialog[^>]*id="usage-history-dialog"/, 'History must use a native modal');
+const historyMarkup=html.match(/<dialog id="usage-history-dialog"[\s\S]*?<\/dialog>/)[0];
+assert.match(historyMarkup, /<details id="usage-history-details"[\s\S]*?<summary[^>]*aria-label="Forecast details"[\s\S]*?id="usage-history-rate"[\s\S]*?id="usage-history-note"[\s\S]*?<\/details>/, 'Forecast explanation and caveat belong in on-demand details');
+assert.doesNotMatch(historyMarkup.match(/<header[\s\S]*?<\/header>/)[0], /usage-history-scope/, 'Remove the redundant provider/window subtitle from the header');
+assert.doesNotMatch(historyMarkup, /<small>current remaining<\/small>/, 'The remaining value needs no redundant label');
 console.log('PASS provider-scoped native modal entry points');
 const modelSource = html.split('// BEGIN usage history model')[1]?.split('// END usage history model')[0];
 assert.ok(modelSource, 'Chart needs a testable history model');
@@ -187,7 +191,7 @@ if (process.argv.includes('--browser')) {
   const dialog=html.match(/<dialog id="usage-history-dialog"[\s\S]*?<\/dialog>/)[0];
   const buttons=['chatgpt','brave'].map(p=>html.match(new RegExp('<button id="usage-history-open-'+p+'"[^>]*>[\\s\\S]*?<\\/button>'))[0].replace(' disabled','')).join('');
   const page='<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>'+style+'</style>'+buttons+dialog+'<script>let activeProfileID="p1";const settingsPanel={hidden:false},chatApp={hidden:false};'+modelSource+controllerSource+'</script>';
-  const calls=[];let capDisabled=false;
+  const calls=[];let capDisabled=false,sparseHistory=false;
   const server=createServer((req,res)=>{
     if(req.url==='/'){res.writeHead(200,{'Content-Type':'text/html'});res.end(page);return;}
     calls.push(req.url);
@@ -195,6 +199,7 @@ if (process.argv.includes('--browser')) {
     const result={...data,scope:'ChatGPT · weekly allowance',observed_at:t,tracking_started_at:t-86400,period_start:t-86400,reset_at:t+7200,points:points.map(p=>({...p,at:p.at-now+t,reset_at:t+7200})),window_id:'weekly',windows:[{id:'weekly',label:'Weekly allowance'},{id:'five',label:'5-hour allowance'}]};
     if(url.pathname==='/api/research/history')Object.assign(result,{provider:'brave',scope:'Brave Search · Agent cap',gap_seconds:0,remaining_count:40,...(capDisabled?{remaining_percent:null,points:[],warning:'Agent cap is disabled'}:{})});
     if(url.searchParams.get('window_id')==='five')Object.assign(result,{scope:'ChatGPT · 5-hour allowance',window_id:'five'});
+    if(sparseHistory)result.points=result.points.slice(-4);
     res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(result));
   });
   await new Promise(r=>server.listen(0,'127.0.0.1',r));
@@ -208,31 +213,62 @@ if (process.argv.includes('--browser')) {
     const ready=await waitForTestBrowser(browser,profile),targets=await(await fetch('http://127.0.0.1:'+ready.split('\n')[0]+'/json/list')).json();
     socket=new WebSocket(targets.find(t=>t.type==='page').webSocketDebuggerUrl);await new Promise((resolve,reject)=>{socket.onopen=resolve;socket.onerror=reject;});
     socket.onmessage=e=>{const msg=JSON.parse(e.data);if(msg.method==='Runtime.exceptionThrown')errors.push(msg.params.exceptionDetails.text);const job=jobs.get(msg.id);if(!job)return;jobs.delete(msg.id);clearTimeout(job.timer);if(msg.error)job.reject(new Error(msg.error.message));else job.resolve(msg.result);};
-    await cdp('Runtime.enable');await cdp('Page.enable');await cdp('Page.navigate',{url:'http://127.0.0.1:'+server.address().port});
+    await cdp('Runtime.enable');await cdp('Page.enable');await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:844,deviceScaleFactor:1,mobile:false});await cdp('Page.navigate',{url:'http://127.0.0.1:'+server.address().port});
     await until("!!document.getElementById('usage-history-open-chatgpt')");
     await js("document.getElementById('usage-history-open-chatgpt').click()");
     await until("!!document.getElementById('usage-history-forecast')");
     assert.equal(await js("document.activeElement.id"),'usage-history-close');
     assert.equal(await js("document.querySelectorAll('.usage-history-milestone').length"),5);
     await js("document.getElementById('usage-history-chart').focus()");
-    const press=key=>cdp('Input.dispatchKeyEvent',{type:'keyDown',key,code:key});
+    const press=async key=>{const event={key,code:key,windowsVirtualKeyCode:{Enter:13,Escape:27,Home:36,End:35}[key]||0};await cdp('Input.dispatchKeyEvent',{type:'keyDown',...event,...(key==='Enter'?{text:'\r',unmodifiedText:'\r'}:{})});await cdp('Input.dispatchKeyEvent',{type:'keyUp',...event});};
     await press('Home');await press('Enter');assert.equal(await js("document.getElementById('usage-history-unpin').hidden"),false);
     await press('Escape');assert.equal(await js("document.getElementById('usage-history-tooltip').hidden"),true);assert.equal(await js("document.getElementById('usage-history-dialog').open"),true);
     const coords=await js("(()=>{const r=document.getElementById('usage-history-chart').getBoundingClientRect();return {x:r.left+r.width*.5,y:r.top+r.height*.5};})()");
     await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',...coords});await cdp('Input.dispatchMouseEvent',{type:'mousePressed',...coords,button:'left',clickCount:1});await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',x:coords.x+20,y:coords.y,button:'left',buttons:1});await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',x:coords.x+20,y:coords.y,button:'left',clickCount:1});
     assert.equal(await js("document.getElementById('usage-history-unpin').hidden"),false);
+    await js("document.getElementById('usage-history-unpin').click()");
+    assert.equal(await js("document.getElementById('usage-history-details').open"),false,'Details start collapsed');
+    assert.equal(await js("document.getElementById('usage-history-dialog').innerText.includes('current remaining')"),false);
+    const chartHeight=await js("document.getElementById('usage-history-chart').getBoundingClientRect().height");
+    const detailPoint=await js("(()=>{const r=document.getElementById('usage-history-details-toggle').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()");
+    await cdp('Input.dispatchMouseEvent',{type:'mousePressed',...detailPoint,button:'left',clickCount:1});
+    await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',...detailPoint,button:'left',clickCount:1});
+    assert.equal(await js("document.getElementById('usage-history-details').open"),true,'Information control opens real details: '+JSON.stringify(await js("(()=>{const p=document.getElementById('usage-history-details-toggle'),r=p.getBoundingClientRect();return {point:{x:r.x,y:r.y,width:r.width,height:r.height},viewport:[innerWidth,innerHeight],hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.outerHTML};})()")));
+    assert.equal(await js("document.getElementById('usage-history-chart').getBoundingClientRect().height"),chartHeight,'Opening details never resizes the plot');
+    assert.equal(await js("document.getElementById('usage-history-scope').getClientRects().length"),0,'Removed subtitle stays absent even when details are open');
+    await press('Escape');
+    assert.equal(await js("document.getElementById('usage-history-details').open"),false,'Escape dismisses details before the dialog');
+    assert.equal(await js("document.getElementById('usage-history-dialog').open"),true);
+    assert.equal(await js('document.activeElement.id'),'usage-history-details-toggle','Dismissal restores focus to the information control');
+    await press('Enter');
+    await until("document.getElementById('usage-history-details').open");
     await js("(()=>{const w=document.getElementById('usage-history-window');w.value='five';w.dispatchEvent(new Event('change'));})()");await until("document.getElementById('usage-history-scope').textContent.includes('5-hour')");
     await js("(()=>{const r=document.getElementById('usage-history-range');r.value='week';r.dispatchEvent(new Event('change'));})()");await until("!!document.getElementById('usage-history-chart')");assert.ok(calls.some(c=>c.includes('range=week')&&c.includes('window_id=five')));
-    for(const width of [1280,390,320]){
-      await cdp('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:width<500});
+    await js("document.getElementById('usage-history-details').open=false");
+    for(const [width,height] of [[1280,844],[900,600],[390,844],[320,640]]){
+      await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<500});
       await js('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
       assert.equal(await js("(()=>{const d=document.getElementById('usage-history-dialog'),r=d.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&d.scrollWidth<=d.clientWidth;})()"),true,'Modal must fit width '+width);
       assert.equal(await js("(()=>{const r=document.getElementById('usage-history-range').getBoundingClientRect(),c=document.getElementById('usage-history-close').getBoundingClientRect();return r.right<=c.left&&Math.abs(r.top-c.top)<8;})()"),true,'Range stays inline just before Close');
+      assert.equal(await js("(()=>{const t=document.getElementById('usage-history-title').getBoundingClientRect(),r=document.getElementById('usage-history-range').getBoundingClientRect();return t.right<=r.left&&Math.abs((t.top+t.bottom-r.top-r.bottom)/2)<2;})()"),true,'Title and range share one row without overlap at '+width);
+      assert.equal(await js("(()=>{const d=document.getElementById('usage-history-dialog');return d.scrollHeight<=d.clientHeight;})()"),true,'Compact dialog has no internal scrolling at '+width+'×'+height);
+      assert.equal(await js("document.getElementById('usage-history-chart').viewBox.baseVal.height"),width<500?310:330,'Original chart height is preserved');
+      await js("document.getElementById('usage-history-details-toggle').click()");
+      assert.equal(await js("(()=>{const d=document.getElementById('usage-history-dialog'),p=document.querySelector('.history-details-body').getBoundingClientRect(),r=d.getBoundingClientRect();return p.left>=r.left&&p.right<=r.right&&p.top>=r.top&&p.bottom<=r.bottom&&d.scrollHeight<=d.clientHeight;})()"),true,'Open details stay inside the dialog without adding scrolling');
+      await js("document.getElementById('usage-history-details-toggle').click()");
     }
     await js("document.getElementById('usage-history-close').click()");assert.equal(await js('document.activeElement.id'),'usage-history-open-chatgpt');
+    sparseHistory=true;await js("document.getElementById('usage-history-open-chatgpt').click()");await until("document.getElementById('usage-history-estimate').textContent==='Forecast unavailable'");
+    assert.equal(await js("document.getElementById('usage-history-dialog').innerText.includes('Needs a complete hour')"),false,'Unavailable reason is hidden until requested');
+    await js("document.getElementById('usage-history-details-toggle').click()");
+    assert.equal(await js("document.getElementById('usage-history-dialog').innerText.includes('Needs a complete hour')"),true,'Sparse-history reason is available on demand');
+    await js("document.getElementById('usage-history-close').click()");sparseHistory=false;
     capDisabled=true;await js("document.getElementById('usage-history-open-brave').click()");await until("document.getElementById('usage-history-message').textContent.includes('disabled')");
     assert.equal(await js("document.getElementById('usage-history-plot').childElementCount"),0);assert.equal(await js("document.getElementById('usage-history-window-label').hidden"),true);
+    assert.equal(await js("document.getElementById('usage-history-details').open"),false,'Reopening a provider resets the details disclosure');
+    await js("document.getElementById('usage-history-details-toggle').click()");
+    assert.equal(await js("(()=>{const p=document.querySelector('.history-details-body').getBoundingClientRect(),d=document.getElementById('usage-history-dialog').getBoundingClientRect();return p.top>=d.top&&p.bottom<=d.bottom;})()"),true,'Details remain readable even without a chart');
     assert.deepEqual(errors,[]);assert.ok(calls.every(c=>!c.includes('/check')&&!c.includes('/refresh')));
-    console.log('PASS native Chromium focus, threshold/pointer/keyboard interaction, scoped windows, empty cap and 1280/390/320px layout');
+    console.log('PASS native Chromium focus, chart inspection, keyboard details, scoped windows, sparse/empty history and scroll-free 1280/900/390/320px layout');
   } finally {for(const job of jobs.values())clearTimeout(job.timer);socket?.close();await stopTestBrowser(browser);await rm(profile,{recursive:true,force:true});await new Promise(r=>server.close(r));}
 }
