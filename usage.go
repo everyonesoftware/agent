@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -17,12 +18,14 @@ type usageRequest struct {
 	Password             string  `json:"password,omitempty"`
 }
 
-func registerUsageRoutes(mux *http.ServeMux, accounts *accountStore, base *siwcService) {
-	newUsageService(accounts, base).register(mux)
+func registerUsageRoutes(mux *http.ServeMux, accounts *accountStore, base *siwcService) *usageService {
+	s := newUsageService(accounts, base)
+	s.register(mux)
+	return s
 }
 
 func (s *usageService) register(mux *http.ServeMux) {
-	for _, route := range []string{"GET /api/usage/status", "POST /api/usage/connect", "POST /api/usage/cancel", "POST /api/usage/refresh", "POST /api/usage/disconnect"} {
+	for _, route := range []string{"GET /api/usage/history", "GET /api/usage/status", "POST /api/usage/connect", "POST /api/usage/cancel", "POST /api/usage/refresh", "POST /api/usage/disconnect"} {
 		mux.Handle(route, s.accounts.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Cache-Control", "no-store")
 			if requestIsCrossSite(r) {
@@ -87,6 +90,26 @@ func (s *usageService) register(mux *http.ServeMux) {
 				writeChatError(w, 409, "The active ChatGPT account changed. Refresh Settings.")
 				return
 			}
+			if action == "history" {
+				if _, err := historyRangeStart(r.URL.Query().Get("range"), s.now(), 0); err != nil {
+					writeChatError(w, 400, err.Error())
+					return
+				}
+				ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+				defer cancel()
+				s.status(ctx, entry, profile.Email)
+				history, err := s.history(entry, r.URL.Query().Get("range"), r.URL.Query().Get("window_id"))
+				if err != nil {
+					if errors.Is(err, errUsageHistoryUnavailable) {
+						writeChatError(w, 503, err.Error())
+						return
+					}
+					writeChatError(w, 400, err.Error())
+					return
+				}
+				writeChatJSON(w, 200, history)
+				return
+			}
 			if action != "status" && action != "connect" && (payload.ConnectionID == "" || payload.ConnectionID != entry.record.ConnectionID) {
 				writeChatError(w, 409, "The usage connection changed. Refresh Settings.")
 				return
@@ -138,6 +161,7 @@ func (s *usageService) register(mux *http.ServeMux) {
 			case "refresh":
 				// Cached snapshots do not authorize skipping an account check on refresh.
 				entry.lastRead = time.Time{}
+				entry.lastAttempt = time.Time{}
 				before := entry.view.Snapshot
 				s.status(ctx, entry, profile.Email)
 				if entry.view.State == "connected" && entry.view.Snapshot == before {

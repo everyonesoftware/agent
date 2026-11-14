@@ -136,6 +136,33 @@ the OS label prevents automatic major-OS migration; it does not freeze hosted
 runner patches or system packages. Local verification alone is not proof that the
 hosted runner's sandbox startup passed.
 
+## Usage history in Settings
+
+Choose **View usage history** in the ChatGPT allowance or Brave Search usage
+section. Each popup shows only that provider, with **24 hours**, **1 week**, and
+**Entire period** views. ChatGPT quota windows can be selected independently.
+Milestone dots support hover, drag, tap-to-pin, and keyboard inspection.
+
+ChatGPT allowance observations are collected about once per minute while the
+Agent server is running, even with Settings closed, and retained for 90 days.
+Collection uses the separate usage connection and resumes after server restart;
+earlier unrecorded history and collection gaps are not reconstructed. Brave
+remaining-search history is reconstructed from the account's successful-request
+ledger and requires an enabled Agent cap; it is not Brave's billing balance.
+History reads never issue Brave searches or model requests.
+
+Visible Settings and popups refresh metadata about every 30 seconds. Forecasts
+require a complete recent hour of observations, stop at reset or depletion, and
+are omitted when evidence is insufficient or stale. No token-to-allowance
+conversion is assumed.
+
+Verify the history UI and production-router/SQLite integration with:
+
+```sh
+node tests/usage-history-ui.mjs --browser
+AGENT_HISTORY_BROWSER=1 go test -run '^TestUsageHistoryProductionBrowser$' -count=1 -v .
+```
+
 ## Public-web research with task-scoped consent
 
 Ordinary chat has no tools. To research a task, enable **Research public web**

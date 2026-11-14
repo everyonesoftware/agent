@@ -8,7 +8,27 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
+
+// Handler construction is side-effect free with respect to background workers.
+// The server command owns their lifetime; isolated test routers do not leak them.
+type applicationServer struct {
+	http.Handler
+	usage *usageService
+}
+
+func (s *applicationServer) startBackground() {
+	if s.usage != nil {
+		s.usage.startSampler(time.Minute)
+	}
+}
+
+func (s *applicationServer) close() {
+	if s.usage != nil {
+		s.usage.close()
+	}
+}
 
 func newServer() http.Handler {
 	return newServerWithResearchWebFactory(nil)
@@ -19,6 +39,7 @@ func newServerWithResearchWebFactory(factory func(string) *researchWeb) http.Han
 	siwc := newSIWCServiceFromEnv()
 	apiProvider := newModelProviderFromEnv()
 	mux := http.NewServeMux()
+	var usage *usageService
 	registerPWARoutes(mux)
 	dataDir := strings.TrimSpace(os.Getenv("APP_DATA_DIR"))
 	if dataDir == "" {
@@ -56,7 +77,7 @@ func newServerWithResearchWebFactory(factory func(string) *researchWeb) http.Han
 		mux.Handle("GET /api/auth/profiles", accounts.scopedSIWCHandler(siwc, (*siwcService).profilesHandler))
 		mux.Handle("POST /api/auth/profiles/active", accounts.scopedPasswordSIWCHandler(siwc, false, (*siwcService).selectProfileHandler))
 		mux.Handle("POST /api/auth/disconnect", accounts.scopedPasswordSIWCHandler(siwc, false, (*siwcService).disconnectHandler))
-		registerUsageRoutes(mux, accounts, siwc)
+		usage = registerUsageRoutes(mux, accounts, siwc)
 	} else {
 		log.Printf("local account database is unavailable: %v", accountErr)
 		unavailable := func(w http.ResponseWriter, _ *http.Request) {
@@ -87,5 +108,5 @@ func newServerWithResearchWebFactory(factory func(string) *researchWeb) http.Han
 		}
 		_, _ = fmt.Fprint(w, strings.NewReplacer("{{APP_VERSION}}", html.EscapeString(version), "{{APP_BUILD_ID}}", appBuildID()).Replace(homePage))
 	})
-	return mux
+	return &applicationServer{Handler: mux, usage: usage}
 }

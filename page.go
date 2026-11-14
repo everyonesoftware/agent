@@ -396,6 +396,57 @@ const homePage = `<!doctype html>
     .device-code code { font:18px/1.5 Consolas,monospace; letter-spacing:1px; user-select:all; }
     #usage-verification { display:inline-flex; align-items:center; }
     #usage-error, #usage-confirm-error { color:#efada5; }
+    .usage-history-trigger { font-size:11px; color:var(--muted); white-space:nowrap; }
+    #usage-history-open-chatgpt { margin-top:8px; }
+    #usage-history-dialog { width:min(900px,calc(100% - 48px)); max-width:none; max-height:calc(100dvh - 48px); overflow:auto; padding:24px; border:1px solid #394139; border-radius:10px; background:var(--field); color:#e1e6e2; box-shadow:0 24px 100px #0008; }
+    #usage-history-dialog::backdrop { background:#0009; }
+    #usage-history-dialog h2 { margin:0; font-size:18px; font-weight:500; }
+    #usage-history-dialog p { margin:0; }
+    #usage-history-scope { margin-top:5px!important; font-size:12px; color:var(--muted); }
+    .history-top { gap:14px; align-items:center; }
+    .history-top > div:first-child { min-width:0; }
+    .history-popup-actions { display:flex; align-items:center; gap:12px; margin-left:auto; flex-shrink:0; }
+    .history-popup-actions label { display:flex; align-items:center; gap:8px; color:var(--muted); white-space:nowrap; font-size:11px; }
+    #usage-history-dialog button, #usage-history-dialog select { min-height:36px; padding:6px 11px; border:1px solid #394139; border-radius:5px; background:transparent; color:inherit; }
+    #usage-history-dialog select option { background:var(--field); }
+    #usage-history-dialog button:hover { background:#b4d6a314; }
+    #usage-history-dialog button:focus-visible, #usage-history-chart:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+    #usage-history-window-label { display:block; margin-top:12px; font-size:11px; color:var(--muted); }
+    #usage-history-window { margin-left:8px; }
+    .history-headline { display:flex; align-items:baseline; gap:10px; margin-top:23px; }
+    .history-headline strong { font-size:26px; font-weight:500; font-variant-numeric:tabular-nums; }
+    .history-headline small { color:var(--muted); font-size:11px; }
+    .history-headline > span { margin-left:auto; font-size:11px; color:#c6ad7d; text-align:right; }
+    #usage-history-message { font-size:11px; color:var(--muted); margin-top:8px!important; }
+    #usage-history-message:empty { display:none; }
+    #usage-history-chart-wrap { position:relative; margin-top:10px; touch-action:pan-y; }
+    #usage-history-chart { display:block; width:100%; overflow:visible; cursor:crosshair; }
+    #usage-history-tooltip { position:absolute; top:7px; z-index:2; width:218px; max-width:calc(100% - 8px); padding:10px 30px 10px 12px; border:1px solid #394139; border-radius:6px; background:var(--field); box-shadow:0 6px 22px #0003; pointer-events:none; font-size:11px; line-height:1.6; }
+    #usage-history-tooltip.pinned { border-color:var(--accent); }
+    #usage-history-unpin { position:absolute; top:3px; right:3px; min-height:28px!important; padding:0 6px!important; border:0!important; pointer-events:auto; }
+    .history-bottom { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; border-top:1px solid var(--line); padding-top:17px; margin-top:16px; }
+    #usage-history-estimate { color:var(--accent); font-size:14px; }
+    #usage-history-rate, #usage-history-note { color:var(--muted); font-size:11px; line-height:1.6; }
+    #usage-history-rate { margin-top:5px!important; }
+    #usage-history-note { margin-top:15px!important; }
+    .history-legend { display:flex; align-items:center; gap:15px; color:var(--muted); font-size:11px; white-space:nowrap; }
+    .history-legend span { display:inline-flex; align-items:center; gap:6px; }
+    .history-legend i { width:20px; border-top:2px solid var(--accent); }
+    .history-legend .projected { border-top-style:dashed; }
+    @media(max-width:600px) {
+      #usage-history-dialog { width:calc(100% - 20px); max-height:calc(100dvh - 20px); padding:17px; }
+      #usage-history-dialog h2 { font-size:16px; }
+      #usage-history-scope { font-size:10px; }
+      .history-top { gap:8px; align-items:flex-start; }
+      .history-popup-actions { gap:6px; }
+      .history-popup-actions label { gap:4px; font-size:10px; }
+      #usage-history-dialog button, #usage-history-dialog select { min-height:44px; padding:5px 8px; }
+      #usage-history-range { max-width:108px; font-size:11px; }
+      .history-headline { flex-wrap:wrap; gap:7px; margin-top:18px; }
+      .history-headline strong { font-size:24px; }
+      .history-headline small { font-size:10px; }
+      .history-bottom { flex-direction:column; gap:13px; }
+    }
   </style>
 </head>
 <body>
@@ -486,6 +537,7 @@ const homePage = `<!doctype html>
           <p id="provider-feedback" role="status" aria-live="polite" hidden></p>
           <section class="usage-subsection" id="usage-panel" aria-labelledby="usage-heading" hidden>
             <div class="usage-heading"><h3 id="usage-heading">Allowance</h3><button id="usage-refresh" class="connection-refresh" type="button" aria-label="Refresh usage" title="Refresh usage"><span id="usage-badge" class="connection-badge off">Optional</span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button></div>
+            <button id="usage-history-open-chatgpt" class="reset usage-history-trigger" type="button" aria-haspopup="dialog" aria-controls="usage-history-dialog" disabled>View usage history</button>
             <p id="usage-message">See remaining allowance and reset times with a separate Codex sign-in. Your conversation connection won’t change.</p>
             <p class="usage-identity" id="usage-identity" hidden></p>
             <div class="device-panel" id="usage-device" hidden><strong>Approve your usage connection</strong><p>Open the OpenAI verification page, sign in to the intended ChatGPT account and workspace, and enter this code. Return here after approval.</p><div class="device-code"><code id="usage-code"></code><button class="reset" id="usage-copy" type="button">Copy code</button></div><div class="usage-actions"><a id="usage-verification" target="_blank" rel="noopener noreferrer" hidden>Open verification page ↗</a><button class="reset" id="usage-cancel" type="button">Cancel</button></div><p id="usage-expiry"></p></div>
@@ -510,7 +562,7 @@ const homePage = `<!doctype html>
           </form>
           <p id="research-key-error" class="menu-error" role="alert"></p><p id="research-key-feedback" class="connection-detail" role="status" aria-live="polite"></p><button class="reset" id="research-settings-retry" type="button" hidden>Retry settings</button>
           <section id="research-usage-panel" class="research-usage" aria-labelledby="research-usage-title" hidden>
-            <div class="research-usage-heading"><h3 id="research-usage-title">Brave Search usage</h3><span>Tracked by Agent</span></div>
+            <div class="research-usage-heading"><h3 id="research-usage-title">Brave Search usage</h3><button id="usage-history-open-brave" class="reset usage-history-trigger" type="button" aria-haspopup="dialog" aria-controls="usage-history-dialog">View usage history</button></div>
             <p id="research-budget-interval"></p>
             <div class="research-usage-number"><strong id="research-budget-used"></strong><span id="research-budget-denominator"></span></div>
             <div id="research-budget-progress" class="research-usage-track" role="progressbar" aria-label="Successful requests used toward Agent cap" aria-valuemin="0" hidden><div class="research-usage-fill"></div></div>
@@ -665,6 +717,17 @@ const homePage = `<!doctype html>
   </dialog>
   <dialog class="connection-dialog" id="usage-dialog" aria-labelledby="usage-dialog-title" aria-describedby="usage-dialog-description">
     <form id="usage-confirm-form"><h2 id="usage-dialog-title">Disconnect usage account?</h2><p id="usage-dialog-account"></p><p id="usage-dialog-description">Remove this usage connection from Agent. Your conversation connection and saved chats are kept. Remote revocation is not guaranteed.</p><label for="usage-password">Agent password</label><input id="usage-password" type="password" autocomplete="current-password" maxlength="72" required><p id="usage-confirm-error" class="menu-error" role="alert" hidden></p><div class="dialog-actions"><button class="reset" id="usage-dialog-cancel" type="button" autofocus>Cancel</button><button class="reset danger" id="usage-confirm" type="submit">Disconnect usage account</button></div></form>
+  </dialog>
+  <dialog id="usage-history-dialog" aria-labelledby="usage-history-title">
+    <header class="history-top"><div><h2 id="usage-history-title">Usage history</h2><p id="usage-history-scope"></p></div><div class="history-popup-actions"><label>History <select id="usage-history-range"><option value="24h">24 hours</option><option value="week">1 week</option><option value="period">Entire period</option></select></label><button id="usage-history-close" type="button" aria-label="Close usage history">×</button></div></header>
+    <label id="usage-history-window-label" hidden>Allowance window <select id="usage-history-window"></select></label>
+    <div class="history-headline"><strong id="usage-history-value">Unavailable</strong><small>current remaining</small><span id="usage-history-reset"></span></div>
+    <p id="usage-history-message" role="status"></p>
+    <div id="usage-history-chart-wrap"><div id="usage-history-plot"></div><div id="usage-history-tooltip" role="status" hidden><span id="usage-history-tip-text"></span><button id="usage-history-unpin" type="button" aria-label="Unpin selected point" hidden>×</button></div></div>
+    <p id="usage-history-instructions" class="visually-hidden">Hover to inspect. Click or tap to pin. Drag to explore. Use arrow keys, Home and End to select points; Enter or Space to pin; Escape to clear selection.</p>
+    <div class="history-bottom"><div><p id="usage-history-estimate"></p><p id="usage-history-rate"></p></div><div class="history-legend"><span><i></i>Recorded</span><span><i class="projected"></i>Projected</span></div></div>
+    <p id="usage-history-note" title="Forecast assumes your last hour’s pace continues and stops at reset or depletion.">Estimates only.</p>
+    <div id="usage-history-selection" class="visually-hidden" aria-live="polite"></div>
   </dialog>
   <script>
     (function () {
@@ -999,11 +1062,256 @@ const homePage = `<!doctype html>
         else if (inspectedRun && !runPanel.hidden) void readRun();
       });
 
+      // BEGIN usage history model
+      // Only recorded observations are history. Codex gaps and resets are boundaries;
+      // a Brave ledger is complete between events and is drawn as steps, not slopes.
+      function usageHistoryModel(data, range, now) {
+        const valid = v => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100;
+        const timestamp = v => typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
+        const ledger = data.provider === 'brave', gap = data.gap_seconds > 0 ? data.gap_seconds : 180;
+        const start = range === 'period' ? Math.min(now,timestamp(data.period_start) || timestamp(data.tracking_started_at) || now) : now - (range === 'week' ? 604800 : 86400);
+        const all = (Array.isArray(data.points) ? data.points : []).filter(p => p && Number.isFinite(p.at) && p.at > 0 && p.at <= now && valid(p.remaining_percent)).sort((a,b) => a.at-b.at).filter((p,i,a) => i === a.length-1 || p.at !== a[i+1].at);
+        const groups = [];
+        for (const p of all) {
+          const group = groups[groups.length-1], prev = group?.[group.length-1];
+          if (!prev || (!ledger && p.at-prev.at > gap) || (prev.reset_at && p.at >= prev.reset_at) || (p.reset_at && prev.reset_at && p.reset_at !== prev.reset_at) || p.remaining_percent > prev.remaining_percent) groups.push([p]);
+          else group.push(p);
+        }
+        const segments = groups.map(g => g.filter(p => p.at >= start)).filter(g=>g.length);
+        const milestones = [];
+        for (const g of segments) for (let i=1; i<g.length; i++) {
+          const a=g[i-1], b=g[i];
+          for (const level of [90,75,50,25,10]) if (a.remaining_percent > level && b.remaining_percent <= level) milestones.push({at:ledger ? b.at : a.at+(a.remaining_percent-level)/(a.remaining_percent-b.remaining_percent)*(b.at-a.at),remaining_percent:level,kind:'milestone'});
+        }
+        let forecast = null;
+        const g = groups[groups.length-1] || [], last = g[g.length-1];
+        const baseline = g.filter(p=>p.at<=now-3600).pop();
+        const observed = data.observed_at;
+        const fresh = Number.isFinite(observed) && observed <= now+5 && now-observed <= (ledger ? 90 : gap);
+        if (!data.stale && fresh && valid(data.remaining_percent) && data.reset_at > now && last && baseline && (ledger || (now-last.at <= gap && now-3600-baseline.at <= gap)) && (!last.reset_at || last.reset_at === data.reset_at) && last.remaining_percent === data.remaining_percent) {
+          const rate = (baseline.remaining_percent-data.remaining_percent)/3600;
+          if (rate > 0) {
+            const endAt = Math.min(data.reset_at,now+data.remaining_percent/rate);
+            const end = {at:endAt,remaining_percent:Math.max(0,data.remaining_percent-rate*(endAt-now)),kind:'forecast'};
+            forecast = {rate,start:{at:now,remaining_percent:data.remaining_percent,kind:'forecast'},end};
+            for (const level of [90,75,50,25,10]) if (data.remaining_percent > level && end.remaining_percent <= level) milestones.push({at:now+(data.remaining_percent-level)/rate,remaining_percent:level,kind:'forecast milestone'});
+          }
+        }
+        return {start,now,segments,milestones,forecast,ledger};
+      }
+      // END usage history model
+
+      // BEGIN usage history controller
+      const historyEl = id => document.getElementById('usage-history-' + id);
+      const historyDialog = historyEl('dialog');
+      let historyProvider = '', historyProfile = '', historyWindow = '', historyData = null;
+      let historyEpoch = 0, historyController = null, historyOrigin = null, historyView = null;
+      let historyPinned = false, historyDragging = false, historyIndex = 0, historySelection = null;
+      const historyPercent = value => Number(value.toFixed(1)).toLocaleString();
+      function historyDuration(seconds) {
+        const n = Math.abs(seconds);
+        return n < 3600 ? Math.round(n/60) + ' min' : n < 86400 ? historyPercent(n/3600) + ' hours' : historyPercent(n/86400) + ' days';
+      }
+      function historyClearSelection() {
+        historyPinned = false; historyDragging = false; historySelection = null;
+        historyEl('tooltip').hidden = true; historyEl('unpin').hidden = true;
+        historyEl('cursor')?.setAttribute('visibility','hidden');
+      }
+      function historyInspect(point, announce = false) {
+        if (!point || !historyView) return;
+        historySelection = point;
+        const projected = point.kind?.startsWith('forecast'), milestone = point.kind?.includes('milestone');
+        const text = historyPercent(point.remaining_percent) + '% remaining · ' + new Date(point.at*1000).toLocaleString() + ' · ' + (projected ? 'Projected' : milestone ? (historyData.provider === 'brave' ? 'Recorded threshold crossing' : 'Approximate threshold crossing') : 'Recorded') + (historyPinned ? ' · pinned' : '');
+        historyEl('tip-text').textContent = text;
+        const tip = historyEl('tooltip'); tip.hidden = false; tip.classList.toggle('pinned',historyPinned);
+        historyEl('unpin').hidden = !historyPinned;
+        tip.style.left = Math.max(4,Math.min(historyView.width-230,historyView.x(point.at)-105)) + 'px';
+        historyEl('cursor')?.setAttribute('visibility','visible');
+        for (const key of ['x1','x2']) historyEl('cursor-line')?.setAttribute(key,historyView.x(point.at));
+        historyEl('cursor-point')?.setAttribute('cx',historyView.x(point.at));
+        historyEl('cursor-point')?.setAttribute('cy',historyView.y(point.remaining_percent));
+        if (announce) historyEl('selection').textContent = text;
+      }
+      function renderUsageHistory() {
+        if (!historyDialog.open || !historyData) return;
+        const data = historyData, now = Math.floor(Date.now()/1000), model = usageHistoryModel(data,historyEl('range').value,now);
+        const current = typeof data.remaining_percent === 'number' && Number.isFinite(data.remaining_percent) && data.remaining_percent >= 0 && data.remaining_percent <= 100;
+
+        historyEl('value').textContent = current ? (data.provider === 'brave' && typeof data.remaining_count === 'number' ? data.remaining_count.toLocaleString() + ' searches left' : historyPercent(data.remaining_percent) + '% left') : 'Unavailable';
+        historyEl('reset').textContent = data.reset_at > now ? 'Resets in ' + historyDuration(data.reset_at-now) : 'Reset time unavailable';
+        historyEl('message').textContent = data.warning || (data.stale ? 'Last-known observations; current allowance may have changed.' : '');
+        const availableWindows = data.provider === 'chatgpt' && Array.isArray(data.windows) ? data.windows.filter(w=>typeof w.id==='string' && typeof w.label==='string') : [];
+        historyEl('scope').textContent = (data.provider === 'chatgpt' ? 'ChatGPT · ' + (availableWindows.find(w=>w.id===historyWindow)?.label || 'Codex-reported allowance') : data.scope) + (data.stale ? ' · last known' : '');
+        historyEl('window-label').hidden = availableWindows.length < 2;
+        const select = historyEl('window'); select.replaceChildren();
+        for (const w of availableWindows) { const option = document.createElement('option'); option.value = w.id; option.textContent = w.label; select.append(option); }
+        select.value = historyWindow;
+        historyEl('estimate').textContent = model.forecast ? (model.forecast.end.at === data.reset_at ? 'Resets before running out' : 'About ' + historyDuration(model.forecast.end.at-now) + ' left at this pace') : 'Forecast unavailable';
+        historyEl('rate').textContent = model.forecast ? (model.forecast.end.at === data.reset_at ? '~' + historyPercent(model.forecast.end.remaining_percent) + '% projected at reset' : 'Based on the last hour') : 'Needs a complete hour of recent history.';
+        const earlier = data.tracking_started_at > model.start || (!model.ledger && model.segments[0]?.[0]?.at > model.start);
+        historyEl('note').textContent = (data.provider === 'brave' ? 'Agent cap · ' : '') + (earlier ? 'Earlier history unavailable · ' : '') + 'Estimates only.';
+        const plot = historyEl('plot');
+        if (!model.segments.length || (data.provider === 'brave' && !current)) {
+          plot.innerHTML = ''; historyView = null; historyClearSelection();
+          if (!historyEl('message').textContent) historyEl('message').textContent = data.provider === 'brave' && !current ? 'Agent cap is disabled. Search tracking continues, but remaining allowance has no percentage until a cap is enabled.' : 'No recorded history for this window yet. Missing data does not mean no allowance remains.';
+          return;
+        }
+        const width = Math.max(290,plot.clientWidth || 800), height = width < 500 ? 310 : 330;
+        const left=40,right=width-14,top=61,bottom=height-37,lookback=Math.max(60,now-model.start);
+        const future = historyEl('range').value === 'period' && data.reset_at > now ? data.reset_at-now : lookback*2/3;
+        const end = now+Math.max(60,future), x = at => left+(at-model.start)/(end-model.start)*(right-left), y = value => bottom-value/100*(bottom-top);
+        const options = [...model.segments.flat().map(p=>({...p,kind:'sample'})),...model.milestones.filter(p=>p.at<=end)];
+        if (model.forecast) options.push({...model.forecast.end,at:Math.min(end,model.forecast.end.at),remaining_percent:Math.max(0,data.remaining_percent-model.forecast.rate*(Math.min(end,model.forecast.end.at)-now))});
+        options.sort((a,b)=>a.at-b.at);
+        historyView = {x,y,width,options}; historyIndex = Math.max(0,options.findLastIndex(p=>p.at<=now));
+        const focused = document.activeElement?.id === 'usage-history-chart';
+        const text = (px,py,label,anchor='start',color='var(--muted)') => '<text x="'+px+'" y="'+py+'" text-anchor="'+anchor+'" fill="'+color+'" font-size="10">'+label+'</text>';
+        const line = (at,kind,dash,color) => '<line id="usage-history-'+kind+'" x1="'+x(at)+'" x2="'+x(at)+'" y1="'+(top-4)+'" y2="'+bottom+'" stroke="'+color+'"'+(dash?' stroke-dasharray="'+dash+'"':'')+'/>';
+        let svg = '';
+        for (const value of [100,50,0]) svg += '<line x1="'+left+'" x2="'+right+'" y1="'+y(value)+'" y2="'+y(value)+'" stroke="var(--line)"/>'+text(left-7,y(value)+4,value+'%','end');
+        const markers = [[model.start,historyEl('range').value==='period'?'Period start':historyEl('range').value==='week'?'1 week ago':'24 hours ago'],[now-86400,'24 hours ago'],[now-3600,'1 hour ago']];
+        let previous = -Infinity;
+        for (const [at,label] of markers) if (at>=model.start && x(at)-previous>85 && x(now)-x(at)>5) { previous=x(at); svg += line(at,'marker-'+at,'3 5','var(--muted)')+text(x(at),top-17,label,at===model.start?'start':'end'); }
+        svg += line(now,'now','','#dce4dc')+text(x(now),bottom+23,'Now','middle','#dce4dc');
+        for (const segment of model.segments) {
+          const path = segment.map((p,i)=>(i ? (model.ledger?'H '+x(p.at)+' V '+y(p.remaining_percent):'L '+x(p.at)+' '+y(p.remaining_percent)) : 'M '+x(p.at)+' '+y(p.remaining_percent))).join(' ');
+          svg += '<path class="usage-history-recorded" d="'+path+'" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>';
+          if (segment.length === 1) svg += '<circle cx="'+x(segment[0].at)+'" cy="'+y(segment[0].remaining_percent)+'" r="3" fill="var(--accent)"/>';
+        }
+        if (model.forecast) { const at=Math.min(end,model.forecast.end.at), remaining=Math.max(0,data.remaining_percent-model.forecast.rate*(at-now)); svg += '<path id="usage-history-forecast" d="M '+x(now)+' '+y(data.remaining_percent)+' L '+x(at)+' '+y(remaining)+'" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="5 6"/>'; }
+        for (const [i,p] of options.entries()) if (p.kind.includes('milestone')) svg += '<circle class="usage-history-milestone" data-index="'+i+'" cx="'+x(p.at)+'" cy="'+y(p.remaining_percent)+'" r="4" fill="var(--field)" stroke="var(--accent)" stroke-width="1.7" tabindex="0" role="button" aria-label="'+p.remaining_percent+'% remaining threshold. Press Enter to pin."/>';
+        if (data.reset_at > now && data.reset_at <= end) svg += line(data.reset_at,'reset-marker','6 4','#c6ad7d')+text(x(data.reset_at),top-17,'Reset','end','#c6ad7d');
+        else if (data.reset_at > end) historyEl('reset').textContent += ' · beyond chart';
+        svg += '<g id="usage-history-cursor" visibility="hidden" pointer-events="none"><line id="usage-history-cursor-line" y1="'+top+'" y2="'+bottom+'" stroke="#dce4dc" stroke-dasharray="2 3"/><circle id="usage-history-cursor-point" r="5" fill="var(--accent)" stroke="var(--field)" stroke-width="2"/></g>';
+        plot.innerHTML = '<svg id="usage-history-chart" viewBox="0 0 '+width+' '+height+'" tabindex="0" role="group" aria-label="Remaining allowance. Recorded history is solid; forecast is dashed." aria-describedby="usage-history-instructions">'+svg+'</svg>';
+        bindUsageHistoryChart();
+        if (historyPinned && historySelection) historyInspect(historySelection);
+        else historyClearSelection();
+        if (focused) historyEl('chart')?.focus({preventScroll:true});
+      }
+      function bindUsageHistoryChart() {
+        const svg = historyEl('chart'); if (!svg || !historyView) return;
+        const nearest = event => { const r=svg.getBoundingClientRect(), px=(event.clientX-r.left)/r.width*historyView.width; return historyView.options.reduce((a,b)=>Math.abs(historyView.x(b.at)-px)<Math.abs(historyView.x(a.at)-px)?b:a); };
+        svg.onpointermove = event => { if (!historyPinned || historyDragging) historyInspect(nearest(event)); };
+        svg.onpointerleave = () => { if (!historyPinned && !historyDragging) historyClearSelection(); };
+        svg.onpointerdown = event => { if (event.button !== 0) return; historyDragging=true; historyPinned=false; svg.setPointerCapture?.(event.pointerId); historyInspect(nearest(event)); };
+        svg.onpointerup = event => { if (!historyDragging) return; historyDragging=false; historyPinned=true; historyInspect(nearest(event),true); if (svg.hasPointerCapture?.(event.pointerId)) svg.releasePointerCapture(event.pointerId); };
+        svg.onpointercancel = historyClearSelection;
+        svg.onkeydown = event => {
+          if (event.target !== svg) return;
+          if (['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) {
+            event.preventDefault(); historyPinned=false;
+            historyIndex=event.key==='Home'?0:event.key==='End'?historyView.options.length-1:Math.max(0,Math.min(historyView.options.length-1,historyIndex+(event.key==='ArrowRight'?1:-1)));
+            historyInspect(historyView.options[historyIndex],true);
+          } else if (['Enter',' '].includes(event.key)) { event.preventDefault(); historyPinned=!historyPinned; historyInspect(historyView.options[historyIndex],true); }
+          else if (event.key==='Escape') { event.preventDefault(); event.stopPropagation(); if(historySelection)historyClearSelection();else usageHistoryClose(); }
+        };
+        for (const dot of svg.querySelectorAll('.usage-history-milestone')) {
+          const point=historyView.options[Number(dot.dataset.index)];
+          dot.onfocus=()=>{if(!historyPinned)historyInspect(point,true);};
+          dot.onclick=event=>{event.stopPropagation();historyPinned=true;historyInspect(point,true);};
+          dot.onkeydown=event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();event.stopPropagation();historyPinned=true;historyInspect(point,true);}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();if(historySelection)historyClearSelection();else usageHistoryClose();}};
+        }
+      }
+      function abortUsageHistory() { ++historyEpoch; historyController?.abort(); historyController=null; }
+      function usageHistoryClose(restore = true) {
+        abortUsageHistory(); historyClearSelection(); historyData=null; historyView=null; historyProvider='';
+        if (historyDialog.open) historyDialog.close();
+        const origin=historyOrigin; historyOrigin=null;
+        if (restore && origin) origin.focus({preventScroll:true});
+      }
+      async function usageHistoryRead() {
+        if (!historyDialog.open || !historyProvider || chatApp.hidden || document.hidden) return;
+        abortUsageHistory();
+        const epoch=historyEpoch, provider=historyProvider, profile=historyProfile, controller=new AbortController(); historyController=controller;
+        const params=new URLSearchParams();
+        if (provider==='chatgpt') params.set('profile_id',profile);
+        params.set('range',historyEl('range').value);
+        if (provider==='chatgpt' && historyWindow) params.set('window_id',historyWindow);
+        const timer=setTimeout(()=>controller.abort(),12000);
+        try {
+          const response=await fetch((provider==='chatgpt'?'/api/usage/history?':'/api/research/history?')+params,{cache:'no-store',signal:controller.signal});
+          const result=await response.json();
+          if (epoch!==historyEpoch || !historyDialog.open || (provider==='chatgpt' && profile!==activeProfileID)) return;
+          if (!response.ok || result.provider!==provider || typeof result.scope!=='string' || !Array.isArray(result.points)) throw new Error('Invalid history');
+          historyData=result; historyWindow=provider==='chatgpt' && typeof result.window_id==='string'?result.window_id:'';
+          renderUsageHistory();
+        } catch (_) {
+          if (epoch!==historyEpoch || !historyDialog.open) return;
+          if (historyData) { historyData={...historyData,stale:true}; renderUsageHistory(); }
+          historyEl('message').textContent='Usage history could not be loaded. '+(historyData?'Showing last-known observations. ':'')+'Try another range or reopen to retry.';
+        } finally { clearTimeout(timer); if(epoch===historyEpoch)historyController=null; }
+      }
+      async function usageHistoryOpen(provider,origin) {
+        usageHistoryClose(false); historyProvider=provider; historyProfile=activeProfileID; historyOrigin=origin; historyWindow='';
+        historyEl('range').value='24h'; historyEl('title').textContent=provider==='chatgpt'?'ChatGPT usage':'Brave Search usage';
+        historyEl('scope').textContent=provider==='chatgpt'?'Codex-reported allowance':'Brave Search · Agent cap, not provider billing';
+        historyEl('window-label').hidden=true; historyEl('value').textContent='Unavailable'; historyEl('reset').textContent=''; historyEl('plot').innerHTML='';
+        historyEl('message').textContent='Loading recorded history…'; historyEl('estimate').textContent=''; historyEl('rate').textContent='';
+        historyDialog.showModal(); historyEl('close').focus({preventScroll:true});
+        await usageHistoryRead();
+      }
+      for (const provider of ['chatgpt','brave']) historyEl('open-'+provider)?.addEventListener('click',()=>{void usageHistoryOpen(provider,historyEl('open-'+provider));});
+      historyEl('close')?.addEventListener('click',()=>usageHistoryClose());
+      historyEl('unpin')?.addEventListener('click',historyClearSelection);
+      historyEl('range')?.addEventListener('change',()=>{historyClearSelection();historyData=null;historyEl('plot').innerHTML='';return usageHistoryRead();});
+      historyEl('window')?.addEventListener('change',()=>{historyWindow=historyEl('window').value;historyClearSelection();historyData=null;historyEl('plot').innerHTML='';return usageHistoryRead();});
+      historyDialog?.addEventListener('cancel',event=>{event.preventDefault();if(historySelection)historyClearSelection();else usageHistoryClose();});
+      historyDialog?.addEventListener('close',()=>{if(!historyDialog.open && historyProvider)usageHistoryClose();});
+      historyDialog?.addEventListener('click',event=>{if(event.target===historyDialog){const r=historyDialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)usageHistoryClose();}});
+      if (typeof ResizeObserver !== 'undefined' && historyEl('chart-wrap')) new ResizeObserver(()=>{if(historyDialog.open)renderUsageHistory();}).observe(historyEl('chart-wrap'));
+      // END usage history controller
+
+      // BEGIN usage history refresh
+      let usageMonitorTimer = null, usageMonitorEpoch = 0, searchMetadataController = null;
+      function usageMonitorVisible() { return !chatApp.hidden && !document.hidden && (!settingsPanel.hidden || historyDialog.open); }
+      function stopUsageMonitor() {
+        ++usageMonitorEpoch; clearTimeout(usageMonitorTimer); usageMonitorTimer=null;
+        searchMetadataController?.abort(); searchMetadataController=null;
+      }
+      async function refreshSearchMetadata() {
+        if (!usageMonitorVisible() || searchBusy || !searchData || searchMetadataController) return;
+        const epoch=usageMonitorEpoch, searchVersion=searchEpoch, previous=searchData, controller=new AbortController(); searchMetadataController=controller;
+        const timer=setTimeout(()=>controller.abort(),12000);
+        try {
+          const response=await fetch('/api/research/settings',{cache:'no-store',signal:controller.signal});
+          const result=await response.json();
+          if (!response.ok || epoch!==usageMonitorEpoch || searchVersion!==searchEpoch || searchBusy || searchData!==previous || !usageMonitorVisible()) return;
+          // acceptSearchSettings preserves cap drafts and their conflict revision.
+          // This path never sets searchBusy or clears a credential draft.
+          acceptSearchSettings(result.settings); renderSearchSettings();
+        } catch (_) { /* Retain cached metadata and editable drafts on a poll failure. */ }
+        finally { clearTimeout(timer); if(searchMetadataController===controller)searchMetadataController=null; }
+      }
+      function startUsageMonitor() {
+        clearTimeout(usageMonitorTimer); usageMonitorTimer=null;
+        if (!usageMonitorVisible()) return;
+        usageMonitorTimer=setTimeout(()=>{
+          usageMonitorTimer=null;
+          if (!usageMonitorVisible()) return;
+          void refreshSearchMetadata();
+          if (historyDialog.open && !historyController) void usageHistoryRead();
+          startUsageMonitor();
+        },30000);
+      }
+      document.addEventListener('visibilitychange',()=>{
+        if(document.hidden){stopUsageMonitor();abortUsageHistory();}
+        else if(usageMonitorVisible()){void refreshSearchMetadata();if(historyDialog.open)void usageHistoryRead();startUsageMonitor();}
+      });
+      window.addEventListener('focus',()=>{
+        if(!usageMonitorVisible())return;
+        void refreshSearchMetadata();if(historyDialog.open&&!historyController)void usageHistoryRead();
+        if(usageVisible()&&!usageBusy)void usageRequest('status',undefined,true);
+        startUsageMonitor();
+      });
+      window.addEventListener('pagehide',()=>{stopUsageMonitor();abortUsageHistory();});
+      // END usage history refresh
+
       // Usage authorization is independent of the conversation connection.
       const usageElement = id => document.getElementById('usage-' + id);
       const usagePanel = usageElement('panel'), usageDialog = usageElement('dialog');
       let usageProfile = '', usageData = null, usageEpoch = 0, usageTimer = null;
-      let usageBusy = false, usageTarget = null, usageSubmitting = false;
+      let usageBusy = false, usageTarget = null, usageSubmitting = false, usageController = null;
       // BEGIN update reload safety
       // Only booleans and a revision leave this closure; drafts/passwords stay in memory.
       let updateDraftRevision = 0;
@@ -1014,28 +1322,34 @@ const homePage = `<!doctype html>
         revision: updateDraftRevision,
       });
       // END update reload safety
-      function stopUsage() {
+      function stopUsage(preserve = false) {
         ++usageEpoch;
+        usageController?.abort(); usageController=null;
+        stopUsageMonitor();
+        if (!preserve && historyDialog.open) usageHistoryClose(false);
         clearTimeout(usageTimer);
         usageTimer = null;
         usageBusy = false;
+        if (preserve) return;
+        historyEl('open-chatgpt').disabled=true;
         usageProfile = '';
         usageData = null;
         usagePanel.hidden = true;
       }
       function usageVisible() { return !settingsPanel.hidden && !chatApp.hidden && !document.hidden && Boolean(activeProfileID); }
       function syncUsage() {
-        if (!usageVisible()) { stopUsage(); return; }
-        if (usageProfile === activeProfileID) return;
+        startUsageMonitor();
+        if (!usageVisible()) { stopUsage(true); usagePanel.hidden=true; startUsageMonitor(); return; }
+        usagePanel.hidden = false;
+        if (usageProfile === activeProfileID) { void usageRequest('status',undefined,true); return; }
         usageProfile = activeProfileID;
         usageData = null;
-        usagePanel.hidden = false;
         void usageRequest('status');
       }
       function usagePoll() {
         clearTimeout(usageTimer);
-        if (usageVisible() && ['pending', 'checking'].includes(usageData?.state)) {
-          usageTimer = setTimeout(() => { void usageRequest('status'); }, 2000);
+        if (usageVisible()) {
+          usageTimer = setTimeout(() => { void usageRequest('status',undefined,true); }, ['pending','checking'].includes(usageData?.state) ? 2000 : 30000);
         }
       }
       function usageDate(value) {
@@ -1044,6 +1358,7 @@ const homePage = `<!doctype html>
         return Number.isFinite(date.getTime()) ? date.toLocaleString() : '';
       }
       function renderUsage() {
+        historyEl('open-chatgpt').disabled=!activeProfileID || Boolean(connectionRefresh) || connectionBusy;
         if (!usageData) {
           usageElement('badge').textContent = 'Checking…';
           for (const id of ['connect', 'disconnect', 'device', 'identity']) usageElement(id).hidden = true;
@@ -1104,7 +1419,7 @@ const homePage = `<!doctype html>
         }
         usageElement('updated').textContent = !mismatch && data.snapshot ? (usageDate(data.snapshot.fetched_at) ? 'Updated ' + usageDate(data.snapshot.fetched_at) + ' · local time' : 'Update time unavailable') + (stale ? ' · stale' : '') : '';
       }
-      async function usageRequest(action, captured) {
+      async function usageRequest(action, captured, quiet = false) {
         if (!usageVisible() || usageBusy || !usageProfile) return false;
         const priorState = usageData?.state;
         let firstFetch = false;
@@ -1112,12 +1427,13 @@ const homePage = `<!doctype html>
         const target = captured || {profile_id:profile,connection_id:usageData?.connection_id || ''};
         clearTimeout(usageTimer);
         usageBusy = true;
-        usageElement('feedback').textContent = '';
-        renderUsage();
+        const controller = new AbortController(); usageController=controller;
+        const timeout = setTimeout(()=>controller.abort(),12000);
+        if (!quiet) { usageElement('feedback').textContent = ''; renderUsage(); }
         try {
           const payload = {...target};
           if (action === 'connect') { payload.expected_connection_id = payload.connection_id; delete payload.connection_id; }
-          const response = await fetch('/api/usage/' + action + (action === 'status' ? '?profile_id=' + encodeURIComponent(profile) : ''), action === 'status' ? {cache:'no-store'} : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+          const response = await fetch('/api/usage/' + action + (action === 'status' ? '?profile_id=' + encodeURIComponent(profile) : ''), action === 'status' ? {cache:'no-store',signal:controller.signal} : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal});
           if ('password' in payload) payload.password = '';
           const result = await response.json();
           if (epoch !== usageEpoch || profile !== activeProfileID || profile !== usageProfile || !usageVisible()) return false;
@@ -1145,6 +1461,7 @@ const homePage = `<!doctype html>
           }
           return false;
         } finally {
+          clearTimeout(timeout); if (usageController===controller) usageController=null;
           if (captured && 'password' in captured) captured.password = '';
           if (epoch === usageEpoch) { usageBusy = false; renderUsage(); if (firstFetch) void usageRequest('refresh'); else usagePoll(); }
         }
@@ -1188,7 +1505,7 @@ const homePage = `<!doctype html>
         try { if (await usageRequest('disconnect', target)) usageDialog.close(); }
         finally { target.password = ''; usageElement('password').value = ''; usageSubmitting = false; controls.forEach(control => { control.disabled = false; }); usageElement('confirm-form').setAttribute('aria-busy','false'); if (usageDialog.open) usageElement('password').focus(); }
       });
-      document.addEventListener('visibilitychange', () => { if (document.hidden) stopUsage(); else syncUsage(); });
+      document.addEventListener('visibilitychange', () => { if (document.hidden) stopUsage(true); else syncUsage(); });
 
       // Search credentials never leave this input except in the explicit verify POST.
       const searchEl = id => document.getElementById(id);
@@ -1216,8 +1533,10 @@ const homePage = `<!doctype html>
         if (!dirty) { searchBudgetBase = searchBudgetValues(budget); searchBudgetDraft = {...searchBudgetBase}; searchBudgetRevision = budget.revision; }
         for (const key of searchBudgetFields) {
           const field = searchEl('research-budget-' + key);
-          if (key === 'enabled') field.checked = searchBudgetDraft.enabled;
-          else field.value = searchBudgetDraft[key];
+          if (!dirty) {
+            if (key === 'enabled') field.checked = searchBudgetDraft.enabled;
+            else field.value = searchBudgetDraft[key];
+          }
           field.disabled = searchBusy;
         }
         searchEl('research-budget-save').disabled = searchBusy || !searchBudgetDirty();

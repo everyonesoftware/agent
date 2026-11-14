@@ -43,5 +43,8 @@ func run(args []string) error {
 	}
 	addr := ":" + port
 	log.Printf("Agent listening on %s", addr)
-	return http.ListenAndServe(addr, newServer())
+	server := newServer().(*applicationServer)
+	server.startBackground()
+	defer server.close()
+	return http.ListenAndServe(addr, server)
 }

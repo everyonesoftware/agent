@@ -134,6 +134,11 @@ func (s *researchSettingsService) release(userID string) {
 	s.inflight--
 }
 func (s *researchSettingsService) register(mux *http.ServeMux) {
+	protectedHistory := s.accounts.middleware(http.HandlerFunc(s.historyHandler))
+	mux.Handle("GET /api/research/history", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		protectedHistory.ServeHTTP(w, r)
+	}))
 	for _, pattern := range []string{"GET /api/research/settings", "POST /api/research/settings/verify", "POST /api/research/settings/check", "POST /api/research/settings/remove", "POST /api/research/settings/budget"} {
 		// Include unauthenticated failures in the no-store policy.
 		protected := s.accounts.middleware(http.HandlerFunc(s.handler))

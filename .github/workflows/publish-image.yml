@@ -74,6 +74,11 @@ jobs:
       - name: Test browser UI
         run: node tests/ui.mjs
 
+      - name: Verify usage history charts and provider-scoped Settings popups
+        run: |
+          node tests/usage-history-ui.mjs --browser
+          AGENT_HISTORY_BROWSER=1 go test -run '^TestUsageHistoryProductionBrowser$' -count=1 -v .
+
       - name: Test memory controls and context disclosure
         run: node tests/memory-ui.mjs
 

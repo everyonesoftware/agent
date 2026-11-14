@@ -58,31 +58,40 @@ type usageRecord struct {
 	ConnectionID string `json:"connection_id"`
 }
 type usageSession struct {
-	mu          sync.Mutex
-	dir         string
-	record      usageRecord
-	rpc         usageRPC
-	timer       *time.Timer
-	workerEpoch uint64
-	view        usageStatus
-	lastRead    time.Time
+	mu              sync.Mutex
+	dir             string
+	record          usageRecord
+	rpc             usageRPC
+	timer           *time.Timer
+	workerEpoch     uint64
+	view            usageStatus
+	lastRead        time.Time
+	lastAttempt     time.Time
+	checkedEmail    string
+	userID          string
+	identityKey     string
+	historyWriteErr error
 }
 type usageService struct {
-	accounts    *accountStore
-	base        *siwcService
-	mu          sync.Mutex
-	sessions    map[string]*usageSession
-	factory     func(context.Context, string, string) (usageRPC, error)
-	executable  func() (string, error)
-	idleTimeout time.Duration
-	now         func() time.Time
-	slots       chan struct{}
-	starts      connectionPasswordLimiter
-	closed      bool
+	accounts      *accountStore
+	base          *siwcService
+	mu            sync.Mutex
+	sessions      map[string]*usageSession
+	factory       func(context.Context, string, string) (usageRPC, error)
+	executable    func() (string, error)
+	idleTimeout   time.Duration
+	now           func() time.Time
+	slots         chan struct{}
+	starts        connectionPasswordLimiter
+	closed        bool
+	historyErr    error
+	samplerCancel context.CancelFunc
+	samplerDone   chan struct{}
+	samplerCursor string
 }
 
 func newUsageService(accounts *accountStore, base *siwcService) *usageService {
-	return &usageService{accounts: accounts, base: base, sessions: make(map[string]*usageSession), factory: startCodexUsageRPC,
+	return &usageService{historyErr: migrateUsageHistory(accounts.db), accounts: accounts, base: base, sessions: make(map[string]*usageSession), factory: startCodexUsageRPC,
 		executable: func() (string, error) {
 			name := strings.TrimSpace(os.Getenv("CODEX_USAGE_BINARY"))
 			if name == "" {
@@ -95,11 +104,18 @@ func newUsageService(accounts *accountStore, base *siwcService) *usageService {
 func (s *usageService) close() {
 	s.mu.Lock()
 	s.closed = true
+	if s.samplerCancel != nil {
+		s.samplerCancel()
+	}
+	done := s.samplerDone
 	all := make([]*usageSession, 0, len(s.sessions))
 	for _, entry := range s.sessions {
 		all = append(all, entry)
 	}
 	s.mu.Unlock()
+	if done != nil {
+		<-done
+	}
 	for _, entry := range all {
 		entry.mu.Lock()
 		s.stopWorker(entry)
@@ -120,7 +136,7 @@ func (s *usageService) session(user authUser, profile string) (*usageSession, er
 		return nil, errors.New("usage connection capacity reached")
 	}
 	dir := filepath.Join(s.accounts.dataDir, "account-data", user.ID, "usage", profile)
-	entry := &usageSession{dir: dir, view: usageStatus{ProfileID: profile, State: "disconnected", IdentityMatch: "unverified"}}
+	entry := &usageSession{userID: user.ID, dir: dir, view: usageStatus{ProfileID: profile, State: "disconnected", IdentityMatch: "unverified"}}
 	// Refuse symlinked credential parents without creating anything for a mere read.
 	if err := checkUsageParents(s.accounts.dataDir, dir); err != nil {
 		return nil, err
@@ -311,7 +327,20 @@ func (s *usageService) status(ctx context.Context, entry *usageSession, email st
 		entry.view.Error = "The usage sign-in request expired. Start sign-in again."
 		return
 	}
-	if entry.view.State == "connected" && entry.view.Login == nil && s.now().Sub(entry.lastRead) < time.Minute {
+	resetDue := false
+	if entry.view.Snapshot != nil {
+		for _, window := range entry.view.Snapshot.Windows {
+			if window.ResetAt > 0 && window.ResetAt <= s.now().Unix() && window.ResetAt > entry.lastAttempt.Unix() {
+				resetDue = true
+			}
+		}
+	}
+	if entry.identityKey != "" && strings.TrimSpace(email) != "" && !strings.EqualFold(strings.TrimSpace(email), entry.identityKey) {
+		entry.view.IdentityMatch = "different"
+		entry.view.Snapshot = nil
+		entry.identityKey = ""
+	}
+	if !resetDue && entry.view.Login == nil && !entry.lastAttempt.IsZero() && s.now().Sub(entry.lastAttempt) < time.Minute && strings.EqualFold(strings.TrimSpace(email), entry.checkedEmail) {
 		return
 	}
 	var result struct {
@@ -321,6 +350,8 @@ func (s *usageService) status(ctx context.Context, entry *usageSession, email st
 			PlanType string `json:"planType"`
 		} `json:"account"`
 	}
+	entry.lastAttempt = s.now()
+	entry.checkedEmail = strings.ToLower(strings.TrimSpace(email))
 	if err := s.call(ctx, entry, "account/read", map[string]bool{"refreshToken": false}, &result); err != nil {
 		entry.view.State = "unavailable"
 		entry.view.Login = nil
@@ -358,7 +389,12 @@ func (s *usageService) status(ctx context.Context, entry *usageSession, email st
 		entry.view.Snapshot = nil
 		return
 	}
-	if wasPending || entry.view.Snapshot == nil {
+	identityKey := strings.ToLower(strings.TrimSpace(result.Account.Email))
+	if entry.identityKey != identityKey {
+		entry.view.Snapshot = nil
+	}
+	entry.identityKey = identityKey
+	if resetDue || wasPending || entry.view.Snapshot == nil || s.now().Unix()-entry.view.Snapshot.FetchedAt >= 60 {
 		s.refreshQuota(ctx, entry)
 	}
 }
@@ -387,6 +423,7 @@ func (s *usageService) refreshQuota(ctx context.Context, entry *usageSession) {
 	entry.view.State = "connected"
 	entry.view.Error = ""
 	entry.view.Snapshot = &usageSnapshot{FetchedAt: s.now().Unix(), Windows: windows}
+	entry.historyWriteErr = s.recordHistory(ctx, entry)
 }
 
 type usageRateWindow struct {
