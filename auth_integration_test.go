@@ -35,6 +35,90 @@ func TestConversationMessagesAreIsolatedBetweenAccounts(t *testing.T) {
 	}
 }
 
+func TestNewConversationTitleUsesFirstUserRequest(t *testing.T) {
+	store, err := newAccountStore(t.TempDir() + "/users.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, _, err := store.register("alice", "correct-horse-battery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := store.saveExchange(user, "", []chatMessage{
+		{Role: "user", Content: "How can I organize my weekly notes?"},
+		{Role: "assistant", Content: "Here are a few ways to organize your notes."},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var title string
+	if err := store.db.QueryRow(`SELECT title FROM conversations WHERE id=?`, id).Scan(&title); err != nil {
+		t.Fatal(err)
+	}
+	if title != "How can I organize my weekly notes?" {
+		t.Fatalf("saved title = %q, want first user request", title)
+	}
+}
+
+func TestNewConversationTitleSummarizesOpeningLine(t *testing.T) {
+	store, err := newAccountStore(t.TempDir() + "/users.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, _, err := store.register("alice", "correct-horse-battery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := store.saveExchange(user, "", []chatMessage{
+		{Role: "user", Content: "  Plan   a quieter week with café notes 🌿  \n\nConstraints: keep meetings in the afternoon."},
+		{Role: "assistant", Content: "Let's do it."},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var title string
+	if err := store.db.QueryRow(`SELECT title FROM conversations WHERE id=?`, id).Scan(&title); err != nil {
+		t.Fatal(err)
+	}
+	if title != "Plan a quieter week with café notes 🌿" {
+		t.Fatalf("saved title = %q, want a concise opening-line title", title)
+	}
+}
+
+func TestNewConversationTitleStopsAtWholeWord(t *testing.T) {
+	store, err := newAccountStore(t.TempDir() + "/users.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, _, err := store.register("alice", "correct-horse-battery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := store.saveExchange(user, "", []chatMessage{
+		{Role: "user", Content: strings.Repeat("Planning ", 15)},
+		{Role: "assistant", Content: "Sure."},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var title string
+	if err := store.db.QueryRow(`SELECT title FROM conversations WHERE id=?`, id).Scan(&title); err != nil {
+		t.Fatal(err)
+	}
+	want := strings.TrimSpace(strings.Repeat("Planning ", 9))
+	if title != want {
+		t.Fatalf("saved title = %q, want %q", title, want)
+	}
+}
+
+func TestNewConversationTitleTruncatesUnicodeSafely(t *testing.T) {
+	got := requestTitle(strings.Repeat("界", 90))
+	want := strings.Repeat("界", 80)
+	if got != want {
+		t.Fatalf("title = %q, want %q", got, want)
+	}
+}
+
 func TestLoginRejectsWrongPasswordAndAcceptsCorrectPassword(t *testing.T) {
 	t.Setenv("APP_DATA_DIR", t.TempDir())
 	handler := newServer()

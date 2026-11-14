@@ -419,6 +419,27 @@ type savedMessage struct {
 func (s *accountStore) saveExchange(user authUser, conversationID string, messages []chatMessage) (string, error) {
 	return s.saveRunExchange(user, conversationID, messages, "")
 }
+
+func requestTitle(content string) string {
+	line := strings.SplitN(strings.TrimSpace(content), "\n", 2)[0]
+	title := strings.Join(strings.Fields(line), " ")
+	if title == "" {
+		return "Conversation"
+	}
+	runes := []rune(title)
+	if len(runes) <= 80 {
+		return title
+	}
+	prefix := string(runes[:80])
+	if runes[80] == ' ' {
+		return prefix
+	}
+	if space := strings.LastIndex(prefix, " "); space > 0 {
+		return prefix[:space]
+	}
+	return prefix
+}
+
 func (s *accountStore) saveRunExchange(user authUser, conversationID string, messages []chatMessage, runID string) (string, error) {
 	now := time.Now().Unix()
 	newConversation := conversationID == ""
@@ -435,10 +456,7 @@ func (s *accountStore) saveRunExchange(user authUser, conversationID string, mes
 	}
 	defer tx.Rollback()
 	if newConversation {
-		title := strings.TrimSpace(messages[len(messages)-1].Content)
-		if len(title) > 120 {
-			title = title[:120]
-		}
+		title := requestTitle(messages[0].Content)
 		if _, err = tx.Exec(`INSERT INTO conversations(id,user_id,title,created_at,updated_at) VALUES(?,?,?,?,?)`, conversationID, user.ID, title, now, now); err != nil {
 			return "", err
 		}
