@@ -109,6 +109,8 @@ func (s *usageService) history(entry *usageSession, rangeID, windowID string) (u
 		return h, errUsageHistoryUnavailable
 	}
 	start, _ := historyRangeStart(rangeID, s.now(), h.PeriodStart)
+	// Include nearby real observations before the range for forecast baselines.
+	start -= h.GapSeconds
 	// Bound results while retaining real observations across the entire range.
 	bucket := int64(1)
 	var count int64

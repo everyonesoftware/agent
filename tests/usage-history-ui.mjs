@@ -1,7 +1,7 @@
 // Usage-history regression tests against the actual embedded production page.
 // node tests/usage-history-ui.mjs; add --browser for isolated Chromium fixtures.
 import assert from 'node:assert/strict';
-import { readFile, mkdtemp, rm } from 'node:fs/promises';
+import { readFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
@@ -46,6 +46,29 @@ const sameSecond={...brave,points:[{at:now-7200,remaining_percent:100},{at:now-7
 assert.equal(context.model(sameSecond,'week',now).segments[0][0].remaining_percent,95,'Multiple ledger changes in one second retain the final balance, not the pre-event baseline');
 assert.equal(context.model({...brave,remaining_percent:null,points:[]},'period',now).forecast,null);
 assert.equal(context.model({...data,period_start:0,tracking_started_at:'<invalid timestamp>'},'period',now).start,now,'Malformed timestamps must never become chart markup');
+const dailyPoints = Array.from({length:1442}, (_,i) => ({at:now-86460+i*60,remaining_percent:i<=1381?64:64-(i-1381)/5,reset_at:now+604800}));
+const dailyData = {...data,reset_at:now+604800,remaining_percent:52,points:dailyPoints};
+let daily = context.model(dailyData,'24h',now);
+assert.ok(daily.forecastDaily,'A full day of recorded history supports a second projection');
+assert.equal(daily.forecast.rate,12/3600,'Hourly pace reflects the recent active hour');
+assert.equal(daily.forecastDaily.rate,12/86400,'Daily pace includes the idle hours');
+assert.equal(daily.forecastDaily.end.at,now+52/(12/86400),'Daily projection stops at depletion');
+assert.equal(context.model({...dailyData,points:dailyPoints.slice(-61)},'24h',now).forecastDaily,null,'One hour must not be extrapolated as a measured daily average');
+assert.equal(context.model({...dailyData,stale:true},'24h',now).forecastDaily,null,'Stale readings disable the daily forecast');
+assert.equal(context.model({...dailyData,points:dailyPoints.filter((_,i)=>i<100||i>110)},'24h',now).forecastDaily,null,'Daily forecast cannot bridge missing coverage');
+assert.equal(context.model({...dailyData,points:dailyPoints.map((p,i)=>({...p,reset_at:i<100?now-80000:p.reset_at}))},'24h',now).forecastDaily,null,'Daily forecast cannot bridge a reset');
+const idleDaily=context.model({...dailyData,remaining_percent:52,points:dailyPoints.map(p=>({...p,remaining_percent:52}))},'24h',now);
+assert.equal(idleDaily.forecastDaily.end.at,dailyData.reset_at,'No daily consumption projects a flat balance until reset');
+assert.equal(idleDaily.forecastDaily.end.remaining_percent,52);
+const emptyDaily=context.model({...dailyData,remaining_percent:0,points:dailyPoints.map(p=>({...p,remaining_percent:0}))},'24h',now);
+assert.equal(emptyDaily.forecastDaily.end.at,now,'An already depleted balance must not project remaining time until reset');
+const idleHourData={...dailyData,remaining_percent:52,points:dailyPoints.map((p,i)=>({...p,remaining_percent:i<1381?64-(12*i/1381):52}))};
+const idleHour=context.model(idleHourData,'24h',now);
+assert.ok(idleHour.forecast,'A fully observed idle hour supports a flat hourly projection');
+assert.equal(idleHour.forecast.rate,0);
+assert.equal(idleHour.forecast.end.at,idleHourData.reset_at);
+assert.equal(idleHour.forecast.end.remaining_percent,52);
+assert.ok(idleHour.forecastDaily.rate>0,'Earlier daily usage remains visible when the recent hour is idle');
 console.log('PASS observed-only history, gap/reset boundaries, recent-hour forecast and endpoint limits');
 const controllerSource=html.split('// BEGIN usage history controller')[1]?.split('// END usage history controller')[0];
 assert.ok(controllerSource,'History modal must load scoped server observations');
@@ -60,7 +83,7 @@ class Element {
   showModal(){this.open=true;}
   close(){this.open=false;this.listeners.close?.({});}
   focus(){this.focused=true;}
-  getBoundingClientRect(){return {left:0,top:0,width:800,right:800,bottom:400};}
+  getBoundingClientRect(){return {left:0,top:0,width:800,height:400,right:800,bottom:400};}
 }
 const nodes=new Map();const el=id=>{if(!nodes.has(id))nodes.set(id,new Element(id));return nodes.get(id);};
 let requests=[],delayed=null,timers=new Map(),timerID=0,metadataRenders=0;
@@ -144,6 +167,22 @@ svg.onpointerleave();assert.equal(el('usage-history-tooltip').hidden,false,'Pinn
 key('Escape');assert.equal(el('usage-history-tooltip').hidden,true);assert.equal(el('usage-history-dialog').open,true);
 svg.onpointerdown({button:0,pointerId:1,clientX:400});svg.onpointermove({clientX:500});svg.onpointerup({pointerId:1,clientX:500});assert.equal(el('usage-history-unpin').hidden,false,'Pointer drag release pins a real point');
 key('Escape');key('Escape');assert.equal(el('usage-history-dialog').open,false,'A second Escape closes the modal after clearing the chart selection');
+env.fetch=async()=>({ok:true,json:async()=>dailyData});
+await env.openHistory('chatgpt',el('usage-history-open-chatgpt'));
+assert.match(el('usage-history-plot').innerHTML,/id="usage-history-forecast-daily"[^>]*stroke-dasharray="2 5"/,'Render a visually distinct daily projection alongside the hourly line');
+assert.match(el('usage-history-daily-estimate').textContent,/24h pace: About/,'Daily result is labeled separately');
+assert.match(el('usage-history-daily-rate').textContent,/last 24 hours.*idle/i,'Explain that daily pace includes idle time');
+el('usage-history-chart').onkeydown({key:'End',target:el('usage-history-chart'),preventDefault(){},stopPropagation(){}});
+assert.match(el('usage-history-tip-text').textContent,/24h pace/,'Daily projection can be inspected and identified');
+env.closeHistory();
+env.fetch=async()=>({ok:true,json:async()=>idleHourData});
+await env.openHistory('chatgpt',el('usage-history-open-chatgpt'));
+const dailyPath=el('usage-history-plot').innerHTML.match(/id="usage-history-forecast-daily" d="([^"]+)"/)[1];
+const [,dailyX,dailyY]=dailyPath.match(/L ([\d.]+) ([\d.]+)/);
+el('usage-history-chart').onpointerdown({button:0,pointerId:2,clientX:Number(dailyX),clientY:Number(dailyY)*400/330});
+el('usage-history-chart').onpointerup({pointerId:2,clientX:Number(dailyX),clientY:Number(dailyY)*400/330});
+assert.match(el('usage-history-tip-text').textContent,/24h pace.*pinned/,'Pointer height distinguishes daily and hourly endpoints at the same time');
+env.closeHistory();
 assert.ok(html.includes('#usage-history-dialog::backdrop'),'Native modal needs approved dark backdrop');
 assert.ok(html.includes('.history-headline > span { margin-left:auto;'),'Reset belongs on the right of current remaining');
 console.log('PASS threshold dots, sparse markers, keyboard/pointer pinning and modal presentation');
@@ -191,12 +230,13 @@ if (process.argv.includes('--browser')) {
   const dialog=html.match(/<dialog id="usage-history-dialog"[\s\S]*?<\/dialog>/)[0];
   const buttons=['chatgpt','brave'].map(p=>html.match(new RegExp('<button id="usage-history-open-'+p+'"[^>]*>[\\s\\S]*?<\\/button>'))[0].replace(' disabled','')).join('');
   const page='<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>'+style+'</style>'+buttons+dialog+'<script>let activeProfileID="p1";const settingsPanel={hidden:false},chatApp={hidden:false};'+modelSource+controllerSource+'</script>';
-  const calls=[];let capDisabled=false,sparseHistory=false;
+  const calls=[];let capDisabled=false,sparseHistory=false,dailyHistory=false;
   const server=createServer((req,res)=>{
     if(req.url==='/'){res.writeHead(200,{'Content-Type':'text/html'});res.end(page);return;}
     calls.push(req.url);
     const t=Math.floor(Date.now()/1000),url=new URL(req.url,'http://127.0.0.1');
     const result={...data,scope:'ChatGPT · weekly allowance',observed_at:t,tracking_started_at:t-86400,period_start:t-86400,reset_at:t+7200,points:points.map(p=>({...p,at:p.at-now+t,reset_at:t+7200})),window_id:'weekly',windows:[{id:'weekly',label:'Weekly allowance'},{id:'five',label:'5-hour allowance'}]};
+    if(dailyHistory)Object.assign(result,{remaining_percent:dailyData.remaining_percent,reset_at:t+604800,points:(dailyHistory==='idle'?idleHourData.points:dailyPoints).map(p=>({...p,at:p.at-now+t,reset_at:t+604800}))});
     if(url.pathname==='/api/research/history')Object.assign(result,{provider:'brave',scope:'Brave Search · Agent cap',gap_seconds:0,remaining_count:40,...(capDisabled?{remaining_percent:null,points:[],warning:'Agent cap is disabled'}:{})});
     if(url.searchParams.get('window_id')==='five')Object.assign(result,{scope:'ChatGPT · 5-hour allowance',window_id:'five'});
     if(sparseHistory)result.points=result.points.slice(-4);
@@ -245,6 +285,14 @@ if (process.argv.includes('--browser')) {
     await js("(()=>{const w=document.getElementById('usage-history-window');w.value='five';w.dispatchEvent(new Event('change'));})()");await until("document.getElementById('usage-history-scope').textContent.includes('5-hour')");
     await js("(()=>{const r=document.getElementById('usage-history-range');r.value='week';r.dispatchEvent(new Event('change'));})()");await until("!!document.getElementById('usage-history-chart')");assert.ok(calls.some(c=>c.includes('range=week')&&c.includes('window_id=five')));
     await js("document.getElementById('usage-history-details').open=false");
+    dailyHistory=true;
+    await js("document.getElementById('usage-history-close').click();document.getElementById('usage-history-open-chatgpt').click()");
+    await until("!!document.getElementById('usage-history-forecast-daily')");
+    assert.equal(await js("document.getElementById('usage-history-forecast-daily').getAttribute('stroke-dasharray')"),'2 5');
+    assert.equal(await js("document.getElementById('usage-history-forecast').getAttribute('stroke-dasharray')"),'5 6');
+    await js("document.getElementById('usage-history-chart').focus()");await press('End');await press('Enter');
+    assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),/24h pace.*pinned/,'Real keyboard inspection identifies the daily projection');
+    await press('Escape');
     for(const [width,height] of [[1280,844],[900,600],[390,844],[320,640]]){
       await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<500});
       await js('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
@@ -256,8 +304,25 @@ if (process.argv.includes('--browser')) {
       await js("document.getElementById('usage-history-details-toggle').click()");
       assert.equal(await js("(()=>{const d=document.getElementById('usage-history-dialog'),p=document.querySelector('.history-details-body').getBoundingClientRect(),r=d.getBoundingClientRect();return p.left>=r.left&&p.right<=r.right&&p.top>=r.top&&p.bottom<=r.bottom&&d.scrollHeight<=d.clientHeight;})()"),true,'Open details stay inside the dialog without adding scrolling');
       await js("document.getElementById('usage-history-details-toggle').click()");
+      if(process.env.UI_SCREENSHOTS){const {data}=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(join(process.env.UI_SCREENSHOTS,'history-daily-'+width+'.png'),Buffer.from(data,'base64'));}
     }
-    await js("document.getElementById('usage-history-close').click()");assert.equal(await js('document.activeElement.id'),'usage-history-open-chatgpt');
+    dailyHistory='idle';
+    await js("document.getElementById('usage-history-close').click();document.getElementById('usage-history-open-chatgpt').click()");
+    await until("!!document.getElementById('usage-history-forecast-daily')");
+    const endpoint=async id=>js("(()=>{const p=document.getElementById("+JSON.stringify(id)+"),v=p.getPointAtLength(p.getTotalLength()),s=new DOMPoint(v.x,v.y).matrixTransform(p.getScreenCTM());return {x:s.x,y:s.y};})()");
+    const dailyEnd=await endpoint('usage-history-forecast-daily'),hourlyEnd=await endpoint('usage-history-forecast');
+    assert.ok(Math.abs(dailyEnd.x-hourlyEnd.x)<.01&&Math.abs(dailyEnd.y-hourlyEnd.y)>1,'Idle-hour projections share an endpoint time but not a balance');
+    await cdp('Input.dispatchMouseEvent',{type:'mousePressed',...dailyEnd,button:'left',clickCount:1});
+    await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',...dailyEnd,button:'left',clickCount:1});
+    assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),/24h pace.*pinned/,'Mouse can select the daily endpoint at a shared time');
+    await cdp('Emulation.setTouchEmulationEnabled',{enabled:true});
+    for(const [point,label] of [[hourlyEnd,/1h pace.*pinned/],[dailyEnd,/24h pace.*pinned/]]){
+      await cdp('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});
+      await cdp('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+      assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),label,'Touch distinguishes projections at a shared endpoint time');
+    }
+    await cdp('Emulation.setTouchEmulationEnabled',{enabled:false});
+    await js("document.getElementById('usage-history-close').click()");assert.equal(await js('document.activeElement.id'),'usage-history-open-chatgpt');dailyHistory=false;
     sparseHistory=true;await js("document.getElementById('usage-history-open-chatgpt').click()");await until("document.getElementById('usage-history-estimate').textContent==='Forecast unavailable'");
     assert.equal(await js("document.getElementById('usage-history-dialog').innerText.includes('Needs a complete hour')"),false,'Unavailable reason is hidden until requested');
     await js("document.getElementById('usage-history-details-toggle').click()");

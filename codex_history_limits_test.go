@@ -87,6 +87,61 @@ func TestCodexHistoryRetentionAndBoundedRealPoints(t *testing.T) {
 	}
 }
 
+func TestCodexHistoryIncludesObservedRangeBaseline(t *testing.T) {
+	for _, rangeID := range []string{"24h", "week", "period"} {
+		t.Run(rangeID, func(t *testing.T) {
+			f, s, rpc := newUsageFixture(t)
+			now := time.Unix(2000000000-60, 0)
+			s.now = func() time.Time { return now }
+			codexHistoryConnect(t, f, rpc)
+			entry, err := s.session(f.user, f.id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			initial, err := s.history(entry, rangeID, "codex:primary")
+			if err != nil {
+				t.Fatal(err)
+			}
+			start, err := historyRangeStart(rangeID, now, initial.PeriodStart)
+			if err != nil {
+				t.Fatal(err)
+			}
+			insert := func(at int64, profile, connection, identity, window string) {
+				t.Helper()
+				_, err := f.accounts.db.Exec(`INSERT INTO usage_observations(user_id,profile_id,connection_id,identity_key,window_id,label,minutes,at,remaining,reset_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, f.user.ID, profile, connection, identity, window, "fixture", 300, at, 73, 2000000000)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			for _, at := range []int64{start - 181, start - 180, start - 60, start + 30} {
+				insert(at, f.id, entry.record.ConnectionID, entry.identityKey, "codex:primary")
+			}
+			// A nearby timestamp in another scope or window is not a baseline.
+			insert(start-1, "other-profile", entry.record.ConnectionID, entry.identityKey, "codex:primary")
+			insert(start-2, f.id, "other-connection", entry.identityKey, "codex:primary")
+			insert(start-3, f.id, entry.record.ConnectionID, "other@example.com", "codex:primary")
+			insert(start-4, f.id, entry.record.ConnectionID, entry.identityKey, "other-window")
+			h, err := s.history(entry, rangeID, "codex:primary")
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []int64{start - 180, start - 60, start + 30, now.Unix()}
+			if len(h.Points) != len(want) {
+				t.Fatalf("missing bounded observed baseline: got %+v, want timestamps %v", h.Points, want)
+			}
+			for i, at := range want {
+				p := h.Points[i]
+				if p.At != at || (i < len(want)-1 && (p.RemainingPercent != 73 || p.ResetAt != 2000000000)) {
+					t.Fatalf("observation %d was changed or leaked: %+v, want timestamp %d", i, p, at)
+				}
+			}
+			if h.GapSeconds != 180 || h.ObservedAt != initial.ObservedAt || *h.RemainingPercent != *initial.RemainingPercent {
+				t.Fatalf("baseline changed latest observation metadata: %+v", h)
+			}
+		})
+	}
+}
+
 func TestCodexHistoryRangeBoundaries(t *testing.T) {
 	now := time.Unix(1900000000, 0)
 	for _, tc := range []struct {
