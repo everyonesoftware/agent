@@ -198,6 +198,24 @@ env.closeHistory();
 assert.ok(html.includes('#usage-history-dialog::backdrop'),'Native modal needs approved dark backdrop');
 assert.ok(html.includes('.history-headline > span { margin-left:auto;'),'Reset belongs on the right of current remaining');
 console.log('PASS threshold dots, sparse markers, keyboard/pointer pinning and modal presentation');
+for (const age of [61,120,180,181]) {
+  env.Date=class extends Date{static now(){return (now+age)*1000;}};
+  env.fetch=async()=>({ok:true,json:async()=>({...data,stale:age>180})});
+  await env.openHistory('chatgpt',el('usage-history-open-chatgpt'));
+  assert.match(el('usage-history-message').textContent,/last checked.*ago/i,'Explain the age of a delayed reading');
+  if(age<=180) {
+    assert.match(el('usage-history-estimate').textContent,/May run out/);
+    assert.match(el('usage-history-budget').textContent,/Daily budget:/);
+    assert.match(el('usage-history-message').textContent,/delayed/i);
+  } else {
+    assert.equal(el('usage-history-estimate').textContent,'Forecast unavailable');
+    assert.match(el('usage-history-basis').textContent,/out of date/i,'Show the actual reason without requiring details');
+    assert.equal(el('usage-history-budget').textContent,'Daily budget unavailable');
+  }
+  env.closeHistory();
+}
+env.Date=class extends Date{static now(){return now*1000;}};
+console.log('PASS delayed updates remain useful and expired readings explain their unavailability');
 env.fetch=async()=>({ok:true,json:async()=>({...brave,remaining_count:80})});
 await env.openHistory('brave',el('usage-history-open-brave'));
 assert.match(el('usage-history-plot').innerHTML,/class="usage-history-recorded"[^>]*d="[^"]* C /,'Brave uses the same time-smoothed curve as ChatGPT');
@@ -253,7 +271,7 @@ if (process.argv.includes('--browser')) {
   const dialog=html.match(/<dialog id="usage-history-dialog"[\s\S]*?<\/dialog>/)[0];
   const buttons=['chatgpt','brave'].map(p=>html.match(new RegExp('<button id="usage-history-open-'+p+'"[^>]*>[\\s\\S]*?<\\/button>'))[0].replace(' disabled','')).join('');
   const page='<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>'+style+'</style>'+buttons+dialog+'<script>let activeProfileID="p1";const settingsPanel={hidden:false},chatApp={hidden:false};'+modelSource+controllerSource+'</script>';
-  const calls=[];let capDisabled=false,sparseHistory=false,dailyHistory=false;
+  const calls=[];let capDisabled=false,sparseHistory=false,dailyHistory=false,readingDelay=0;
   const server=createServer((req,res)=>{
     if(req.url==='/'){res.writeHead(200,{'Content-Type':'text/html'});res.end(page);return;}
     calls.push(req.url);
@@ -264,6 +282,7 @@ if (process.argv.includes('--browser')) {
     if(url.pathname==='/api/research/history')Object.assign(result,{provider:'brave',scope:'Brave Search · Agent cap',gap_seconds:0,remaining_count:80,remaining_percent:80,points:[{at:t-7200,remaining_percent:100},{at:t-1800,remaining_percent:90},{at:t,remaining_percent:80}],...(capDisabled?{remaining_percent:null,points:[],warning:'Agent cap is disabled'}:{})});
     if(url.searchParams.get('window_id')==='five')Object.assign(result,{scope:'ChatGPT · 5-hour allowance',window_id:'five'});
     if(sparseHistory)result.points=result.points.slice(-4);
+    if(readingDelay && result.provider==='chatgpt')Object.assign(result,{observed_at:t-readingDelay,stale:readingDelay>180,points:result.points.map(p=>({...p,at:p.at-readingDelay}))});
     res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(result));
   });
   await new Promise(r=>server.listen(0,'127.0.0.1',r));
@@ -281,6 +300,20 @@ if (process.argv.includes('--browser')) {
     await until("!!document.getElementById('usage-history-open-chatgpt')");
     await js("document.getElementById('usage-history-open-chatgpt').click()");
     await until("!!document.getElementById('usage-history-forecast')");
+    for(const age of [90,181,0]) {
+      readingDelay=age;
+      await js('usageHistoryRead()');
+      if(age===181) {
+        assert.equal(await js("document.getElementById('usage-history-estimate').textContent"),'Forecast unavailable');
+        assert.match(await js("document.getElementById('usage-history-basis').textContent"),/out of date/);
+        assert.equal(await js("!!document.getElementById('usage-history-forecast')"),false);
+      } else {
+        assert.equal(await js("!!document.getElementById('usage-history-forecast')"),true,'Delayed polling retains the real rendered forecast, and a fresh poll restores it');
+        assert.match(await js("document.getElementById('usage-history-budget').textContent"),/Daily budget:/);
+        assert.match(await js("document.getElementById('usage-history-message').textContent"),age ? /last checked.*ago.*delayed/ : /^$/);
+      }
+    }
+    console.log('PASS Chromium delayed-poll grace, stale explanation and fresh-reading recovery');
     assert.equal(await js("document.activeElement.id"),'usage-history-close');
     assert.equal(await js("document.querySelectorAll('.usage-history-milestone').length"),5);
     await js("document.getElementById('usage-history-chart').focus()");

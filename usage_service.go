@@ -19,6 +19,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// Poll once per minute, but allow scheduling/RPC delays before invalidating a
+// successful observation. Keep history gap detection on this same boundary.
+const usageObservationMaxAge = 3 * time.Minute
+
 // The usage connection is deliberately independent of SIWC tokens and inference.
 // The only credential owner is a private, managed Codex account context.
 type usageIdentity struct {
@@ -303,7 +307,7 @@ func (s *usageService) view(entry *usageSession) usageStatus {
 	if result.Snapshot != nil {
 		copySnapshot := *result.Snapshot
 		copySnapshot.Windows = append([]usageWindow(nil), result.Snapshot.Windows...)
-		if s.now().Unix()-copySnapshot.FetchedAt > 60 {
+		if s.now().Unix()-copySnapshot.FetchedAt > int64(usageObservationMaxAge/time.Second) {
 			copySnapshot.Stale = true
 		}
 		for _, window := range copySnapshot.Windows {

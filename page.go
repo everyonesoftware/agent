@@ -1112,12 +1112,15 @@ const homePage = `<!doctype html>
         function project(window, kind, available = false) {
           if (data.stale || !fresh || !last || (!ledger && now-last.at > gap)) return {forecast:null,reason:'Latest allowance reading is out of date.'};
           if (!valid(data.remaining_percent) || !(data.reset_at > now) || (last.reset_at && last.reset_at !== data.reset_at) || last.remaining_percent !== data.remaining_percent) return {forecast:null,reason:'Current allowance or reset time is unavailable or has changed.'};
-          let baseline = g.filter(p=>p.at<=now-window).pop();
-          if (!baseline || (!ledger && now-window-baseline.at > gap)) {
+          // A delayed provider poll is not evidence of idle time. Measure its
+          // pace through the last actual observation, not through wall time.
+          const measuredAt = ledger ? now : last.at;
+          let baseline = g.filter(p=>p.at<=measuredAt-window).pop();
+          if (!baseline || (!ledger && measuredAt-window-baseline.at > gap)) {
             if (!available) return {forecast:null,reason:'Needs a complete hour of recent history.'};
-            baseline = g.find(p=>p.at>=now-window);
+            baseline = g.find(p=>p.at>=measuredAt-window);
           }
-          const seconds = baseline ? (ledger && baseline.at<=now-window ? window : now-baseline.at) : 0;
+          const seconds = baseline ? (ledger && baseline.at<=measuredAt-window ? window : measuredAt-baseline.at) : 0;
           if (!(seconds > 0) || baseline.at >= last.at) return {forecast:null,reason:'A second timestamped allowance reading is needed to measure a pace.'};
           const rate = (baseline.remaining_percent-data.remaining_percent)/seconds;
           if (rate < 0) return {forecast:null,reason:'Remaining allowance increased during the projection window.'};
@@ -1216,7 +1219,9 @@ const homePage = `<!doctype html>
 
         historyEl('value').textContent = current ? (data.provider === 'brave' && typeof data.remaining_count === 'number' ? data.remaining_count.toLocaleString() + ' searches left' : historyPercent(data.remaining_percent) + '% left') : 'Unavailable';
         historyEl('reset').textContent = data.reset_at > now ? 'Resets in ' + historyDuration(data.reset_at-now) : 'Reset time unavailable';
-        historyEl('message').textContent = data.warning || (data.stale ? 'Last-known observations; current allowance may have changed.' : '');
+        const readingAge = Number.isFinite(data.observed_at) && data.observed_at > 0 ? Math.max(0,now-data.observed_at) : null;
+        const outdated = data.stale || (readingAge !== null && readingAge > (model.ledger ? 90 : data.gap_seconds > 0 ? data.gap_seconds : 180));
+        historyEl('message').textContent = data.warning || (outdated ? (readingAge !== null ? 'Allowance last checked ' + historyDuration(readingAge) + ' ago; current allowance may have changed.' : 'Last-known observations; current allowance may have changed.') : readingAge > 60 ? 'Allowance last checked ' + historyDuration(readingAge) + ' ago; updates are delayed.' : '');
         const availableWindows = data.provider === 'chatgpt' && Array.isArray(data.windows) ? data.windows.filter(w=>typeof w.id==='string' && typeof w.label==='string') : [];
         historyEl('scope').textContent = (data.provider === 'chatgpt' ? 'ChatGPT · ' + (availableWindows.find(w=>w.id===historyWindow)?.label || 'Codex-reported allowance') : data.scope) + (data.stale ? ' · last known' : '');
         historyEl('window-label').hidden = availableWindows.length < 2;
@@ -1226,7 +1231,7 @@ const homePage = `<!doctype html>
         const forecast = model.forecast, overBudget = !!forecast && forecast.end.at < data.reset_at;
         historyEl('estimate').textContent = forecast ? data.remaining_percent === 0 ? 'Allowance depleted' : forecast.rate === 0 ? 'No usage recorded in the observed history' : overBudget ? 'May run out in about ' + historyDuration(forecast.end.at-now) : 'About ' + historyPercent(forecast.end.remaining_percent) + '% projected at reset' : 'Forecast unavailable';
         historyEl('estimate').classList.toggle('over-budget',overBudget);
-        historyEl('basis').textContent = forecast ? 'Based on ' + historyDuration(forecast.seconds) + ' of recorded history' : 'Recent average unavailable';
+        historyEl('basis').textContent = forecast ? 'Based on ' + historyDuration(forecast.seconds) + ' of recorded history' : model.forecastReason;
         historyEl('budget').textContent = model.dailyBudget !== null ? 'Daily budget: ' + historyPercent(model.dailyBudget) + '% / day' : 'Daily budget unavailable';
         historyEl('average').textContent = forecast ? 'Recent average: ' + historyPercent(forecast.rate*86400) + '% / day' : '';
         historyEl('comparison').textContent = forecast && model.dailyBudget !== null ? (overBudget ? 'Above budget' : 'Within budget') : '';

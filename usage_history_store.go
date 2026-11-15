@@ -48,7 +48,7 @@ func (s *usageService) recordHistory(ctx context.Context, entry *usageSession) e
 }
 
 func (s *usageService) history(entry *usageSession, rangeID, windowID string) (usageHistory, error) {
-	h := usageHistory{Provider: "chatgpt", Scope: entry.view.ProfileID, Points: []usageHistoryPoint{}, Stale: true, GapSeconds: 180}
+	h := usageHistory{Provider: "chatgpt", Scope: entry.view.ProfileID, Points: []usageHistoryPoint{}, Stale: true, GapSeconds: int64(usageObservationMaxAge / time.Second)}
 	if _, err := historyRangeStart(rangeID, s.now(), 0); err != nil {
 		return h, err
 	}
@@ -161,7 +161,7 @@ func (s *usageService) history(entry *usageSession, rangeID, windowID string) (u
 	if err != nil {
 		return h, errUsageHistoryUnavailable
 	}
-	h.Stale = s.now().Unix()-h.ObservedAt > 60 || (h.ResetAt > 0 && h.ResetAt <= s.now().Unix()) || entry.view.State != "connected" || entry.view.Error != ""
+	h.Stale = s.now().Unix()-h.ObservedAt > h.GapSeconds || (h.ResetAt > 0 && h.ResetAt <= s.now().Unix()) || entry.view.State != "connected" || entry.view.Error != ""
 	h.Warning = entry.view.Error
 	return h, nil
 }

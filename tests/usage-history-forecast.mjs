@@ -27,6 +27,19 @@ for (const change of [{remaining_percent:null},{remaining_percent:NaN},{reset_at
   assert.equal(env.model({...short,...change},'24h',now).dailyBudget,null,'Do not suggest a current budget from invalid or stale allowance');
 }
 console.log('PASS daily budget remains useful without history and rejects stale or invalid allowance');
+for (const age of [61,90,120,180]) {
+  const delayed = env.model(short,'24h',now+age);
+  assert.ok(delayed.forecast,'A briefly delayed poll must retain the forecast');
+  assert.equal(delayed.forecast.seconds,model.forecast.seconds,'Unobserved time is not measured idle time');
+  assert.equal(delayed.forecast.rate,model.forecast.rate,'Poll timing must not dilute the measured consumption rate');
+  assert.ok(delayed.dailyBudget > 0);
+}
+for (const change of [{stale:true},{observed_at:now-181},{reset_at:now}]) {
+  const unavailable = env.model({...short,...change},'24h',now);
+  assert.equal(unavailable.forecast,null,'Real staleness, provider errors and resets still disable estimates');
+  assert.equal(unavailable.dailyBudget,null);
+}
+console.log('PASS polling grace retains measured pace without inventing idle observations');
 const bucketed={...short,points:short.points.filter((_,i)=>i%5===0),forecast_points:short.points};
 for(const range of ['24h','week','period']) {
   const result=env.model(bucketed,range,now);
