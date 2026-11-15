@@ -129,5 +129,28 @@ func (a *accountStore) researchHistory(userID, rangeID string, now time.Time) (u
 	h.RemainingCount = &count
 	h.RemainingPercent = &percent
 	h.Points = append(h.Points, usageHistoryPoint{At: now.Unix(), RemainingPercent: percent, ResetAt: h.ResetAt})
+	// A complete local ledger can answer exact cutoff balances. Do not derive
+	// hourly/daily rates from display buckets, which move events across cutoffs.
+	forecastStart := now.Add(-24 * time.Hour)
+	if cycle := time.Unix(h.PeriodStart, 0); cycle.After(forecastStart) {
+		forecastStart = cycle
+	}
+	if tracked.After(forecastStart) {
+		forecastStart = tracked
+	}
+	for _, at := range []time.Time{forecastStart, now.Add(-time.Hour), now} {
+		if at.Before(forecastStart) {
+			continue
+		}
+		balance := percent
+		if !at.Equal(now) {
+			var used int64
+			if err = tx.QueryRow(`SELECT COUNT(*) FROM research_budget_events WHERE user_id=? AND state='used' AND started_ns>=? AND started_ns<=?`, userID, time.Unix(h.PeriodStart, 0).UnixNano(), at.UnixNano()).Scan(&used); err != nil {
+				return h, err
+			}
+			balance = remaining(used)
+		}
+		h.ForecastPoints = append(h.ForecastPoints, usageHistoryPoint{At: at.Unix(), RemainingPercent: balance, ResetAt: h.ResetAt})
+	}
 	return h, tx.Commit()
 }

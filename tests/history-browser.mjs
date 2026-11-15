@@ -21,6 +21,11 @@ try{
  await until("!!document.getElementById('usage-history-open-chatgpt')",'ChatGPT history entry point missing');await until("!document.getElementById('usage-history-open-chatgpt').disabled",'ChatGPT history entry point unavailable');
  await capture('history-settings-desktop');await click('usage-history-open-chatgpt');await until("document.getElementById('usage-history-dialog').open",'ChatGPT popup did not open');await until("document.getElementById('usage-history-dialog').textContent.includes('68%')",'Real quota observations were not rendered');
  assert.ok(await js("!document.getElementById('usage-history-dialog').innerText.includes('Brave')"),'ChatGPT popup leaked other provider');assert.equal(await js("document.getElementById('usage-history-range').value"),'24h');assert.deepEqual(await js("[...document.getElementById('usage-history-range').options].map(o=>o.value)"),['24h','week','period']);
+ await until("!!document.getElementById('usage-history-forecast')",'Available stored observations did not produce a forecast');
+ assert.match(await js("document.getElementById('usage-history-basis').textContent"),/Based on 1 hour of recorded history/);
+ assert.match(await js("document.getElementById('usage-history-budget').textContent"),/^Daily budget:/);
+ assert.match(await js("document.querySelector('.usage-history-recorded').getAttribute('d')"),/ C /,'Provider history is smoothed in the production page');
+ assert.equal(await js("document.querySelectorAll('#usage-history-forecast-daily').length"),0,'Only one recent-average forecast is shown');
  await capture('history-chatgpt-desktop');
  await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await js('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
  assert.equal(await js("(()=>{const t=document.getElementById('usage-history-title').getBoundingClientRect(),r=document.getElementById('usage-history-range').getBoundingClientRect(),d=document.getElementById('usage-history-dialog');return t.right<=r.left&&Math.abs((t.top+t.bottom-r.top-r.bottom)/2)<2&&d.scrollHeight<=d.clientHeight;})()"),true,'Production phone header is inline and dialog fits without scrolling');
@@ -34,6 +39,9 @@ try{
  await js("(()=>{const r=document.getElementById('usage-history-range');r.value='period';r.dispatchEvent(new Event('change'))})()");await until("!!document.querySelector('#usage-history-dialog svg')",'Entire-period chart missing');await capture('history-chatgpt-period-desktop');await click('usage-history-close');
  await until("!!document.getElementById('usage-history-open-brave')&&!document.getElementById('usage-history-open-brave').disabled",'Brave history entry point unavailable');await click('usage-history-open-brave');await until("document.getElementById('usage-history-dialog').open&&document.getElementById('usage-history-dialog').textContent.includes('5')",'Brave ledger history did not load');assert.ok(await js("!document.getElementById('usage-history-dialog').innerText.includes('ChatGPT')"),'Brave popup leaked other provider');
  const history=await js("fetch('/api/research/history?range=24h').then(r=>r.json())");assert.equal(history.remaining_count,5);assert.equal(history.remaining_percent,50);assert.ok(history.points.length>=2);assert.equal(history.provider,'brave');
+ assert.ok(history.forecast_points.length>=2,'The ledger supplies exact cutoff balances separately from chart buckets');
+ await until("!!document.querySelector('.usage-history-recorded')",'Brave step chart missing');
+ assert.match(await js("document.querySelector('.usage-history-recorded').getAttribute('d')"),/ H .* V /,'Ledger stays stepped, not smoothed');
  await capture('history-brave-desktop');await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await js('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');assert.equal(await js('document.documentElement.scrollWidth<=innerWidth'),true,'Mobile page overflows');await capture('history-brave-mobile');await click('usage-history-close');
  // History reads must never create extra searches, inference, or budget events.
  const after=await js("fetch('/api/research/settings').then(r=>r.json())");assert.equal(after.settings.budget.used,5);assert.deepEqual(errors,[],'Runtime exceptions');

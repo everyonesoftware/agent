@@ -140,6 +140,27 @@ func (s *usageService) history(entry *usageSession, rangeID, windowID string) (u
 	if err != nil {
 		return h, errUsageHistoryUnavailable
 	}
+	// Forecasts use recent raw observations, not display-range buckets. Keeping
+	// the newest bounded suffix preserves genuine gaps without introducing gaps
+	// through downsampling, and shortens the labeled duration for dense bursts.
+	forecastArgs := append(append([]any{}, args...), s.now().Add(-24*time.Hour).Unix()-h.GapSeconds, s.now().Unix())
+	rows, err = s.accounts.db.Query(`SELECT at,remaining,reset_at FROM (SELECT at,remaining,reset_at FROM usage_observations WHERE `+scope+` AND window_id=? AND at>=? AND at<=? ORDER BY at DESC LIMIT 4096) ORDER BY at`, forecastArgs...)
+	if err != nil {
+		return h, errUsageHistoryUnavailable
+	}
+	for rows.Next() {
+		var p usageHistoryPoint
+		if rows.Scan(&p.At, &p.RemainingPercent, &p.ResetAt) != nil {
+			rows.Close()
+			return h, errUsageHistoryUnavailable
+		}
+		h.ForecastPoints = append(h.ForecastPoints, p)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return h, errUsageHistoryUnavailable
+	}
 	h.Stale = s.now().Unix()-h.ObservedAt > 60 || (h.ResetAt > 0 && h.ResetAt <= s.now().Unix()) || entry.view.State != "connected" || entry.view.Error != ""
 	h.Warning = entry.view.Error
 	return h, nil

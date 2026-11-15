@@ -26,6 +26,7 @@ type usageHistory struct {
 	WindowID          string               `json:"window_id,omitempty"`
 	Windows           []usageHistoryWindow `json:"windows,omitempty"`
 	Points            []usageHistoryPoint  `json:"points"`
+	ForecastPoints    []usageHistoryPoint  `json:"forecast_points,omitempty"`
 	Stale             bool                 `json:"stale"`
 	GapSeconds        int64                `json:"gap_seconds"`
 	Warning           string               `json:"warning,omitempty"`
