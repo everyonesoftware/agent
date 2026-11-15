@@ -164,6 +164,9 @@ assert.match(el('usage-history-budget').textContent,/Daily budget: 480% \/ day/,
 assert.match(el('usage-history-average').textContent,/Recent average: 1,440% \/ day/);
 assert.doesNotMatch(historyMarkup,/>1h pace<|>24h pace</,'Only the recent-average series appears in the legend');
 assert.match(chartHTML,/class="usage-history-recorded"[^>]*d="[^"]* C /,'Production rendering uses a smooth curve for sampled readings');
+const recordedPath=chartHTML.match(/class="usage-history-recorded" d="([^"]+)"/)[1];
+assert.ok((recordedPath.match(/ C /g)||[]).length<30,'Production rendering uses time-smoothed knots rather than every minute reading');
+assert.match(el('usage-history-note').textContent,/time-smoothed.*exact readings/,'Explain the visual smoothing without relabeling exact inspection readings');
 assert.match(chartHTML, /id="usage-history-forecast"[^>]*stroke-dasharray="5 6"/);
 assert.equal((chartHTML.match(/class="usage-history-milestone"/g)||[]).length,5,'All 90/75/50/25/10 crossings always visible, without a toggle');
 assert.match(chartHTML,/1 hour ago/,'Show a sparse hourly marker in 24h view');assert.doesNotMatch(chartHTML,/10 min/);
@@ -195,6 +198,17 @@ env.closeHistory();
 assert.ok(html.includes('#usage-history-dialog::backdrop'),'Native modal needs approved dark backdrop');
 assert.ok(html.includes('.history-headline > span { margin-left:auto;'),'Reset belongs on the right of current remaining');
 console.log('PASS threshold dots, sparse markers, keyboard/pointer pinning and modal presentation');
+env.fetch=async()=>({ok:true,json:async()=>({...brave,remaining_count:80})});
+await env.openHistory('brave',el('usage-history-open-brave'));
+assert.match(el('usage-history-plot').innerHTML,/class="usage-history-recorded"[^>]*d="[^"]* C /,'Brave uses the same time-smoothed curve as ChatGPT');
+assert.doesNotMatch(el('usage-history-plot').innerHTML,/class="usage-history-recorded"[^>]*d="[^"]* H /,'Brave display is no longer a step line');
+assert.match(el('usage-history-note').textContent,/Agent cap.*time-smoothed.*exact readings/,'Brave discloses display smoothing too');
+assert.equal(el('usage-history-value').textContent,'80 searches left','Smoothing cannot alter the exact search count');
+key('Home');key('ArrowRight');
+assert.match(el('usage-history-tip-text').textContent,/90% remaining.*Recorded/,'Inspection retains the original ledger event balance');
+assert.match(el('usage-history-hourly-rate').textContent,/Last hour: 20 percentage points/,'Ledger forecast math remains unchanged');
+env.closeHistory();
+console.log('PASS Brave smoothing with exact search counts, ledger inspection and forecasts');
 assert.match(html, /id="usage-history-open-chatgpt"[^>]* disabled/,'History cannot open while the active profile is still being discovered');
 const stopSource=html.match(/function stopUsage\([^)]*\) \{[\s\S]*?\n      \}/)[0];
 const syncSource=html.match(/function syncUsage\(\) \{[\s\S]*?\n      \}/)[0];
@@ -246,7 +260,8 @@ if (process.argv.includes('--browser')) {
     const t=Math.floor(Date.now()/1000),url=new URL(req.url,'http://127.0.0.1');
     const result={...data,scope:'ChatGPT · weekly allowance',observed_at:t,tracking_started_at:t-86400,period_start:t-86400,reset_at:t+7200,points:points.map(p=>({...p,at:p.at-now+t,reset_at:t+7200})),window_id:'weekly',windows:[{id:'weekly',label:'Weekly allowance'},{id:'five',label:'5-hour allowance'}]};
     if(dailyHistory)Object.assign(result,{remaining_percent:dailyData.remaining_percent,reset_at:t+604800,points:(dailyHistory==='idle'?idleHourData.points:dailyPoints).map(p=>({...p,at:p.at-now+t,reset_at:t+604800}))});
-    if(url.pathname==='/api/research/history')Object.assign(result,{provider:'brave',scope:'Brave Search · Agent cap',gap_seconds:0,remaining_count:40,...(capDisabled?{remaining_percent:null,points:[],warning:'Agent cap is disabled'}:{})});
+    if(dailyHistory==='stairs')Object.assign(result,{remaining_percent:29,reset_at:t+241920,points:Array.from({length:481},(_,i)=>({at:t-28800+i*60,remaining_percent:37-Math.floor(i/60),reset_at:t+241920}))});
+    if(url.pathname==='/api/research/history')Object.assign(result,{provider:'brave',scope:'Brave Search · Agent cap',gap_seconds:0,remaining_count:80,remaining_percent:80,points:[{at:t-7200,remaining_percent:100},{at:t-1800,remaining_percent:90},{at:t,remaining_percent:80}],...(capDisabled?{remaining_percent:null,points:[],warning:'Agent cap is disabled'}:{})});
     if(url.searchParams.get('window_id')==='five')Object.assign(result,{scope:'ChatGPT · 5-hour allowance',window_id:'five'});
     if(sparseHistory)result.points=result.points.slice(-4);
     res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(result));
@@ -315,6 +330,16 @@ if (process.argv.includes('--browser')) {
       await js("document.getElementById('usage-history-details-toggle').click()");
       if(process.env.UI_SCREENSHOTS){const {data}=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(join(process.env.UI_SCREENSHOTS,'history-daily-'+width+'.png'),Buffer.from(data,'base64'));}
     }
+    dailyHistory='stairs';
+    await js("document.getElementById('usage-history-close').click();document.getElementById('usage-history-open-chatgpt').click()");
+    await until("document.getElementById('usage-history-value').textContent==='29% left' && !!document.getElementById('usage-history-forecast')");
+    assert.ok(await js("(document.querySelector('.usage-history-recorded').getAttribute('d').match(/ C /g)||[]).length<110"),'Real browser renders a reduced trend for quantized minute readings');
+    await js("document.getElementById('usage-history-chart').focus()");await press('End');await press('ArrowLeft');await press('ArrowLeft');await press('Enter');
+    assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),/29% remaining.*Recorded.*pinned/,'The latest exact reading remains inspectable after smoothing');
+    await press('Escape');
+    await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:844,deviceScaleFactor:1,mobile:false});
+    await js('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+    if(process.env.UI_SCREENSHOTS){const {data}=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(join(process.env.UI_SCREENSHOTS,'history-smoothed-stairs.png'),Buffer.from(data,'base64'));}
     dailyHistory='idle';
     await js("document.getElementById('usage-history-close').click();document.getElementById('usage-history-open-chatgpt').click()");
     await until("!!document.getElementById('usage-history-forecast')");
@@ -338,6 +363,30 @@ if (process.argv.includes('--browser')) {
     await js("document.getElementById('usage-history-details-toggle').click()");
     assert.equal(await js("document.getElementById('usage-history-dialog').innerText.includes('Needs a complete hour')"),true,'The unavailable hourly detail does not prevent a recent-average forecast');
     await js("document.getElementById('usage-history-close').click()");sparseHistory=false;
+    await js("document.getElementById('usage-history-open-brave').click()");
+    await until("document.getElementById('usage-history-value').textContent==='80 searches left' && !!document.getElementById('usage-history-forecast')");
+    assert.match(await js("document.querySelector('.usage-history-recorded').getAttribute('d')"),/ C /,'Native Brave chart uses smoothed history');
+    assert.doesNotMatch(await js("document.querySelector('.usage-history-recorded').getAttribute('d')"),/ [HV] /,'Native Brave chart no longer renders steps');
+    assert.match(await js("document.getElementById('usage-history-note').textContent"),/Agent cap.*time-smoothed.*exact readings/);
+    assert.match(await js("document.getElementById('usage-history-hourly-rate').textContent"),/Last hour: 20 percentage points/);
+    await js("document.getElementById('usage-history-chart').focus()");await press('Home');await press('Enter');
+    assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),/100% remaining.*Recorded.*pinned/,'Keyboard still inspects the exact ledger baseline');
+    await press('Escape');
+    const threshold=await js("(()=>{const r=document.querySelector('.usage-history-milestone').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()");
+    await cdp('Input.dispatchMouseEvent',{type:'mousePressed',...threshold,button:'left',clickCount:1});
+    await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',...threshold,button:'left',clickCount:1});
+    assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),/90% remaining.*Recorded.*pinned/,'Mouse retains the actual Brave balance at the threshold event');
+    await press('Escape');
+    for(const width of [1280,390]) {
+      await cdp('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:width<500});
+      await js('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+      await js("document.getElementById('usage-history-details-toggle').click()");
+      assert.equal(await js("(()=>{const d=document.getElementById('usage-history-dialog'),r=d.getBoundingClientRect(),p=document.querySelector('.history-details-body').getBoundingClientRect();return d.scrollHeight<=d.clientHeight&&d.scrollWidth<=d.clientWidth&&p.top>=r.top&&p.bottom<=r.bottom;})()"),true,'Brave smoothing details fit desktop and narrow layouts');
+      await js("document.getElementById('usage-history-details-toggle').click()");
+      if(process.env.UI_SCREENSHOTS){const {data}=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(join(process.env.UI_SCREENSHOTS,'history-brave-smoothed-'+width+'.png'),Buffer.from(data,'base64'));}
+    }
+    await js("document.getElementById('usage-history-close').click()");
+    assert.equal(await js('document.activeElement.id'),'usage-history-open-brave');
     capDisabled=true;await js("document.getElementById('usage-history-open-brave').click()");await until("document.getElementById('usage-history-message').textContent.includes('disabled')");
     assert.equal(await js("document.getElementById('usage-history-plot').childElementCount"),0);assert.equal(await js("document.getElementById('usage-history-window-label').hidden"),true);
     assert.equal(await js("document.getElementById('usage-history-details').open"),false,'Reopening a provider resets the details disclosure');

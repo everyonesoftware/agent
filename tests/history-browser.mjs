@@ -40,8 +40,12 @@ try{
  await until("!!document.getElementById('usage-history-open-brave')&&!document.getElementById('usage-history-open-brave').disabled",'Brave history entry point unavailable');await click('usage-history-open-brave');await until("document.getElementById('usage-history-dialog').open&&document.getElementById('usage-history-dialog').textContent.includes('5')",'Brave ledger history did not load');assert.ok(await js("!document.getElementById('usage-history-dialog').innerText.includes('ChatGPT')"),'Brave popup leaked other provider');
  const history=await js("fetch('/api/research/history?range=24h').then(r=>r.json())");assert.equal(history.remaining_count,5);assert.equal(history.remaining_percent,50);assert.ok(history.points.length>=2);assert.equal(history.provider,'brave');
  assert.ok(history.forecast_points.length>=2,'The ledger supplies exact cutoff balances separately from chart buckets');
- await until("!!document.querySelector('.usage-history-recorded')",'Brave step chart missing');
- assert.match(await js("document.querySelector('.usage-history-recorded').getAttribute('d')"),/ H .* V /,'Ledger stays stepped, not smoothed');
+ await until("!!document.querySelector('.usage-history-recorded')",'Brave smoothed chart missing');
+ const bravePath=await js("document.querySelector('.usage-history-recorded').getAttribute('d')");
+ assert.match(bravePath,/ C /,'Brave ledger history uses a smoothed display curve');
+ assert.doesNotMatch(bravePath,/ [HV] /,'Brave display no longer uses the old step line');
+ assert.match(await js("document.getElementById('usage-history-value').textContent"),/^5 searches left$/,'The smoothed chart retains the exact ledger balance');
+ assert.match(await js("document.getElementById('usage-history-note').textContent"),/Agent cap.*time-smoothed.*exact readings/,'Brave discloses display-only smoothing');
  await capture('history-brave-desktop');await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await js('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');assert.equal(await js('document.documentElement.scrollWidth<=innerWidth'),true,'Mobile page overflows');await capture('history-brave-mobile');await click('usage-history-close');
  // History reads must never create extra searches, inference, or budget events.
  const after=await js("fetch('/api/research/settings').then(r=>r.json())");assert.equal(after.settings.budget.used,5);assert.deepEqual(errors,[],'Runtime exceptions');

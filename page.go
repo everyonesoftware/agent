@@ -1081,7 +1081,8 @@ const homePage = `<!doctype html>
 
       // BEGIN usage history model
       // Only recorded observations are history. Codex gaps and resets are boundaries;
-      // a Brave ledger is complete between events and is drawn as steps, not slopes.
+      // a Brave ledger is complete between events. Display smoothing is separate
+      // from exact observations, ledger balances and forecast evidence.
       function usageHistoryModel(data, range, now) {
         const valid = v => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100;
         const timestamp = v => typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
@@ -1129,22 +1130,46 @@ const homePage = `<!doctype html>
         const dailyBudget = !data.stale && fresh && valid(data.remaining_percent) && data.reset_at > now ? data.remaining_percent*86400/(data.reset_at-now) : null;
         return {start,now,segments,milestones,forecast:average.forecast,forecastHourly:hourly.forecast,forecastReason:average.reason,hourlyReason:hourly.reason,dailyBudget,ledger};
       }
-      function usageHistoryPath(segment, x, y, ledger) {
+      function usageHistoryTrend(segment, ledger = false) {
+        if (segment.length < 2) return segment.slice();
+        // Display only: time-weight sampled observations, or step-held ledger
+        // balances, so event/poll density cannot bias the moving average.
+        // Never mix gap/reset segments or alter the raw forecast evidence.
+        const first=segment[0], last=segment[segment.length-1], area=[0];
+        const window=Math.max(900,(last.at-first.at)/80), step=window/3;
+        for (let i=1; i<segment.length; i++) area.push(area[i-1]+(segment[i].at-segment[i-1].at)*(ledger ? segment[i-1].remaining_percent : (segment[i].remaining_percent+segment[i-1].remaining_percent)/2));
+        const integral = at => {
+          if (at <= first.at) return (at-first.at)*first.remaining_percent;
+          if (at >= last.at) return area[area.length-1]+(at-last.at)*last.remaining_percent;
+          let lo=0, hi=segment.length-1;
+          while (hi-lo>1) { const mid=Math.floor((lo+hi)/2); if (segment[mid].at<=at) lo=mid; else hi=mid; }
+          const a=segment[lo], b=segment[hi], dt=at-a.at;
+          return area[lo]+a.remaining_percent*dt+(ledger ? 0 : (b.remaining_percent-a.remaining_percent)*dt*dt/(2*(b.at-a.at)));
+        };
+        const trend=[first];
+        for (let at=first.at+step; at<last.at; at+=step) {
+          const mean=(integral(at+window/2)-integral(at-window/2))/window;
+          trend.push({at,remaining_percent:Math.max(last.remaining_percent,Math.min(trend[trend.length-1].remaining_percent,mean))});
+        }
+        trend.push(last);
+        return trend;
+      }
+      function usageHistoryPath(segment, x, y) {
         if (!segment.length) return '';
         let path = 'M '+x(segment[0].at)+' '+y(segment[0].remaining_percent);
+        const knots=[segment[0]];
         for (let i=1; i<segment.length; i++) {
           const a=segment[i-1], b=segment[i];
-          if (ledger) { path += ' H '+x(b.at)+' V '+y(b.remaining_percent); continue; }
-          // Cubic controls stay inside each pair of readings: no overshoot or
-          // invented consumption on flat stretches. Keep threshold dots on the
-          // curve at the same approximate times used by chart inspection.
-          const knots = [a];
           for (const level of [90,75,50,25,10]) if (a.remaining_percent > level && b.remaining_percent < level) knots.push({at:a.at+(a.remaining_percent-level)/(a.remaining_percent-b.remaining_percent)*(b.at-a.at),remaining_percent:level});
           knots.push(b);
-          for (let j=1; j<knots.length; j++) {
-            const p=knots[j-1], q=knots[j], mid=(x(p.at)+x(q.at))/2;
-            path += ' C '+mid+' '+y(p.remaining_percent)+' '+mid+' '+y(q.remaining_percent)+' '+x(q.at)+' '+y(q.remaining_percent);
-          }
+        }
+        const slopes=knots.slice(1).map((p,i)=>(p.remaining_percent-knots[i].remaining_percent)/(p.at-knots[i].at));
+        // Shared, slope-limited tangents avoid easing to a stop at every knot.
+        // Controls stay inside each pair of balances, including flat intervals.
+        const tangents=knots.map((p,i)=>i===0 ? slopes[0] : i===knots.length-1 ? slopes[i-1] : slopes[i-1]*slopes[i]>0 ? Math.sign(slopes[i])*Math.min(Math.abs(slopes[i-1]),Math.abs(slopes[i])) : 0);
+        for (let i=1; i<knots.length; i++) {
+          const p=knots[i-1], q=knots[i], dt=(q.at-p.at)/3;
+          path += ' C '+x(p.at+dt)+' '+y(p.remaining_percent+tangents[i-1]*dt)+' '+x(q.at-dt)+' '+y(q.remaining_percent-tangents[i]*dt)+' '+x(q.at)+' '+y(q.remaining_percent);
         }
         return path;
       }
@@ -1209,7 +1234,7 @@ const homePage = `<!doctype html>
         historyEl('rate').textContent = forecast ? 'Recent average: ' + historyPercent(forecast.rate*86400) + ' percentage points/day, including idle time across ' + historyDuration(forecast.seconds) + ' of continuous recorded history.' : model.forecastReason;
         historyEl('hourly-rate').textContent = model.forecastHourly ? model.forecastHourly.rate === 0 ? 'Last hour: no usage recorded.' : 'Last hour: ' + historyPercent(model.forecastHourly.rate*3600) + ' percentage points used. If that pace continues: ' + (model.forecastHourly.end.at === data.reset_at ? 'resets before running out.' : 'about ' + historyDuration(model.forecastHourly.end.at-now) + ' left.') : 'Last hour: ' + model.hourlyReason;
         const earlier = data.tracking_started_at > model.start || (!model.ledger && model.segments[0]?.[0]?.at > model.start);
-        historyEl('note').textContent = (data.provider === 'brave' ? 'Agent cap · ' : '') + (earlier ? 'Earlier history unavailable · ' : '') + 'Estimates only.';
+        historyEl('note').textContent = (data.provider === 'brave' ? 'Agent cap · ' : '') + 'Recorded line is a time-smoothed trend (15-minute minimum window); inspection shows exact readings. Threshold markers use raw readings. ' + (earlier ? 'Earlier history unavailable · ' : '') + 'Estimates only.';
         const plot = historyEl('plot');
         if (!model.segments.length || (data.provider === 'brave' && !current)) {
           plot.innerHTML = ''; historyView = null; historyClearSelection();
@@ -1234,7 +1259,7 @@ const homePage = `<!doctype html>
         for (const [at,label] of markers) if (at>=model.start && x(at)-previous>85 && x(now)-x(at)>5) { previous=x(at); svg += line(at,'marker-'+at,'3 5','var(--muted)')+text(x(at),top-17,label,at===model.start?'start':'end'); }
         svg += line(now,'now','','#dce4dc')+text(x(now),bottom+23,'Now','middle','#dce4dc');
         for (const segment of model.segments) {
-          const path = usageHistoryPath(segment,x,y,model.ledger);
+          const path = usageHistoryPath(usageHistoryTrend(segment,model.ledger),x,y);
           svg += '<path class="usage-history-recorded" d="'+path+'" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>';
           if (segment.length === 1) svg += '<circle cx="'+x(segment[0].at)+'" cy="'+y(segment[0].remaining_percent)+'" r="3" fill="var(--accent)"/>';
         }
