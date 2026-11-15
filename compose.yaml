@@ -16,7 +16,6 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-}
       SIWC_DATA_DIR: /data
-      SIWC_REDIRECT_URI: ${SIWC_REDIRECT_URI:-http://127.0.0.1:8080/auth/callback}
     volumes:
       - everyoneagent-data:/data
     ports:

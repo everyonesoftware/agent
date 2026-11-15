@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -40,44 +41,38 @@ func (t testReadCloser) Close() error           { return nil }
 func newTestReadCloser(s string) testReadCloser { return testReadCloser{strings.NewReader(s)} }
 
 func TestRunResponsesActualProviderPayload(t *testing.T) {
-	var payload struct {
-		Model string        `json:"model"`
-		Input []chatMessage `json:"input"`
-	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/models" {
-			w.Write([]byte(`{"data":[{"id":"oauth-model","visibility":"list"}]}`))
-			return
-		}
-		json.NewDecoder(r.Body).Decode(&payload)
-		w.Write([]byte("data: {\"type\":\"response.output_text.delta\",\"delta\":\"safe answer\"}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":8,\"output_tokens\":3,\"total_tokens\":11}}}\n\n"))
-	}))
-	defer server.Close()
-	store, err := newAccountStore(t.TempDir() + "/accounts.sqlite")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.db.Close()
-	user, token, err := store.register("oauth-owner", "correct-horse-battery")
-	if err != nil {
-		t.Fatal(err)
-	}
-	creds := newFileCredentialStore(t.TempDir())
-	if err = creds.Save(testOAuthCredentials("PRIVATE-ACCESS", "PRIVATE-REFRESH", time.Now().Add(time.Hour))); err != nil {
-		t.Fatal(err)
-	}
-	service := newSIWCService(siwcConfig{apiBaseURL: server.URL}, creds)
-	service.client = server.Client()
-	p := &responsesProvider{auth: service}
+	f, p, _, audit := codexInferenceFixture(t, "chat")
+	store, user := f.accounts, f.user
 	request := httptest.NewRequest("POST", "/api/chat", strings.NewReader(`{"omitted_messages":7,"messages":[{"role":"user","content":"question"}]}`))
-	request.AddCookie(&http.Cookie{Name: authCookieName, Value: token})
+	request.AddCookie(f.cookie)
 	w := httptest.NewRecorder()
 	store.middleware(chatHandlerWithStore(p, store)).ServeHTTP(w, request)
 	if w.Code != 200 {
 		t.Fatalf("chat %d %s", w.Code, w.Body)
 	}
-	if payload.Model != "oauth-model" || len(payload.Input) != 2 || payload.Input[0].Role != "system" || !strings.Contains(payload.Input[0].Content, time.Now().Format("2006-01-02")) {
-		t.Fatalf("payload=%#v", payload)
+	wire, err := os.ReadFile(audit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	var thread map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(string(wire)), "\n") {
+		var call struct {
+			Method string
+			Params map[string]any
+		}
+		if json.Unmarshal([]byte(line), &call) != nil {
+			t.Fatal("invalid RPC audit")
+		}
+		if call.Method == "turn/start" {
+			payload = call.Params
+		}
+		if call.Method == "thread/start" {
+			thread = call.Params
+		}
+	}
+	if payload == nil || thread["model"] != "codex-fixture" || !strings.Contains(string(wire), time.Now().Format("2006-01-02")) || !strings.Contains(string(wire), "question") {
+		t.Fatalf("payload=%#v wire=%s", payload, wire)
 	}
 	r := httptest.NewRequest("GET", "/api/runs/"+w.Header().Get("X-Agent-Run-ID"), nil)
 	r.SetPathValue("id", w.Header().Get("X-Agent-Run-ID"))
@@ -85,10 +80,18 @@ func TestRunResponsesActualProviderPayload(t *testing.T) {
 	got := httptest.NewRecorder()
 	store.runHandler(got, r)
 	run := decodeRunMap(t, got)
-	if run["provider"] != "chatgpt" || run["model"] != "oauth-model" || run["request"] == nil || run["context"].(map[string]any)["omitted_messages"] != float64(7) {
+	if run["provider"] != "chatgpt" || run["model"] != "codex-fixture" || run["request"] == nil || run["context"].(map[string]any)["omitted_messages"] != float64(7) {
 		t.Fatalf("run=%#v", run)
 	}
 	if strings.Contains(got.Body.String(), "PRIVATE-") {
 		t.Fatal("credential captured")
+	}
+	actual, _ := json.Marshal(run["request"])
+	var normalized struct {
+		Model    string
+		Messages []chatMessage
+	}
+	if json.Unmarshal(actual, &normalized) != nil || normalized.Model != thread["model"] || len(normalized.Messages) != 2 || normalized.Messages[0].Role != "system" || !strings.Contains(thread["baseInstructions"].(string), normalized.Messages[0].Content) || normalized.Messages[1].Content != "question" || run["usage"].(map[string]any)["total_tokens"] != float64(36) {
+		t.Fatalf("trace differs from Codex request/usage: %s", got.Body)
 	}
 }

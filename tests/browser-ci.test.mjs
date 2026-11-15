@@ -32,3 +32,9 @@ test('release CI provisions and checks a controlled browser before app tests wit
   assert.match(verify, /browser-diagnostics/);
   assert.doesNotMatch(verify, /--no-sandbox|continue-on-error/);
 });
+test('release CI exercises unified Codex login through the production router and browser', async () => {
+  const workflow = await readFile(new URL('.github/workflows/publish-image.yml', root), 'utf8');
+  const verify = workflow.slice(workflow.indexOf('  verify:'), workflow.indexOf('  publish:'));
+  assert.ok(verify.includes('node tests/codex-connection-ui.mjs'), 'device-login race and isolation regressions must run');
+  assert.match(verify, /AGENT_CODEX_BROWSER=1 go test -run '\^TestCodexConnectionProductionBrowser\$' -count=1 -v \./);
+});

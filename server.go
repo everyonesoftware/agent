@@ -50,7 +50,10 @@ func newServerWithResearchWebFactory(factory func(string) *researchWeb) http.Han
 	}
 	accounts, accountErr := newAccountStore(filepath.Join(dataDir, "everyoneagent.sqlite"))
 	if accountErr == nil {
-		provider := &userScopedProvider{api: apiProvider, baseAuth: siwc, accounts: accounts}
+		usage = registerUsageRoutes(mux, accounts, siwc)
+		accounts.codex = usage
+		usage.registerAuth(mux)
+		provider := &userScopedProvider{api: apiProvider, baseAuth: siwc, accounts: accounts, usage: usage}
 		mux.HandleFunc("POST /api/auth/register", accounts.registerHandler)
 		mux.HandleFunc("POST /api/auth/login", accounts.loginHandler)
 		mux.HandleFunc("POST /api/auth/logout", accounts.logoutHandler)
@@ -71,13 +74,7 @@ func newServerWithResearchWebFactory(factory func(string) *researchWeb) http.Han
 			w.Header().Set("Allow", "POST")
 			writeChatError(w, http.StatusMethodNotAllowed, "Use POST to confirm this connection action.")
 		})
-		mux.Handle("POST /auth/start", accounts.scopedPasswordSIWCHandler(siwc, true, (*siwcService).startHandler))
-		mux.Handle("GET /auth/callback", accounts.scopedOAuthCallbackHandler(siwc, (*siwcService).callbackHandler))
-		mux.Handle("GET /api/auth/status", accounts.scopedSIWCHandler(siwc, (*siwcService).statusHandler))
-		mux.Handle("GET /api/auth/profiles", accounts.scopedSIWCHandler(siwc, (*siwcService).profilesHandler))
-		mux.Handle("POST /api/auth/profiles/active", accounts.scopedPasswordSIWCHandler(siwc, false, (*siwcService).selectProfileHandler))
-		mux.Handle("POST /api/auth/disconnect", accounts.scopedPasswordSIWCHandler(siwc, false, (*siwcService).disconnectHandler))
-		usage = registerUsageRoutes(mux, accounts, siwc)
+
 	} else {
 		log.Printf("local account database is unavailable: %v", accountErr)
 		unavailable := func(w http.ResponseWriter, _ *http.Request) {

@@ -2,6 +2,7 @@
 // Run with Node 22+ and UI_BROWSER pointing to a Chromium executable.
 // All API data is confined to this local test server, never production storage.
 import assert from 'node:assert/strict';
+import './codex-connection-ui.mjs';
 import { spawnTestBrowser, waitForTestBrowser, stopTestBrowser } from './browser-launcher.mjs';
 import { existsSync } from 'node:fs';
 import { readFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -42,6 +43,13 @@ let modelsFailure = false;
 let connectionDelay = 0;
 let authorizationFailure = false;
 let authorizationDelay = 0;
+let authorizationAutoApprove = true;
+function approveDevice(id) {
+  const target=providerProfiles.find(p=>p.id===id), record=usageRecords.get(id);
+  Object.assign(target,{connected:true,oauth_selected:true,plan_usage_enabled:true,registration_pending:false});
+  Object.assign(record,{state:'connected',identity:{email:target.email || 'fixture@example.com',plan_type:'Fixture plan'},snapshot:{fetched_at:Math.floor(Date.now()/1000),stale:false,windows:[{id:'custom',label:'Custom quota window',used_percent:32,window_minutes:180,reset_at:1900000000}]}});
+  delete record.login; activeProfile=id;
+}
 let modelsDelay = 0;
 let remoteRevoked = true;
 let runReadFailure = false;
@@ -68,9 +76,9 @@ const providerProfiles = [
   { id: 'p2', label: 'Other', email: 'other@example.com', connected: true, plan_usage_enabled: true, oauth_selected: true },
 ];
 const calls = [];
-let usageAvailable = true, usageDelay = 0, usageMutationDelay = 0, usageRefreshFailure = false, usageStatusFailure = false, usageConnectFailureOnce = false;
+let usageAvailable = true, usageDelay = 0, usageMutationDelay = 0, usageRefreshFailure = false, usageStatusFailure = false;
 const usageRecords = new Map();
-const usageStatus = id => structuredClone(usageRecords.get(id) || {profile_id:id,available:usageAvailable,state:usageAvailable?'disconnected':'unavailable',connection_id:'',identity_match:'unverified'});
+const usageStatus = id => structuredClone(usageRecords.get(id) || {profile_id:id,available:usageAvailable,state:usageAvailable?(providerProfiles.find(p=>p.id===id)?.connected?'connected':'disconnected'):'unavailable',connection_id:'',identity_match:'unverified'});
 
 let conversations = [
   { id: 'one', title: 'A quieter week', updated_at: Math.floor(Date.now() / 1000) },
@@ -122,14 +130,14 @@ const server = createServer(async (req, res) => {
     if ('password' in payload) { json(400, { error: 'Authorization must not submit an Agent password.' }); return; }
     await new Promise(resolve => setTimeout(resolve, authorizationDelay));
     if (authorizationFailure) { json(503, { error: 'Test authorization start unavailable.' }); return; }
-    json(200, { authorization_url: origin + '/fixture/authorize' + url.search }); return;
-  }
-  if (url.pathname === '/fixture/authorize') {
-    // Emulate only the existing route handoff, never contact the real provider.
     let target = providerProfiles.find(p => p.id === (url.searchParams.get('profile_id') || activeProfile));
-    if (url.searchParams.get('mode') === 'add') { target = { id: 'p3', label: 'Added', email: 'added@example.com' }; providerProfiles.push(target); }
-    if (target) { Object.assign(target, { connected: true, oauth_selected: true, plan_usage_enabled: true, registration_pending: false }); activeProfile = target.id; }
-    res.writeHead(302, { Location: '/' }); res.end(); return;
+    if (url.searchParams.get('mode') === 'add') { target = { id: 'p3', label: 'Added', email: 'added@example.com',registration_pending:true }; providerProfiles.push(target); }
+    if (!target) { target={id:'first',label:'First account',registration_pending:true}; providerProfiles.push(target); }
+    const login={profile_id:target.id,connection_id:'u-'+target.id,login_id:'login-'+target.id,verification_url:'https://auth.openai.com/codex/device',user_code:'TEST-CODE',expires_at:Math.floor(Date.now()/1000)+600};
+    usageRecords.set(target.id,{profile_id:target.id,available:true,state:'pending',connection_id:login.connection_id,login});
+    json(200,login);
+    if(authorizationAutoApprove) setTimeout(()=>approveDevice(target.id),50);
+    return;
   }
   if (url.pathname === '/api/auth/status') {
     await new Promise(resolve => setTimeout(resolve, connectionDelay));
@@ -151,11 +159,12 @@ const server = createServer(async (req, res) => {
     call.payload = { profile_id: payload.profile_id };
     if (payload.password !== 'synthetic-test-only') { json(401, { error: 'Agent password is incorrect.' }); return; }
     if (call.payload.profile_id !== activeProfile) { json(409, { error: 'Active account changed.' }); return; }
-    if (!disconnectFailure) { const selected = providerProfiles.find(p => p.id === activeProfile); if (selected) Object.assign(selected, { connected: false, oauth_selected: false, plan_usage_enabled: false }); }
+    if (!disconnectFailure) { const selected = providerProfiles.find(p => p.id === activeProfile); if (selected) Object.assign(selected, { connected: false, oauth_selected: false, plan_usage_enabled: false }); usageRecords.delete(activeProfile); }
     json(disconnectFailure ? 500 : 200, disconnectFailure ? { error: 'Test disconnect failure.' } : { remote_revocation_confirmed: remoteRevoked }); return;
   }
   if (url.pathname.startsWith('/api/usage/')) {
     const action = url.pathname.split('/').pop();
+    if (!['status','refresh','cancel'].includes(action)) { json(404,{error:'Only the unified ChatGPT connection is available.'}); return; }
     let payload = {};
     if (req.method === 'POST') { let text=''; for await (const chunk of req) text+=chunk; payload=JSON.parse(text); }
     const id = payload.profile_id || url.searchParams.get('profile_id');
@@ -163,19 +172,15 @@ const server = createServer(async (req, res) => {
     if (action !== 'status') await new Promise(r=>setTimeout(r,usageMutationDelay));
     if (action === 'status' && usageStatusFailure) { json(503,{error:'Fixture usage status unavailable.'}); return; }
     if (action === 'status') { const result=usageStatus(id); await new Promise(r=>setTimeout(r,usageDelay)); json(200,result); return; }
-    if (id !== activeProfile) { json(409,{error:'Active account changed.'}); return; }
+    if (id !== activeProfile && action!=='cancel') { json(409,{error:'Active account changed.'}); return; }
     const record=usageStatus(id);
     if ((payload.expected_connection_id ?? payload.connection_id) !== record.connection_id) { json(409,{error:'Usage connection changed.'}); return; }
-    if (action === 'connect') Object.assign(record,{state:'pending',connection_id:'u-'+id,login:{login_id:'login-'+id,verification_url:'https://auth.openai.com/codex/device',user_code:'TEST-CODE',expires_at:Math.floor(Date.now()/1000)+600}});
-    if (action === 'connect' && usageConnectFailureOnce) { usageConnectFailureOnce=false; Object.assign(record,{state:'expired',connection_id:'recovered-'+id}); delete record.login; usageRecords.set(id,record); json(503,{error:'Fixture device start failed after saving connection.'}); return; }
+
     if (action === 'cancel') { assert.equal(payload.login_id,record.login.login_id); Object.assign(record,{state:'disconnected',connection_id:''}); delete record.login; }
     if (action === 'refresh' && !usageRefreshFailure) record.snapshot = {fetched_at:Math.floor(Date.now()/1000),stale:false,windows:[{id:'custom',label:'Custom quota window',used_percent:32,window_minutes:180,reset_at:1900000000}]};
     if (action === 'refresh' && usageRefreshFailure) { Object.assign(record,{error:'Fixture usage refresh failed.',snapshot:{...record.snapshot,stale:true}}); usageRecords.set(id,record); json(200,record); return; }
     if (action === 'refresh') delete record.error;
-    if (action === 'disconnect') {
-      if (payload.password !== 'synthetic-test-only') { json(401,{error:'Agent password is incorrect.'}); return; }
-      Object.assign(record,{state:'disconnected',connection_id:'',error:'Removed here; remote revocation is not guaranteed.'}); delete record.snapshot; delete record.identity;
-    }
+
     usageRecords.set(id,record); json(200,record); return;
   }
   if (url.pathname === '/api/models') {
@@ -510,32 +515,35 @@ try {
   ok(await js("document.querySelector('.connection-heading #check-chatgpt')?.tagName==='BUTTON' && !!document.querySelector('#check-chatgpt #connection-badge') && !!document.querySelector('#check-chatgpt svg') && !document.querySelector('.provider-actions #check-chatgpt')"), 'Refresh is part of the top-right status pill, not a separate action');
   ok(await js("document.querySelector('#check-chatgpt').getAttribute('aria-label').includes('Refresh') && document.querySelector('#check-chatgpt').title.includes('Refresh')"), 'Status pill announces its refresh action');
   ok(await js("document.querySelector('#connection-status').hidden"), 'Ready local connection does not repeat the selected account or Connected badge');
-  ok(await js("document.querySelector('#local-connection-address').hidden"), 'Localhost does not show remote setup address instructions');
-  await expectEventually("document.querySelector('#usage-panel') && !document.querySelector('#usage-panel').hidden && !document.querySelector('#usage-connect').disabled", 'Integrated allowance Connect is missing');
-  usageMutationDelay=200;
-  const usageStartsBefore=calls.filter(c=>c.path==='/api/usage/connect').length;
-  await click('#usage-connect'); await click('#usage-connect');
-  await expectEventually("document.querySelector('#usage-code').textContent==='TEST-CODE' && !document.querySelector('#usage-cancel').disabled", 'Usage device-code start missing');
-  usageMutationDelay=0;
-  ok(calls.filter(c=>c.path==='/api/usage/connect').length===usageStartsBefore+1 && !calls.findLast(c=>c.path==='/api/usage/connect').payloadKeys.includes('password'), 'Usage start suppresses duplicates and never submits an Agent password');
-  ok(await js("!document.querySelector('#disconnect-dialog').open && document.querySelector('#usage-verification').href==='https://auth.openai.com/codex/device'"), 'Usage starts device-code authorization without an Agent password');
+  ok(await js("!document.querySelector('#local-connection-address') && !document.querySelector('#usage-connect') && !document.querySelector('#usage-disconnect')"), 'One connection replaces localhost guidance and separate usage controls');
+  authorizationAutoApprove=false;
+  Object.assign(providerProfiles[0],{connected:false,plan_usage_enabled:false});
+  await click('#check-chatgpt');
+  await expectEventually("!document.querySelector('#connect-chatgpt').hidden && !document.querySelector('#connect-chatgpt').disabled", 'Unified reconnect unavailable');
+  authorizationDelay=200;
+  const usageStartsBefore=calls.filter(c=>c.path==='/auth/start').length;
+  await click('#connect-chatgpt'); await click('#connect-chatgpt');
+  await expectEventually("document.querySelector('#usage-code').textContent==='TEST-CODE' && !document.querySelector('#usage-cancel').disabled", 'Unified device-code start missing');
+  authorizationDelay=0;
+  ok(calls.filter(c=>c.path==='/auth/start').length===usageStartsBefore+1 && !calls.findLast(c=>c.path==='/auth/start').payload.keys.includes('password'), 'Device start suppresses duplicates and never submits an Agent password');
+  ok(await js("!document.querySelector('#disconnect-dialog').open && document.querySelector('#usage-verification').href==='https://auth.openai.com/codex/device' && document.querySelector('#account-select').disabled && document.querySelector('#connect-chatgpt').disabled"), 'Device approval locks competing mutations without an Agent password');
   await click('#usage-cancel');
-  await expectEventually("!document.querySelector('#usage-connect').hidden && !document.querySelector('#usage-connect').disabled", 'Usage cancel did not restore Connect');
-  await click('#usage-connect');
-  await expectEventually("document.querySelector('#usage-code').textContent==='TEST-CODE' && !document.querySelector('#usage-cancel').disabled", 'Second usage start failed');
-  const approved = usageRecords.get('p1');
-  approved.state='checking';
-  await expectEventually("document.querySelector('#usage-badge').textContent==='Checking…' && !document.querySelector('#usage-refresh').getAttribute('aria-busy').includes('true')", 'Usage approval checking phase missing');
-  Object.assign(approved,{state:'connected',identity:{email:'personal@example.com',plan_type:'Fixture plan'}}); delete approved.login;
-  await expectEventually("document.querySelector('#usage-windows [role=meter]')?.getAttribute('aria-valuenow')==='68'", 'Approval polling did not fetch initial allowance');
-  ok(calls.some(c=>c.path==='/api/usage/refresh'), 'Approval explicitly retrieves initial allowance instead of fabricating quota');
+  await expectEventually("document.querySelector('#usage-device').hidden && !document.querySelector('#connect-chatgpt').disabled", 'Device cancel did not restore Connect');
+  ok(calls.findLast(c=>c.path==='/api/usage/cancel').payload.login_id==='login-p1', 'Cancel submits the exact device login');
+  await click('#connect-chatgpt');
+  await expectEventually("document.querySelector('#usage-code').textContent==='TEST-CODE' && !document.querySelector('#usage-cancel').disabled", 'Second device start failed');
+  usageRecords.get('p1').state='checking';
+  await expectEventually("document.querySelector('#device-feedback').textContent.includes('Checking')", 'Device approval checking phase missing');
+  approveDevice('p1'); authorizationAutoApprove=true;
+  await expectEventually("document.querySelector('#usage-device').hidden && document.querySelector('#usage-windows [role=meter]')?.getAttribute('aria-valuenow')==='68' && document.querySelector('#connection-badge').textContent==='Connected'", 'Approval polling did not refresh connection, models and allowance');
+  ok(!calls.some(c=>c.path==='/api/usage/connect'), 'Unified authentication never requires a second usage sign-in');
   ok(await js("document.querySelector('#usage-panel').closest('.settings-card').querySelector('#connection-title') && !document.querySelector('#usage-panel .connection-heading') && document.querySelector('#usage-updated').textContent.includes('local time')"), 'Allowance is integrated without altering primary heading selectors');
   await js("document.querySelector('#settings-panel').scrollTop=0");
   await screenshot('agent-allowance-integrated-desktop');
   await js("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.copiedUsageCode=value;}}})");
   for (const [width,height] of [[1280,850],[390,640],[320,640]]) {
     await viewport(width,height);
-    ok(await js("(() => { const a=document.querySelector('#disconnect-chatgpt'), b=document.querySelector('#usage-disconnect'); const props=['color','backgroundColor','borderColor','borderWidth','borderRadius','fontSize','fontWeight','padding','minHeight']; return props.every(p=>getComputedStyle(a)[p]===getComputedStyle(b)[p]) && a.getBoundingClientRect().height===b.getBoundingClientRect().height && b.getBoundingClientRect().height>=44 && document.querySelector('#settings-panel').scrollWidth<=document.querySelector('#settings-panel').clientWidth && document.documentElement.scrollWidth<=innerWidth; })()"), `Usage Disconnect matches the conversation control and fits ${width}px`);
+    ok(await js("document.querySelector('#disconnect-chatgpt').getBoundingClientRect().height>=44 && document.querySelector('#settings-panel').scrollWidth<=document.querySelector('#settings-panel').clientWidth && document.documentElement.scrollWidth<=innerWidth"), `Unified Disconnect and allowance fit ${width}px`);
     await js("document.querySelector('#usage-panel').scrollIntoView({block:'start'})");
     await screenshot('agent-allowance-connected-'+width);
   }
@@ -543,7 +551,7 @@ try {
   usageRefreshFailure=true; usageMutationDelay=200;
   const refreshBefore=calls.filter(c=>c.path==='/api/usage/refresh').length;
   await click('#usage-refresh'); await click('#usage-refresh');
-  ok(await js("document.querySelector('#usage-refresh').getAttribute('aria-busy')==='true' && document.querySelector('#usage-refresh svg') && document.querySelector('#usage-disconnect').disabled"), 'Usage refresh pill is busy and blocks duplicate mutations');
+  ok(await js("document.querySelector('#usage-refresh').getAttribute('aria-busy')==='true' && document.querySelector('#usage-refresh svg') && document.querySelector('#usage-refresh').disabled"), 'Usage refresh pill is busy and blocks duplicate mutations');
   await expectEventually("document.querySelector('#usage-badge').textContent==='Last known' && !document.querySelector('#usage-refresh').disabled", 'Failed usage refresh did not preserve stale quota');
   ok(calls.filter(c=>c.path==='/api/usage/refresh').length===refreshBefore+1 && await js("document.querySelector('#usage-windows [role=meter]').getAttribute('aria-valuenow')==='68' && document.querySelector('#usage-updated').textContent.includes('stale') && document.querySelector('#connection-badge').textContent==='Connected' && !document.querySelector('#send-button').disabled"), 'Failed refresh preserves last-known quota and leaves chat connected');
   usageRefreshFailure=false; usageMutationDelay=0;
@@ -559,71 +567,45 @@ try {
   await loadRetainedUsage('unavailable',true);
   ok(await js("document.querySelector('#usage-windows [role=meter]')?.getAttribute('aria-valuenow')==='68'"), 'Unavailable status retains stale allowance meters');
   ok(await js("document.querySelector('#usage-badge').textContent==='Last known' && document.querySelector('#usage-message').textContent.includes('last-known') && document.querySelector('#usage-windows').classList.contains('usage-stale') && document.querySelector('#usage-windows [role=meter]').getAttribute('aria-label').includes('last known') && document.querySelector('#usage-updated').textContent.includes('stale')"), 'Unavailable retained allowance is explicitly last-known, never live');
-  ok(await js("!document.querySelector('#usage-refresh').disabled && !document.querySelector('#usage-connect').hidden && !document.querySelector('#usage-connect').disabled && !document.querySelector('#usage-disconnect').hidden && !document.querySelector('#usage-disconnect').disabled && document.querySelector('#connection-badge').textContent==='Connected' && !document.querySelector('#send-button').disabled"), 'Unavailable retained quota leaves refresh, reconnect, disconnect, and chat usable');
+  ok(await js("!document.querySelector('#usage-refresh').disabled && !document.querySelector('#disconnect-chatgpt').disabled && document.querySelector('#connection-badge').textContent==='Connected' && !document.querySelector('#send-button').disabled"), 'Unavailable retained quota leaves refresh, unified disconnect, and chat usable');
   const retainedStatusBefore=calls.filter(c=>c.path==='/api/usage/status').length;
   await click('#usage-refresh');
   await expectEventually("document.querySelector('#usage-refresh').getAttribute('aria-busy')==='false'", 'Unavailable status refresh did not finish');
   ok(calls.filter(c=>c.path==='/api/usage/status').length===retainedStatusBefore+1 && await js("!!document.querySelector('#usage-windows [role=meter]')"), 'Unavailable refresh retries status and preserves the stale meter');
-  await click('#usage-connect');
-  await expectEventually("!document.querySelector('#usage-device').hidden && !document.querySelector('#usage-cancel').disabled", 'Unavailable usage reconnect did not start device flow');
-  await click('#usage-cancel');
-  await expectEventually("!document.querySelector('#usage-connect').disabled", 'Unavailable usage reconnect cancellation did not finish');
-  for (const [state,stale,identityMatch] of [['unavailable',true,'different'],['unavailable',false,'unverified'],...['disconnected','expired','pending','checking','unsupported'].map(state=>[state,true,'unverified'])]) {
+  for (const [state,stale,identityMatch] of [['unavailable',false,'unverified'],...['disconnected','expired','pending','checking','unsupported'].map(state=>[state,true,'unverified'])]) {
     await loadRetainedUsage(state,stale,identityMatch);
     ok(await js("document.querySelector('#usage-windows').childElementCount===0"), `Retained quota remains hidden for ${state}/${stale}/${identityMatch}`);
-    if (identityMatch==='different') ok(await js("document.querySelector('#usage-badge').textContent==='Review account' && document.querySelector('#usage-message').textContent.includes('Allowance is hidden')"), 'Identity mismatch overrides stale allowance display');
+
     if (!stale) ok(await js("document.querySelector('#usage-badge').textContent==='Unavailable'"), 'Unavailable non-stale snapshot is not presented as live allowance');
   }
   usageRecords.set('p1',retainedUsage);
   await click('#check-chatgpt');
   await expectEventually("document.querySelector('#usage-badge').textContent==='Connected' && !document.querySelector('#usage-refresh').disabled", 'Retained quota fixture did not restore connected usage');
-  const usageDisconnectCalls=()=>calls.filter(c=>c.path==='/api/usage/disconnect');
-  const beforeUsageDisconnect=usageDisconnectCalls().length;
-  await click('#usage-disconnect');
-  ok(await js("document.querySelector('#usage-dialog').open && document.activeElement.id==='usage-dialog-cancel' && document.querySelector('#usage-dialog-account').textContent.includes('personal@example.com')"), 'Usage-only named confirmation focuses Cancel');
-  await viewport(320,640);
-  ok(await js("document.querySelector('#usage-dialog').getBoundingClientRect().right<=innerWidth && document.querySelector('#usage-confirm').getBoundingClientRect().bottom<=innerHeight && document.querySelector('#usage-dialog').scrollWidth<=document.querySelector('#usage-dialog').clientWidth"), 'Usage-only password confirmation fits a 320px phone');
-  await screenshot('agent-allowance-confirmation-320');
-  await viewport(1280,850);
-  await js("document.querySelector('#usage-password').value='discard-this-synthetic-value'"); await click('#usage-dialog-cancel');
-  await expectEventually("!document.querySelector('#usage-dialog').open && document.querySelector('#usage-password').value==='' && !document.querySelector('#usage-disconnect').disabled", 'Usage cancel did not clear password');
-  await click('#usage-disconnect');
-  await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27}); await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
-  await expectEventually("!document.querySelector('#usage-dialog').open && !document.querySelector('#usage-disconnect').disabled", 'Usage Escape did not cancel');
-  ok(usageDisconnectCalls().length===beforeUsageDisconnect, 'Usage cancel and Escape do not mutate connections');
-  await click('#usage-disconnect');
-  await js("document.querySelector('#usage-password').value='wrong-synthetic-only';document.querySelector('#usage-confirm-form').requestSubmit()");
-  await expectEventually("!document.querySelector('#usage-confirm-error').hidden && !document.querySelector('#usage-confirm').disabled", 'Usage password failure did not allow retry');
-  ok(await js("document.querySelector('#usage-password').value==='' && document.querySelector('#usage-dialog').open && document.querySelector('#connection-badge').textContent==='Connected'"), 'Usage password failure clears input without touching SIWC');
-  await js("document.querySelector('#usage-password').value='synthetic-test-only';document.querySelector('#usage-confirm-form').requestSubmit()");
-  await expectEventually("!document.querySelector('#usage-dialog').open && !document.querySelector('#usage-connect').hidden && !document.querySelector('#usage-connect').disabled", 'Usage disconnect success failed');
-  ok(usageDisconnectCalls().at(-1).payload.profile_id==='p1' && usageDisconnectCalls().at(-1).payload.connection_id==='u-p1' && providerProfiles[0].connected && await js("document.querySelector('#usage-error').textContent.includes('remote revocation') && document.querySelector('#connection-badge').textContent==='Connected' && !document.querySelector('#send-button').disabled"), 'Usage removal submits exact IDs, preserves chat, and reports revocation warning');
+  ok(await js("!document.querySelector('#usage-dialog') && !!document.querySelector('#disconnect-dialog')"), 'One password-protected account disconnect owns both conversations and allowance');
   usageRecords.delete('p1'); usageAvailable=false;
   await click('#check-chatgpt');
   await expectEventually("document.querySelector('#usage-badge').textContent==='Unavailable'", 'Missing dependency state not rendered');
-  ok(await js("document.querySelector('#usage-connect').disabled && !document.querySelector('#usage-windows [role=meter]') && document.querySelector('#usage-message').textContent.includes('dependency') && document.querySelector('#connection-badge').textContent==='Connected'"), 'Missing Codex dependency disables Connect without invented quota');
+  ok(await js("!document.querySelector('#usage-windows [role=meter]') && document.querySelector('#usage-message').textContent.includes('dependency') && document.querySelector('#usage-message').textContent.includes('conversations')"), 'Missing Codex dependency explicitly affects both conversations and allowance without invented quota');
   usageAvailable=true; usageStatusFailure=true;
   await click('#check-chatgpt');
   await expectEventually("document.querySelector('#usage-error').textContent.includes('status unavailable')", 'Usage status transport failure missing');
-  ok(await js("document.querySelector('#usage-connect').disabled && !document.querySelector('#usage-refresh').disabled && document.querySelector('#connection-badge').textContent==='Connected'"), 'Unavailable usage status offers retry without assuming Connect availability');
+  ok(await js("!document.querySelector('#usage-refresh').disabled && document.querySelector('#connection-badge').textContent==='Connected'"), 'Unavailable allowance status offers retry without a second sign-in');
   usageStatusFailure=false;
-  await click('#usage-refresh'); await expectEventually("!document.querySelector('#usage-connect').disabled", 'Usage status retry did not recover');
-  usageConnectFailureOnce=true;
-  await click('#usage-connect');
-  await expectEventually("document.querySelector('#usage-error').textContent.includes('device start failed') && !document.querySelector('#usage-connect').disabled", 'Usage start failure did not allow retry');
-  await click('#usage-connect');
-  await expectEventually("!document.querySelector('#usage-device').hidden && !document.querySelector('#usage-cancel').disabled", 'Usage start retry did not recover changed connection ID');
-  ok(calls.findLast(c=>c.path==='/api/usage/connect').payload.expected_connection_id==='recovered-p1', 'Mutation failure reloads status before retrying a newly persisted connection ID');
-  await click('#usage-cancel'); await expectEventually("!document.querySelector('#usage-connect').disabled", 'Recovery login cancel failed');
+  await click('#usage-refresh'); await expectEventually("document.querySelector('#usage-badge').textContent==='Connected' && !document.querySelector('#usage-refresh').disabled", 'Usage status retry did not recover');
   usageRecords.set('p1',{profile_id:'p1',available:true,state:'expired',connection_id:'expired-p1',identity_match:'unverified'});
+  Object.assign(providerProfiles[0],{connected:false,plan_usage_enabled:false});
+  authorizationAutoApprove=false;
   await click('#check-chatgpt');
-  await expectEventually("document.querySelector('#usage-connect').textContent==='Reconnect usage account' && !document.querySelector('#usage-connect').disabled", 'Expired usage reconnect missing');
-  await click('#usage-connect'); await expectEventually("!document.querySelector('#usage-device').hidden && !document.querySelector('#usage-cancel').disabled", 'Expired reconnect did not start device flow');
-  await click('#usage-copy'); await expectEventually("window.copiedUsageCode==='TEST-CODE' && document.querySelector('#usage-feedback').textContent==='Code copied.'", 'Usage copy feedback missing');
+  await expectEventually("document.querySelector('#connect-chatgpt').textContent.includes('Reconnect') && !document.querySelector('#connect-chatgpt').disabled", 'Expired unified reconnect missing');
+  await click('#connect-chatgpt'); await expectEventually("!document.querySelector('#usage-device').hidden && !document.querySelector('#usage-cancel').disabled", 'Expired reconnect did not start device flow');
+  await click('#usage-copy'); await expectEventually("window.copiedUsageCode==='TEST-CODE' && document.querySelector('#device-feedback').textContent==='Code copied.'", 'Device copy feedback missing');
   await js("navigator.clipboard.writeText=async()=>{throw new Error('Fixture clipboard denied')}"); await click('#usage-copy');
-  await expectEventually("document.querySelector('#usage-feedback').textContent.includes('manually')", 'Usage copy fallback missing');
+  await expectEventually("document.querySelector('#device-feedback').textContent.includes('manually')", 'Device copy fallback missing');
   const unsafeLogin=usageRecords.get('p1').login;
   unsafeLogin.verification_url='https://auth.openai.com.evil.invalid/codex/device';
+  await click('#usage-cancel');
+  await expectEventually("document.querySelector('#usage-device').hidden && !document.querySelector('#check-chatgpt').disabled", 'Cancel before unsafe restoration failed');
+  usageRecords.set('p1',{profile_id:'p1',available:true,state:'pending',connection_id:'u-p1',login:unsafeLogin});
   await click('#check-chatgpt');
   await expectEventually("!document.querySelector('#usage-panel').hidden && !document.querySelector('#usage-device').hidden && !document.querySelector('#check-chatgpt').disabled && document.querySelector('#usage-refresh').getAttribute('aria-busy')==='false'", 'Unsafe verification fixture did not load');
   ok(await js("document.querySelector('#usage-verification').hidden && !document.querySelector('#usage-verification').hasAttribute('href') && document.querySelector('#usage-code').textContent==='TEST-CODE'"), 'Untrusted verification URLs are never made clickable');
@@ -631,10 +613,10 @@ try {
   const pendingUsageCalls=calls.filter(c=>c.path==='/api/usage/status').length;
   await click('#back-to-chat'); await new Promise(r=>setTimeout(r,2250));
   ok(calls.filter(c=>c.path==='/api/usage/status').length===pendingUsageCalls, 'Pending usage polling stops outside Settings');
-  const mismatched=usageRecords.get('p1'); Object.assign(mismatched,{state:'connected',identity:{email:'different@example.com',plan_type:'Fixture plan'},identity_match:'different',snapshot:{fetched_at:1900000000,stale:false,windows:[{id:'hidden',label:'Hidden window',used_percent:10,window_minutes:60,reset_at:1900000000}]}}); delete mismatched.login;
+  approveDevice('p1'); authorizationAutoApprove=true;
   await click('#settings-button');
-  await expectEventually("document.querySelector('#usage-badge').textContent==='Review account'", 'Usage identity mismatch missing');
-  ok(await js("document.querySelector('#usage-identity').textContent.includes('different@example.com') && !document.querySelector('#usage-windows [role=meter]') && document.querySelector('#usage-message').textContent.includes('Reconnect') && !document.querySelector('#usage-connect').hidden && !document.querySelector('#usage-disconnect').hidden"), 'Different usage identity hides all meters and offers reconnect or disconnect');
+  await expectEventually("document.querySelector('#usage-device').hidden && document.querySelector('#usage-badge').textContent==='Connected'", 'Foreground device approval did not restore the unified connection');
+  const mismatched=usageRecords.get('p1');
   mismatched.identity_match='unverified'; mismatched.identity.email='<img src=x onerror=alert(1)>';
   mismatched.snapshot.windows[0].used_percent=null;
   await click('#check-chatgpt');
@@ -646,17 +628,16 @@ try {
   await until(()=>calls.some(c=>c.path==='/api/usage/status' && !c.status), 'Delayed usage read did not start');
   usageDelay=0;
   await changeAccount('p2');
-  await expectEventually("document.querySelector('#account-select').value==='p2' && !document.querySelector('#check-chatgpt').disabled && !document.querySelector('#usage-connect').disabled", 'Switch with delayed usage read failed');
+  await expectEventually("document.querySelector('#account-select').value==='p2' && !document.querySelector('#check-chatgpt').disabled && !document.querySelector('#usage-refresh').disabled", 'Switch with delayed usage read failed');
   await new Promise(r=>setTimeout(r,1000));
-  ok(await js("document.querySelector('#usage-identity').hidden && !document.querySelector('#usage-windows [role=meter]') && document.querySelector('#usage-badge').textContent==='Optional'"), 'Delayed allowance response cannot replace another account');
-  await changeAccount('p1'); await expectEventually("document.querySelector('#account-select').value==='p1' && !document.querySelector('#check-chatgpt').disabled && !document.querySelector('#usage-disconnect').disabled", 'Restore Personal usage failed');
-  await click('#usage-disconnect');
+  ok(await js("document.querySelector('#usage-identity').hidden && !document.querySelector('#usage-windows [role=meter]') && document.querySelector('#usage-badge').textContent==='Connected'"), 'Delayed allowance response cannot replace another account');
+  await changeAccount('p1'); await expectEventually("document.querySelector('#account-select').value==='p1' && !document.querySelector('#check-chatgpt').disabled", 'Restore Personal usage failed');
+  await click('#disconnect-chatgpt');
   activeProfile='p2'; await js("window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}))");
-  await expectEventually("document.querySelector('#account-select').value==='p2' && !document.querySelector('#check-chatgpt').disabled", 'Background profile refresh failed during usage confirmation');
-  await js("document.querySelector('#usage-password').value='synthetic-test-only';document.querySelector('#usage-confirm-form').requestSubmit()");
-  await expectEventually("!document.querySelector('#usage-confirm-error').hidden && !document.querySelector('#usage-confirm').disabled", 'Stale usage target not rejected');
-  ok(usageDisconnectCalls().at(-1).payload.profile_id==='p1' && usageDisconnectCalls().at(-1).payload.connection_id==='u-p1' && usageDisconnectCalls().at(-1).status===409, 'Usage confirmation keeps immutable profile and connection IDs across background account refresh');
-  await click('#usage-dialog-cancel');
+  ok(await js("document.querySelector('#account-select').value==='p1' && document.querySelector('#disconnect-dialog').open"), 'Restored-page refresh cannot retarget an open account confirmation');
+  await confirmChange();
+  await expectEventually("!document.querySelector('#provider-error').hidden && !document.querySelector('#disconnect-dialog').open && !document.querySelector('#check-chatgpt').disabled", 'Stale unified disconnect target not rejected');
+  ok(calls.findLast(c=>c.path==='/api/auth/disconnect').payload.profile_id==='p1' && calls.findLast(c=>c.path==='/api/auth/disconnect').status===409, 'Unified confirmation keeps immutable profile ID across background account refresh');
   await changeAccount('p1'); await expectEventually("document.querySelector('#account-select').value==='p1' && !document.querySelector('#check-chatgpt').disabled", 'Restore first profile failed');
   const beforePasswordSwitch = calls.filter(call => call.path === '/api/auth/profiles/active').length;
   await js("document.querySelector('#account-select').value='p2';document.querySelector('#account-select').dispatchEvent(new Event('change'))");
@@ -716,7 +697,7 @@ try {
   await viewport(390,640); await click('#sidebar-toggle'); await click('#settings-button');
   ok(!(await visible('#sidebar-resize')), 'Sidebar resizing stays hidden on phones');
   ok(await visible('#settings-panel') && !(await visible('#session-sidebar')), 'Phone gear opens Settings and closes sidebar');
-  await expectEventually("!document.querySelector('#usage-panel').hidden && !document.querySelector('#usage-connect').disabled", 'Phone usage load unfinished');
+  await expectEventually("!document.querySelector('#usage-panel').hidden && !document.querySelector('#usage-refresh').disabled", 'Phone usage load unfinished');
   await js("document.querySelector('#settings-panel').scrollTop=document.querySelector('#settings-panel').scrollHeight");
   ok(await js("document.querySelector('#logout-button').getBoundingClientRect().bottom<=innerHeight && document.querySelector('#logout-button').getBoundingClientRect().top>=60"), 'Phone settings scroll exposes the sign-out button');
   await click('#back-to-chat'); await viewport(1280,850);
@@ -821,7 +802,7 @@ try {
   authorizationFailure = false;
   authorizationDelay = 0;
   await click('#connect-chatgpt');
-  await expectEventually("document.querySelector('#chat-app') && !document.querySelector('#chat-app').hidden && !document.querySelector('#check-chatgpt').disabled", 'Reconnection route handoff did not return');
+  await expectEventually("document.querySelector('#usage-device').hidden && document.querySelector('#connection-badge').textContent==='Connected' && !document.querySelector('#check-chatgpt').disabled", 'Reconnection approval did not refresh the connection');
   ok(calls.some(call => call.path === '/auth/start' && call.query === ''), 'Reconnect uses the existing ChatGPT authorization route');
   await click('#settings-button');
   await expectEventually("!document.querySelector('#check-chatgpt').disabled", 'Settings refresh unfinished');
@@ -877,6 +858,17 @@ try {
   await expectEventually("document.querySelector('#connection-badge').textContent==='Not connected' && !document.querySelector('#check-chatgpt').disabled", 'Empty subscription state missing');
   ok(await js("document.querySelector('#usage-panel').hidden"), 'Allowance is hidden without an active conversation profile');
   ok(await js("document.querySelector('#account-select').hidden && document.querySelector('#add-chatgpt-account').hidden && !document.querySelector('#connect-chatgpt').hidden"), 'First-time connection offers authorization without a stale selector');
+  authorizationAutoApprove=false;
+  await click('#connect-chatgpt');
+  await expectEventually("!document.querySelector('#usage-device').hidden && document.querySelector('#usage-code').textContent==='TEST-CODE' && !document.querySelector('#usage-cancel').disabled", 'First-time login did not show its device code before active profile selection');
+  ok(activeProfile==='' && await js("document.querySelector('#usage-panel').hidden && document.querySelector('#usage-device').getClientRects().length>0 && !document.querySelector('#usage-device').closest('#usage-panel')"), 'First device code remains visible independently of the hidden Allowance section');
+  const firstQuery='?profile_id=first&connection_id=u-first';
+  const firstReads=calls.filter(c=>c.path==='/api/usage/status' && c.query===firstQuery).length;
+  await until(()=>calls.filter(c=>c.path==='/api/usage/status' && c.query===firstQuery).length>firstReads,'First-time device polling must target the captured pending profile and connection');
+  await click('#usage-cancel');
+  await expectEventually("document.querySelector('#usage-device').hidden && !document.querySelector('#check-chatgpt').disabled", 'First-time device cancel failed');
+  ok(calls.findLast(c=>c.path==='/api/usage/cancel').payload.profile_id==='first' && activeProfile==='', 'First-time cancellation uses the pending profile without selecting another account');
+  providerProfiles.splice(0); usageRecords.delete('first'); authorizationAutoApprove=true;
   providerProfiles.push(...savedProfiles); activeProfile = 'p2';
   await click('#check-chatgpt');
   await expectEventually("!document.querySelector('#check-chatgpt').disabled", 'Restored profiles check stuck');
@@ -1028,52 +1020,24 @@ try {
   await expectEventually("document.querySelector('#chat-app') && !document.querySelector('#chat-app').hidden && !document.querySelector('#check-chatgpt').disabled", 'Remote workspace did not load');
   await click('#settings-button');
   await expectEventually("!document.querySelector('#check-chatgpt').disabled", 'Remote status refresh unfinished');
-  ok(await js("document.querySelector('#connect-chatgpt').hidden && document.querySelector('#add-chatgpt-account').hidden && !document.querySelector('#disconnect-chatgpt').hidden && !document.querySelector('#account-select').hidden && !document.querySelector('#remote-connection-help').hidden && !document.querySelector('#remote-connection-help').open && document.querySelector('#connection-status').hidden"), 'Ready remote connection keeps Disconnect visible and setup instructions collapsed without redundant ready copy');
-  await expectEventually("!document.querySelector('#usage-panel').hidden && !document.querySelector('#usage-connect').disabled", 'Remote usage Connect unavailable');
-  await click('#usage-connect');
-  await expectEventually("!document.querySelector('#usage-device').hidden && !document.querySelector('#usage-cancel').disabled", 'Remote usage start did not show device code');
-  ok(remoteCalls.some(c=>c.path==='/api/usage/connect' && c.method==='POST') && await js("!document.querySelector('#disconnect-dialog').open"), 'Remote usage device sign-in is allowed without inheriting localhost-only SIWC restrictions');
-  await click('#usage-cancel');
-  await expectEventually("!document.querySelector('#usage-connect').disabled", 'Remote usage cancel failed');
+  ok(await js("document.querySelector('#connect-chatgpt').hidden && !document.querySelector('#add-chatgpt-account').hidden && !document.querySelector('#disconnect-chatgpt').hidden && !document.querySelector('#account-select').hidden && !document.querySelector('#remote-connection-help') && document.querySelector('#connection-status').hidden"), 'Remote connection exposes the same account actions without localhost guidance');
+  authorizationAutoApprove=false;
+  await click('#add-chatgpt-account');
+  await expectEventually("!document.querySelector('#usage-device').hidden && !document.querySelector('#usage-cancel').disabled", 'Remote add-account start did not show device code');
+  ok(remoteCalls.some(c=>c.path==='/auth/start' && c.method==='POST') && await js("!document.querySelector('#disconnect-dialog').open && document.querySelector('#usage-code').textContent==='TEST-CODE' && document.querySelector('#usage-verification').href==='https://auth.openai.com/codex/device'"), 'Remote device sign-in uses the same primary connection without an Agent password');
   await screenshot('agent-panel-remote-connected');
   for (const [width, height] of [[1280,850],[390,640],[320,640]]) {
     await viewport(width, height);
-    await js("document.querySelector('#remote-connection-help').open=false; document.querySelector('#settings-panel').scrollTop=0");
-    const restingDisconnect = await js("(() => { const r=document.querySelector('#disconnect-chatgpt').getBoundingClientRect(); return {x:r.x,y:r.y}; })()");
-    ok(await js("(() => { const a=document.querySelector('#remote-connection-help > summary').getBoundingClientRect(); const b=document.querySelector('#disconnect-chatgpt').getBoundingClientRect(); return Math.abs(a.top-b.top)<1 && a.right<=b.left && a.height>=44; })()"), `Add or reconnect and Disconnect share one accessible row at ${width}px`);
-    await click('#remote-connection-help > summary');
-
-    ok(await js(`(() => { const r=document.querySelector('#disconnect-chatgpt').getBoundingClientRect(); return document.querySelector('#remote-connection-help').open && Math.abs(r.x-${restingDisconnect.x})<1 && Math.abs(r.y-${restingDisconnect.y})<1; })()`), `Expanding guidance leaves Disconnect stationary at ${width}px`);
-    ok(await js("(() => { const p=document.querySelector('#settings-panel'); const a=document.querySelector('#remote-connection-help-slot').getBoundingClientRect(); const b=document.querySelector('#disconnect-chatgpt').getBoundingClientRect(); return a.top>=b.bottom && a.right>=b.right && p.scrollWidth<=p.clientWidth; })()"), `Expanded guidance spans beneath both actions without overflow at ${width}px`);
+    ok(await js("document.querySelector('#settings-panel').scrollWidth<=document.querySelector('#settings-panel').clientWidth && document.documentElement.scrollWidth<=innerWidth && document.querySelector('#usage-cancel').getBoundingClientRect().height>=44 && !document.querySelector('#usage-device').closest('#usage-panel')"), `Remote device-code actions fit ${width}px and stay outside Allowance`);
     await screenshot('agent-connection-action-row-' + width);
   }
+  await click('#usage-cancel'); authorizationAutoApprove=true;
+  await expectEventually("document.querySelector('#usage-device').hidden && !document.querySelector('#check-chatgpt').disabled", 'Remote device cancel failed');
   await viewport(1280,850);
-  ok(await js("document.querySelectorAll('#remote-connection-setup ol > li').length===3 && document.querySelector('#remote-connection-setup').textContent.includes('same Agent account') && document.querySelector('#remote-connection-setup').textContent.includes('status pill')"), 'Remote setup provides the three approved steps and points to the refresh pill');
-  ok(await js("document.querySelector('#remote-connection-action').textContent.includes('Add account')"), 'Connected setup guidance names the actual available localhost action');
-  ok(await js("!document.querySelector('#local-connection-address').hidden && document.querySelector('#local-connection-url').textContent==='http://127.0.0.1:8182'"), 'Remote setup shows the configured callback origin, not the container port or remote host');
-  await js("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.copiedLocalURL=value;}}})");
-  await click('#copy-local-connection-url');
-  await expectEventually("window.copiedLocalURL==='http://127.0.0.1:8182' && document.querySelector('#provider-feedback').textContent==='Local address copied.'", 'Configured address was not copied');
-  await js("navigator.clipboard.writeText=async()=>{throw new Error('Test clipboard rejection')}");
-  await click('#copy-local-connection-url');
-  await expectEventually("document.querySelector('#provider-feedback').textContent.includes('Select and copy the local address manually.')", 'Clipboard failure must offer manual copying');
-  for (const [width, height] of [[1280,850],[390,640]]) {
-    await viewport(width,height);
-    ok(await js("document.documentElement.scrollWidth<=innerWidth && document.querySelector('#local-connection-address').getBoundingClientRect().right<=innerWidth"), `Configured local address fits ${width}x${height}`);
-    await screenshot('agent-configured-local-address-' + width);
-  }
-  await viewport(1280,850);
-  configuredLocalURL = '';
-  await click('#check-chatgpt');
-  await expectEventually("!document.querySelector('#check-chatgpt').disabled", 'Invalid config refresh stuck');
-  ok(await js("document.querySelector('#local-connection-address').hidden && document.querySelector('#local-connection-url').textContent==='' && !document.querySelector('#local-connection-config-error').hidden"), 'Invalid configuration clears the stale address and shows an actionable warning');
-  configuredLocalURL = 'http://127.0.0.1:9090';
-  await click('#check-chatgpt');
-  await expectEventually("document.querySelector('#local-connection-url').textContent==='http://127.0.0.1:9090' && !document.querySelector('#check-chatgpt').disabled", 'New configured address did not replace the old one');
   connectionStatusFailure = true;
   await click('#check-chatgpt');
   await expectEventually("!document.querySelector('#check-chatgpt').disabled", 'Status failure refresh stuck');
-  ok(await js("document.querySelector('#local-connection-address').hidden && document.querySelector('#local-connection-url').textContent==='' && document.querySelector('#local-connection-config-error').hidden"), 'Status failure does not show a stale address or misreport a configuration error');
+  ok(await js("document.querySelector('#connection-badge').textContent==='Unavailable' && !document.querySelector('#remote-connection-setup')"), 'Remote status failure is actionable without stale localhost guidance');
   await screenshot('agent-panel-unavailable');
   connectionStatusFailure = false;
   await click('#check-chatgpt');
@@ -1090,8 +1054,10 @@ try {
   await confirmChange();
   await expectEventually("document.querySelector('#disconnect-chatgpt').hidden && !document.querySelector('#check-chatgpt').disabled", 'Remote password-confirmed disconnect failed');
   ok(!providerProfiles.find(p => p.id === 'p1').connected && authenticated, 'Remote disconnect changes only the selected connection and preserves Agent sign-in');
-  ok(await js("!document.querySelector('#local-connection-address').hidden && document.querySelector('#local-connection-url').textContent==='http://127.0.0.1:9090'"), 'Disconnected remote users retain the configured local setup address');
-  ok(await js("!document.querySelector('#remote-connection-setup').hidden && !document.querySelector('#remote-connection-setup').closest('details') && document.querySelector('#provider-actions').hidden"), 'Disconnected remote setup shows the checklist directly without an empty action row');
+  ok(await js("!document.querySelector('#connect-chatgpt').hidden && !document.querySelector('#provider-actions').hidden && !document.querySelector('#local-connection-address')"), 'Disconnected remote users can reconnect directly from their current device');
+  await click('#connect-chatgpt');
+  await expectEventually("document.querySelector('#usage-device').hidden && document.querySelector('#connection-badge').textContent==='Connected' && !document.querySelector('#check-chatgpt').disabled", 'Remote device approval did not restore conversations and allowance');
+  ok(providerProfiles.find(p=>p.id==='p1').connected && await js("!document.querySelector('#model-select').disabled && document.querySelector('#usage-windows [role=meter]')?.getAttribute('aria-valuenow')==='68'"), 'Remote approval refreshes the model picker and allowance without navigating away');
   for (const [width,height] of [[1280,850],[390,640],[360,640]]) {
     await viewport(width,height);
     ok(await js("document.documentElement.scrollWidth<=innerWidth && document.documentElement.scrollHeight<=innerHeight && document.querySelector('#settings-panel').scrollWidth<=document.querySelector('#settings-panel').clientWidth"), `Remote setup remains inside the settings scroll pane at ${width}x${height}`);
@@ -1101,7 +1067,7 @@ try {
     await js("document.querySelector('#settings-panel').scrollTop=document.querySelector('#settings-panel').scrollHeight");
     ok(await js("document.querySelector('#logout-button').getBoundingClientRect().bottom<=innerHeight"), 'Settings below the setup checklist remain reachable by scrolling');
   }
-  ok(!remoteCalls.some(call => call.path === '/auth/start'), 'Remote management never starts an unsupported authorization flow');
+  ok(remoteCalls.some(call => call.path === '/auth/start') && !remoteCalls.some(call => call.path === '/api/usage/connect'), 'Remote management uses exactly one device-code connection path');
   await screenshot('agent-settings-remote');
   await cdp('Page.navigate',{url:origin});
   await expectEventually("document.querySelector('#chat-app') && !document.querySelector('#chat-app').hidden && !document.querySelector('#check-chatgpt').disabled", 'Return to local workspace failed');

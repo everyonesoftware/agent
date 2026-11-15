@@ -81,7 +81,7 @@ func TestConnectionStatusLocalURLThroughAuthenticatedRouter(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &status); err != nil {
 		t.Fatal(err)
 	}
-	if response.Code != http.StatusOK || status.LocalURL != "http://127.0.0.1:8182" {
+	if response.Code != http.StatusOK || status.LocalURL != "" {
 		t.Fatalf("authenticated status = %d, local_url = %q", response.Code, status.LocalURL)
 	}
 }

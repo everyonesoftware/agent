@@ -23,8 +23,8 @@ import (
 // successful observation. Keep history gap detection on this same boundary.
 const usageObservationMaxAge = 3 * time.Minute
 
-// The usage connection is deliberately independent of SIWC tokens and inference.
-// The only credential owner is a private, managed Codex account context.
+// The private Codex account context owns the unified ChatGPT connection.
+// Quota polling never performs inference or imports legacy SIWC tokens.
 type usageIdentity struct {
 	Email    string `json:"email"`
 	PlanType string `json:"plan_type,omitempty"`
@@ -62,6 +62,7 @@ type usageRecord struct {
 	ConnectionID string `json:"connection_id"`
 }
 type usageSession struct {
+	inferences      map[*codexUsageRPC]context.CancelFunc
 	mu              sync.Mutex
 	dir             string
 	record          usageRecord
@@ -77,21 +78,23 @@ type usageSession struct {
 	historyWriteErr error
 }
 type usageService struct {
-	accounts      *accountStore
-	base          *siwcService
-	mu            sync.Mutex
-	sessions      map[string]*usageSession
-	factory       func(context.Context, string, string) (usageRPC, error)
-	executable    func() (string, error)
-	idleTimeout   time.Duration
-	now           func() time.Time
-	slots         chan struct{}
-	starts        connectionPasswordLimiter
-	closed        bool
-	historyErr    error
-	samplerCancel context.CancelFunc
-	samplerDone   chan struct{}
-	samplerCursor string
+	inferenceFactory func(context.Context, string, string) (*codexUsageRPC, error)
+	accounts         *accountStore
+	base             *siwcService
+	mu               sync.Mutex
+	sessions         map[string]*usageSession
+	factory          func(context.Context, string, string) (usageRPC, error)
+	executable       func() (string, error)
+	idleTimeout      time.Duration
+	now              func() time.Time
+	slots            chan struct{}
+	inferenceSlots   chan struct{}
+	starts           connectionPasswordLimiter
+	closed           bool
+	historyErr       error
+	samplerCancel    context.CancelFunc
+	samplerDone      chan struct{}
+	samplerCursor    string
 }
 
 func newUsageService(accounts *accountStore, base *siwcService) *usageService {
@@ -103,7 +106,7 @@ func newUsageService(accounts *accountStore, base *siwcService) *usageService {
 			}
 			return exec.LookPath(name)
 		},
-		idleTimeout: 2 * time.Minute, now: time.Now, slots: make(chan struct{}, 8)}
+		idleTimeout: 2 * time.Minute, now: time.Now, slots: make(chan struct{}, 8), inferenceSlots: make(chan struct{}, 4)}
 }
 func (s *usageService) close() {
 	s.mu.Lock()
@@ -122,6 +125,11 @@ func (s *usageService) close() {
 	}
 	for _, entry := range all {
 		entry.mu.Lock()
+		for rpc, cancel := range entry.inferences {
+			cancel()
+			_ = rpc.Close()
+			delete(entry.inferences, rpc)
+		}
 		s.stopWorker(entry)
 		entry.mu.Unlock()
 	}
@@ -229,7 +237,7 @@ func (s *usageService) openWorker(ctx context.Context, entry *usageSession) erro
 	}
 	binary, err := s.executable()
 	if err != nil {
-		return errors.New("Codex usage runtime is unavailable. Check the Agent deployment.")
+		return errors.New("The Codex runtime is unavailable. Check the Agent deployment.")
 	}
 	if err = checkUsageParents(s.accounts.dataDir, entry.dir); err != nil {
 		return errors.New("Usage credential storage is unavailable.")
@@ -249,7 +257,7 @@ func (s *usageService) openWorker(ctx context.Context, entry *usageSession) erro
 	rpc, err := s.factory(ctx, binary, home)
 	if err != nil {
 		<-s.slots
-		return errors.New("Codex usage service could not start. Your conversation connection was kept.")
+		return errors.New("The Codex connection could not start. Existing credentials were not changed.")
 	}
 	entry.rpc = rpc
 	return nil
@@ -295,7 +303,7 @@ func (s *usageService) call(ctx context.Context, entry *usageSession, method str
 	}
 	if err := entry.rpc.Call(ctx, method, params, result); err != nil {
 		s.stopWorker(entry)
-		return errors.New("Codex usage service could not complete this request. Your conversation connection was kept.")
+		return errors.New("The Codex connection could not complete this request. Existing credentials were not changed.")
 	}
 	s.touchWorker(entry)
 	return nil
@@ -371,7 +379,7 @@ func (s *usageService) status(ctx context.Context, entry *usageSession, email st
 			entry.view.State = "expired"
 			entry.view.Identity = nil
 			entry.view.Snapshot = nil
-			entry.view.Error = "Sign in again to see allowance. Your conversation connection is unchanged."
+			entry.view.Error = "Reconnect ChatGPT to resume conversations and allowance updates."
 		}
 		return
 	}
@@ -550,6 +558,11 @@ func (s *usageService) connect(ctx context.Context, entry *usageSession) error {
 	return nil
 }
 func (s *usageService) clear(ctx context.Context, entry *usageSession) error {
+	for rpc, cancel := range entry.inferences {
+		cancel()
+		_ = rpc.Close()
+		delete(entry.inferences, rpc)
+	}
 	// Persist the tombstone before dropping tokens: a restart must not adopt leftover
 	// credentials if local cleanup or the provider request fails halfway through.
 	if err := s.saveRecord(entry, usageRecord{}); err != nil {

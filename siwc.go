@@ -64,6 +64,7 @@ type credentialStore interface {
 	ListProfiles() ([]credentialProfile, error)
 	ActiveProfileID() (string, error)
 	SetActiveProfile(string) error
+	SetActiveProfileIfEmpty(string) error
 	DeleteProfile(string) error
 }
 
@@ -247,6 +248,28 @@ func (s *fileCredentialStore) SetActiveProfile(id string) error {
 	state, err := s.loadStateLocked()
 	if err != nil {
 		return err
+	}
+	for _, profile := range state.Profiles {
+		if profile.ID == id {
+			if profile.Credentials.RegistrationPending || profile.Credentials.Subject == "" {
+				return errors.New("profile identity is not verified")
+			}
+			state.ActiveProfileID = id
+			return s.writeStateLocked(state)
+		}
+	}
+	return errors.New("profile does not exist")
+}
+
+func (s *fileCredentialStore) SetActiveProfileIfEmpty(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, err := s.loadStateLocked()
+	if err != nil {
+		return err
+	}
+	if state.ActiveProfileID != "" {
+		return nil
 	}
 	for _, profile := range state.Profiles {
 		if profile.ID == id {
@@ -587,6 +610,9 @@ type authAttempt struct {
 }
 
 type siwcService struct {
+	// Legacy storage is migration metadata only. Codex owns live credentials.
+	codex           *usageService
+	owner           authUser
 	config          siwcConfig
 	store           credentialStore
 	client          *http.Client

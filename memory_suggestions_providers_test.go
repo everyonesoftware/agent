@@ -2,54 +2,31 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 )
 
 func TestMemorySuggestionsResponsesUserScopedWire(t *testing.T) {
-	s, _, a, b := memoryFixture(t)
+	f, provider, _, audit := codexInferenceFixture(t, "suggestions")
+	s, a := f.accounts, f.user
 	if _, err := s.saveMemory(a, "user", "PRIVATE SAVED FACT"); err != nil {
 		t.Fatal(err)
 	}
-	var wire struct {
-		Model string        `json:"model"`
-		Input []chatMessage `json:"input"`
-		Store bool          `json:"store"`
+	mux := http.NewServeMux()
+	registerMemorySuggestionRoutes(mux, s, &userScopedProvider{accounts: s, baseAuth: provider.auth})
+	w := runRequest(mux, "POST", "/api/memory-suggestions", `{"message":"I prefer concise explanations.","model":"codex-fixture"}`, f.cookie)
+	if w.Code != 200 {
+		t.Fatalf("Codex suggestions %d %s", w.Code, w.Body)
 	}
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/models" {
-			w.Write([]byte(`{"data":[{"id":"oauth-suggest","visibility":"list"}]}`))
-			return
-		}
-		if r.URL.Path != "/responses" {
-			t.Errorf("unexpected request %s", r.URL.Path)
-		}
-		if err := json.NewDecoder(r.Body).Decode(&wire); err != nil {
-			t.Error(err)
-		}
-		delta, _ := json.Marshal(map[string]string{"type": "response.output_text.delta", "delta": `{"suggestions":["Uses Go."]}`})
-		fmt.Fprintf(w, "data: %s\n\ndata: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":9,\"output_tokens\":3,\"total_tokens\":12}}}\n\n", delta)
-	}))
-	defer upstream.Close()
-	base := newSIWCService(siwcConfig{apiBaseURL: upstream.URL}, newFileCredentialStore(t.TempDir()))
-	service := s.siwcForUser(base, a)
-	service.client = upstream.Client()
-	if err := service.store.Save(testOAuthCredentials("PRIVATE-ACCESS", "PRIVATE-REFRESH", time.Now().Add(time.Hour))); err != nil {
+	wire, err := os.ReadFile(audit)
+	if err != nil {
 		t.Fatal(err)
 	}
-	mux := http.NewServeMux()
-	registerMemorySuggestionRoutes(mux, s, &userScopedProvider{accounts: s, baseAuth: base})
-	w := memoryRequest(t, mux, a, "POST", "/api/memory-suggestions", `{"message":"I use Go.","model":"oauth-suggest"}`)
-	if w.Code != 200 {
-		t.Fatalf("oauth suggestions %d %s", w.Code, w.Body)
-	}
-	if wire.Store || wire.Model != "oauth-suggest" || len(wire.Input) != 2 || wire.Input[0] != (chatMessage{Role: "system", Content: memorySuggestionInstructions}) || wire.Input[1] != (chatMessage{Role: "user", Content: "I use Go."}) {
-		t.Fatalf("wire %+v", wire)
+	if !strings.Contains(string(wire), "Extract memory suggestions") || !strings.Contains(string(wire), "I prefer concise explanations.") || strings.Contains(string(wire), "PRIVATE") {
+		t.Fatalf("unsafe or missing selected-message-only RPC wire: %s", wire)
 	}
 	var data []byte
 	if err := s.db.QueryRow(`SELECT data FROM runs WHERE id=? AND user_id=?`, w.Header().Get("X-Agent-Run-ID"), a.ID).Scan(&data); err != nil {
@@ -59,10 +36,19 @@ func TestMemorySuggestionsResponsesUserScopedWire(t *testing.T) {
 	if err := json.Unmarshal(data, &run); err != nil {
 		t.Fatal(err)
 	}
-	if run.Provider != "chatgpt" || run.Model != "oauth-suggest" || run.Request == nil || run.Usage == nil || run.Usage.TotalTokens != 12 || strings.Contains(string(data), "PRIVATE") {
+	if run.Provider != "chatgpt" || run.Model != "codex-fixture" || run.Request == nil || run.Usage == nil || run.Usage.TotalTokens != 36 || strings.Contains(string(data), "PRIVATE") {
 		t.Fatalf("unsafe/missing trace %s", data)
 	}
-	other := memoryRequest(t, mux, b, "POST", "/api/memory-suggestions", `{"message":"hello"}`)
+	var request struct{ Messages []chatMessage }
+	requestBytes, err := json.Marshal(run.Request)
+	if err != nil || json.Unmarshal(requestBytes, &request) != nil || len(request.Messages) != 2 || request.Messages[0] != (chatMessage{Role: "system", Content: memorySuggestionInstructions}) || request.Messages[1] != (chatMessage{Role: "user", Content: "I prefer concise explanations."}) {
+		t.Fatalf("selected-message trace changed: %s", requestBytes)
+	}
+	registered := runRequest(http.HandlerFunc(s.registerHandler), "POST", "/api/auth/register", `{"username":"other-suggestion-user","password":"isolated-test-only-password"}`, nil)
+	if registered.Code != http.StatusCreated {
+		t.Fatalf("other user registration: %d %s", registered.Code, registered.Body)
+	}
+	other := runRequest(mux, "POST", "/api/memory-suggestions", `{"message":"hello"}`, registered.Result().Cookies()[0])
 	if other.Code != 503 {
 		t.Fatalf("foreign account %d %s", other.Code, other.Body)
 	}

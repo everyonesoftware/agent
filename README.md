@@ -14,31 +14,19 @@ Copy-Item .env.example .env
 docker compose up -d
 ```
 
-If OpenAI enables plan usage for this app and the account is eligible, no API key or API credits are required for that path. The flow is experimental; live authorization and eligibility have not been verified. Public repository visibility alone does not guarantee OpenAI approval. After signing in to Agent, select **Continue with ChatGPT** to connect the ChatGPT account for that Agent user. ChatGPT authorization uses a loopback callback, so complete the connection from a browser on the Windows PC running Docker Desktop at `http://127.0.0.1:8080`. Every app user manages their own ChatGPT profiles and model selection; profiles are not shared between app users.
+ChatGPT features use the bundled Codex runtime and your eligible ChatGPT subscription, rather than Agent making direct Responses API requests. After signing in to Agent, select **Continue with ChatGPT**, open the verification page, and enter the device code. Approval can happen in a browser on the same device or another machine; no localhost callback or browser on the Agent server is needed. Live provider approval and model eligibility are not established by fixture tests.
 
-Remote browsers (for example through Tailscale Serve) can read their own connection list/status, choose a model, switch saved ChatGPT profiles, and disconnect. **Switching the active ChatGPT account and disconnecting still require a fresh confirmation of the currently signed-in user's Agent password**, on localhost as well as remotely; missing or incorrect passwords are rejected, and confirmation attempts are limited per Agent user across sessions. Reads/status and model choice do not require password confirmation. Initial linking, adding, and reconnecting are password-free after Agent sign-in, but authorization starts are accepted only as same-origin POST requests on a loopback host. They still require a browser on the Agent host: OpenAI authorization returns to the existing loopback callback, so a remote browser cannot complete that flow. No remote callback or automatic local-browser handoff is provided.
+One Codex connection powers conversations, model selection, memory suggestions, public-web research, and allowance/history collection. Each Agent user manages their own saved ChatGPT profiles; accounts, credentials, and conversations are not shared with other Agent users. Existing Codex usage connections are reused for the corresponding saved profile. A profile that only has the removed Responses authorization needs device-code sign-in; saved conversations and recorded history are retained. Legacy Responses tokens are not imported into Codex.
 
-The connection UI starts authorization with JSON `POST /auth/start`, `Accept: application/json`, and a bounded body containing `expected_active_profile_id` captured when the action began; no password is needed. Adding uses `?mode=add`, and resuming an incomplete registration uses `?mode=retry&profile_id=<saved-profile-id>`. A successful JSON request returns `authorization_url`; application errors remain JSON. Default reconnect requires the captured active-profile field (including an empty string for initial linking), and rejects a changed active account before preparing authorization. GET starts remain disabled; existing callback validation and per-user connection state are unchanged. Authorization starts do not consume the password-confirmation attempt budget used for switching and disconnecting.
+Remote browsers (for example through Tailscale Serve) can start and finish device sign-in as well as read status, choose a model, switch saved profiles, and disconnect. **Switching the active ChatGPT account and disconnecting still require a fresh confirmation of the currently signed-in user's Agent password.** Missing or incorrect passwords are rejected, and attempts are limited per Agent user across sessions. Initial linking, adding, and reconnecting need no extra password after Agent sign-in. Mutation requests remain same-origin and authenticated; device sign-in does not make Agent publicly accessible.
 
-Create an Agent account in the app using a username and password of at least 12 characters. Passwords are hashed with bcrypt; browser sessions use random tokens whose hashes are stored in SQLite. Sign-in is required for chat, model discovery, ChatGPT account management, and conversation history. Each Agent user has separate OAuth profile files under `/data/account-data/` and separate conversation rows in `/data/everyoneagent.sqlite`. ChatGPT refresh tokens are kept server-side and never returned to the browser. New database and credential files request owner-only permissions; existing host directory permissions are left unchanged. Data is not encrypted at rest, so protect and back up the data storage accordingly. Disconnecting clears the selected user's profile session tokens but retains the registration for safe reauthorization; revoke the app's usage access in ChatGPT settings to revoke remotely.
-
-ChatGPT sign-in uses the existing loopback callback. Complete **Continue with ChatGPT** from a browser on the Windows PC running Docker Desktop, and sign in to the ChatGPT account that belongs to the currently logged-in Agent user. Each user must connect their own account; their plan allowance is not shared through Agent with other app users, though ChatGPT may apply the same subscription limits across other apps using that account. The OAuth flow remains experimental and live authorization/eligibility have not been verified.
+Create an Agent account using a username and password of at least 12 characters. Passwords are hashed with bcrypt; browser sessions use random tokens whose hashes are stored in SQLite. Sign-in is required for chat, model discovery, account management, and conversation history. Per-user data lives under `/data/account-data/`, and conversations are stored in `/data/everyoneagent.sqlite`. Codex credentials stay server-side and are never returned to the browser. New files request owner-only permissions; existing host directory permissions are left unchanged. Data is not encrypted at rest, so protect storage and backups. Disconnecting signs out the selected Codex connection for both conversations and allowance; local logout is not a guarantee of remote revocation. Use the provider's account controls for remote revocation.
 
 An OpenAI-compatible API key or local model remains available as a fallback. `LLM_BASE_URL` defaults to the OpenAI API base URL, `LLM_MODEL` selects the fallback model, and `LLM_API_KEY` is sent as a bearer key when set. For a local model, set `LLM_BASE_URL` to that provider's OpenAI-compatible API base and leave `LLM_API_KEY` blank if it does not require one. API-key requests use separate API billing. The application sends chat requests through the server; the key is not sent to the browser. `.env` is excluded from Git and the Docker build context.
 
 To pin a specific commit-count release, set `APP_VERSION` before starting Compose; for example, `$env:APP_VERSION = "3"`. The GitHub Actions workflow tests the code and publishes `ghcr.io/everyonesoftware/agent:<commit-count>` on pushes to `main` and version tags. The numeric count is also embedded in the app's `/version` endpoint and OCI version label. It additionally publishes `latest`, branch/tag, and short-SHA tags.
 
-Open http://127.0.0.1:8080. The container is published only on the host loopback interface. To reach it from other devices, configure Tailscale Serve on the host to proxy to `http://127.0.0.1:8080`; do not change the Compose binding to `0.0.0.0` or forward the port from your router. If the host-side port is changed, update `SIWC_REDIRECT_URI` to `http://127.0.0.1:<host-port>/auth/callback`.
-
-The ChatGPT connection panel derives its **Configured local address** from
-`SIWC_REDIRECT_URI`, removing `/auth/callback` and retaining the configured host
-port. For example, `http://127.0.0.1:8182/auth/callback` displays
-`http://127.0.0.1:8182`. Remote users can copy this address and open it on the
-computer hosting Agent. If the variable is unset or blank, Agent uses its default
-callback at port `8080`; an invalid callback produces a configuration warning
-instead of a guessed address. This is configuration discovery, not a reachability
-test or Docker port inspection: keep the callback synchronized with your published
-host port and restart Agent after changing the environment.
+Open http://127.0.0.1:8080. The container is published only on the host loopback interface. To reach it from other devices, configure Tailscale Serve on the host to proxy to `http://127.0.0.1:8080`; do not change the Compose binding to `0.0.0.0` or forward the port from your router. Device-code authentication needs no callback port or `SIWC_REDIRECT_URI` setting.
 
 Stop with `docker compose down`.
 
@@ -55,8 +43,7 @@ Agent can run in a standalone app window using the browser's **Install app** or
 **Add to Home Screen** action. Use HTTPS (including a trusted Tailscale Serve
 address), or localhost on the host computer. A plain HTTP address on another
 device does not enable service workers. Installation does not change the existing
-local account, server storage, network access, or loopback-only ChatGPT
-authorization requirements.
+local account, server storage, network access, or device-code ChatGPT sign-in.
 
 In **Settings → Web app updates**, select **Check for updates** to compare the
 running page with the deployed server. An available update offers an explicit
@@ -145,7 +132,7 @@ Milestone dots support hover, drag, tap-to-pin, and keyboard inspection.
 
 ChatGPT allowance observations are collected about once per minute while the
 Agent server is running, even with Settings closed, and retained for 90 days.
-Collection uses the separate usage connection and resumes after server restart;
+Collection uses the same Codex connection as conversations and resumes after server restart;
 earlier unrecorded history and collection gaps are not reconstructed. Brave
 remaining-search history is reconstructed from the account's successful-request
 ledger and requires an enabled Agent cap; it is not Brave's billing balance.
@@ -378,7 +365,7 @@ and desktop/phone evidence in a chosen scratch directory.
 ## Run Inspector and trusted runtime context
 
 Each chat turn prepends a server-owned system message with the current server date,
-timezone and UTC offset, in both the OpenAI-compatible and ChatGPT Responses paths.
+timezone and UTC offset, in both the OpenAI-compatible and ChatGPT Codex paths.
 The clock is read on every turn; the server timezone (`TZ`/Go `time.Local`) is not
 assumed to be the browser's timezone. Timezone data is embedded for minimal container
 images. The baseline explicitly distinguishes missing model knowledge from future
@@ -427,16 +414,15 @@ go build -o agent-inspector-test .
 node tests/run-inspector-browser.mjs ./agent-inspector-test
 ```
 
-## Optional ChatGPT usage status (native Codex runtime)
+## Unified ChatGPT connection (native Codex runtime)
 
 The image includes the official **Codex CLI 0.167.2** (`rust-v0.167.2`)
-standalone Linux musl binary at `/usr/local/bin/codex`. This is a separate,
-server-side usage-status connection; it does not replace Agent's existing
-**Continue with ChatGPT** chat authorization or send chats through Codex. Missing
-usage authorization, unavailable usage data, and Codex failures must not prevent
-chat. No Codex install on the host/laptop, Node/npm, Rust toolchain, or additional
-published port is required. The runtime remains distroless and runs as
-UID/GID `65532:65532` with the existing `/data` mount.
+standalone Linux musl binary at `/usr/local/bin/codex`. It owns the server-side
+ChatGPT connection used for inference and allowance. No Codex install on the
+host/laptop, Node/npm, Rust toolchain, or additional published port is required.
+The runtime remains distroless and runs as UID/GID `65532:65532` with the existing
+`/data` mount. An unavailable quota snapshot does not itself disable inference;
+an unavailable Codex runtime or expired sign-in does prevent ChatGPT requests.
 
 Agent starts `codex app-server --listen stdio:// -c
 cli_auth_credentials_store=\"file\"` as a child process, not an HTTP/WebSocket
@@ -444,18 +430,19 @@ listener. `CODEX_USAGE_BINARY` optionally overrides the executable; otherwise
 Agent resolves `codex` from `PATH`. An override must be an already-installed
 compatible native executable, not a command with shell arguments. The private,
 writable `CODEX_HOME` is scoped to the Agent user and selected ChatGPT profile
-under `/data/account-data/<AgentUserID>/usage/<SIWCprofileID>/`; never share it
+under `/data/account-data/<AgentUserID>/usage/<profileID>/`; never share it
 between users/profiles or mount a personal laptop's Codex credentials there.
-Codex manages these separate credentials on the server. They are plaintext at
+Codex manages these credentials on the server. They are plaintext at
 rest: protect `/data`, backups, and host ACLs. Do not copy Agent's existing SIWC
 refresh tokens into Codex or expose Codex credential files to the browser.
 
-Usage sign-in requires the user's explicit approval of the provider's device-code
+ChatGPT sign-in requires the user's explicit approval of the provider's device-code
 flow; eligible accounts may need to enable device-code authorization in ChatGPT
 security/beta settings. Live approval and signed-in rate-limit retrieval are not
-part of the offline image check. The adapter restricts its calls to initialization
-and account login/read/rate-limit/logout RPCs; this is **not** a promise that the
-provider grants a narrower read-only OAuth scope. Local logout/credential deletion
+part of the offline image check. Account operations use Codex account RPCs;
+inference and model discovery also use Codex, not direct HTTP Responses calls.
+This is **not** a promise that the provider grants a narrower OAuth scope.
+Local logout/credential deletion
 does not guarantee remote revocation; use the provider's account controls when
 remote revocation is required.
 
@@ -473,28 +460,40 @@ The stage also verifies and preserves that release's `LICENSE` and `NOTICE` unde
 `/usr/share/licenses/codex/`, together with a `BUILD-INFO` pin/target/hash record.
 Download tools stay in the build stage and its layer is reused until the pin or
 installer changes. Both musl executables were inspected as statically linked ELF
-binaries; no dynamic loader or shared-library runtime is added. Account-only RPCs
-need no shell, execution-server/code-mode/voice companions, or sandbox tools.
-The standalone app-server currently logs a missing-PATH-bubblewrap warning at
-startup; it is nonfatal for these account RPCs. This image is not a general Codex
-coding/terminal environment.
+binaries; no dynamic loader or shared-library runtime is added. Agent is not a
+general Codex coding/terminal environment: ordinary chat must not acquire local
+tools, and research remains limited to Agent's consented, validated public-web
+functions. The existing distroless image has no shell or general coding tools.
 
 Operators should update the pin and hashes together after reviewing the official
 release, then rerun protocol compatibility and image checks on both supported
-architectures. The image never self-updates Codex. To exercise a built image using
-host Python 3 and Docker (no live credentials or inference):
+architectures. The image never self-updates Codex. To exercise an installed pinned
+runtime with a fresh, isolated home (no user credentials or model turn):
 
 ```sh
-docker build -t agent:codex-smoke .
-python scripts/codex-runtime-smoke.py agent:codex-smoke
+AGENT_CODEX_SMOKE_BINARY=/absolute/path/to/codex \
+  go test -run '^TestCodexPinnedProtocolWithoutAuthorization$' -count=1 -v .
 ```
 
-The check uses network-disabled ephemeral containers, a private writable temporary
-`CODEX_HOME`, and a read-only Codex root filesystem. It verifies the pinned version,
-nonroot configuration, stdio initialize/initialized, a signed-out `account/read`,
-the real signed-out rate-limit error, and both `/agent healthz` and the retained
-`/everyoneagent healthz` alias against the running application. It never mounts
-existing credentials, publishes a port, approves a login, or starts a model turn.
+This checks stdio initialization, signed-out account reads, and the ephemeral,
+no-environment thread configuration. It does not approve a login or start a model
+turn, and it does not prove signed-in inference or a complete Docker image.
+
+Run the device-flow UI and production-router/SQLite browser acceptance with the
+same browser environment as the other application suites:
+
+```sh
+node tests/codex-connection-ui.mjs
+AGENT_CODEX_BROWSER=1 go test -run '^TestCodexConnectionProductionBrowser$' -count=1 -v .
+```
+
+The browser check replaces only the Codex process boundary with explicit local
+fixtures. It verifies first sign-in without an active profile, device approval,
+model discovery, chat and provider-reported Inspector usage, cancellation that
+preserves a working account, password-confirmed switching, and unified disconnect.
+It checks narrow phone layouts and makes no live OpenAI requests. Both browser
+checks are required release-workflow gates. Real provider sign-in remains a
+separate, user-approved validation step.
 
 ## Host-accessible data storage
 
@@ -537,8 +536,9 @@ data deletion is required to use a bind mount with the same existing data.
 The interface is branded **Agent**, with a compact **e1** mark on login and in the
 sidebar. Existing database, session cookie, model preference, and Compose
 identifiers retain their original `everyoneagent` names for compatibility; no data
-migration is needed. New ChatGPT registrations request the Agent display name;
-previously registered connections retain their existing provider-side identity.
+migration is needed for those identifiers. ChatGPT sign-in is managed by Codex;
+saved profiles from the removed Responses integration can be reconnected without
+deleting their conversations or recorded allowance history.
 
 The Focus interface uses a dark chat workspace with searchable conversation history
 in the left sidebar, the current user at the bottom left, and model selection in
@@ -578,4 +578,4 @@ These checks cover UI wiring and layout, not live ChatGPT authorization.
 
 ## Current status
 
-The app contains local account registration/login, owner-scoped saved conversations, per-user ChatGPT OAuth profile storage, direct Responses API requests with upstream streaming and `store: false`, model discovery, and an OpenAI-compatible fallback. OAuth sign-in remains unverified through live authorization or account approval. Existing host-wide ChatGPT profile files are left untouched and are not automatically assigned to a new user; each user should connect their own ChatGPT account after signing in. Anyone who can reach the service can create an account, so expose it only to trusted household devices.
+The app contains local account registration/login, owner-scoped saved conversations, per-user Codex-managed ChatGPT profiles, model discovery, and an OpenAI-compatible fallback. Agent no longer uses direct Responses API inference or loopback ChatGPT authorization. Live subscription sign-in and model eligibility require real provider approval and are not proven by fixture tests. Existing host-wide ChatGPT profile files are not automatically assigned to a new user; each user should connect their own account after signing in. Anyone who can reach the service can create an account, so expose it only to trusted household devices.

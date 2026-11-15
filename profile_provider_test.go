@@ -9,9 +9,10 @@ import (
 	"time"
 )
 
-func TestResponsesProviderUsesActiveProfileTokenAndModelCache(t *testing.T) {
+func TestLegacyProfilesCannotReuseTokensOrModelCache(t *testing.T) {
 	var responseAuthorization string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("legacy profile attempted removed provider transport")
 		switch r.URL.Path {
 		case "/models":
 			w.Header().Set("Content-Type", "application/json")
@@ -59,21 +60,21 @@ func TestResponsesProviderUsesActiveProfileTokenAndModelCache(t *testing.T) {
 	provider := &responsesProvider{auth: service, defaultModel: "model-a"}
 
 	models, err := provider.models(context.Background())
-	if err != nil || len(models) != 1 || models[0].ID != "model-a" {
-		t.Fatalf("first profile models = %#v, %v; want model-a", models, err)
+	if err != errChatGPTNotConnected || len(models) != 0 {
+		t.Fatalf("first legacy profile models = %#v, %v; want reconnect", models, err)
 	}
 	if err := store.SetActiveProfile(secondID); err != nil {
 		t.Fatalf("select second profile: %v", err)
 	}
 	models, err = provider.models(context.Background())
-	if err != nil || len(models) != 1 || models[0].ID != "model-b" {
-		t.Fatalf("second profile models = %#v, %v; want model-b", models, err)
+	if err != errChatGPTNotConnected || len(models) != 0 {
+		t.Fatalf("second legacy profile reused model cache = %#v, %v", models, err)
 	}
 	reply, err := provider.complete(context.Background(), []chatMessage{{Role: "user", Content: "hello"}}, "model-b")
-	if err != nil || reply != "second reply" {
+	if err != errChatGPTNotConnected || reply != "" {
 		t.Fatalf("second profile completion = %q, %v", reply, err)
 	}
-	if responseAuthorization != "Bearer second-access" {
-		t.Fatalf("Responses API used authorization %q; want second profile token", responseAuthorization)
+	if responseAuthorization != "" {
+		t.Fatalf("removed Responses transport received authorization %q", responseAuthorization)
 	}
 }

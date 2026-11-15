@@ -74,6 +74,11 @@ jobs:
       - name: Test browser UI
         run: node tests/ui.mjs
 
+      - name: Verify unified Codex device sign-in and account isolation
+        run: |
+          node tests/codex-connection-ui.mjs
+          AGENT_CODEX_BROWSER=1 go test -run '^TestCodexConnectionProductionBrowser$' -count=1 -v .
+
       - name: Verify usage history charts and provider-scoped Settings popups
         run: |
           node tests/usage-history-ui.mjs --browser

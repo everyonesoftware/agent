@@ -162,13 +162,13 @@ func (p *openAICompatibleProvider) models(_ context.Context) ([]modelOption, err
 
 type hybridProvider struct {
 	api   *openAICompatibleProvider
-	oauth *responsesProvider
+	oauth *codexProvider
 }
 
 func newHybridProvider(api *openAICompatibleProvider, auth *siwcService) *hybridProvider {
 	return &hybridProvider{
 		api: api,
-		oauth: &responsesProvider{
+		oauth: &codexProvider{
 			auth:         auth,
 			defaultModel: strings.TrimSpace(os.Getenv("LLM_MODEL")),
 		},
@@ -179,6 +179,7 @@ type userScopedProvider struct {
 	api      *openAICompatibleProvider
 	baseAuth *siwcService
 	accounts *accountStore
+	usage    *usageService
 }
 
 func (p *userScopedProvider) service(ctx context.Context) (*siwcService, error) {
@@ -196,6 +197,9 @@ func (p *userScopedProvider) oauthSelected(ctx context.Context) (*siwcService, b
 	if err != nil {
 		return nil, false
 	}
+	if service.hasCodexConnection() {
+		return service, true
+	}
 	credentials, err := service.store.Load()
 	if err != nil {
 		return service, !errors.Is(err, os.ErrNotExist)
@@ -205,7 +209,7 @@ func (p *userScopedProvider) oauthSelected(ctx context.Context) (*siwcService, b
 
 func (p *userScopedProvider) complete(ctx context.Context, messages []chatMessage, model string) (string, error) {
 	if service, selected := p.oauthSelected(ctx); selected {
-		return (&responsesProvider{auth: service, defaultModel: strings.TrimSpace(os.Getenv("LLM_MODEL"))}).complete(ctx, messages, model)
+		return (&codexProvider{auth: service, defaultModel: strings.TrimSpace(os.Getenv("LLM_MODEL"))}).complete(ctx, messages, model)
 	}
 	if p.api == nil {
 		return "", errModelNotConfigured
@@ -226,6 +230,9 @@ func (p *userScopedProvider) models(ctx context.Context) ([]modelOption, error) 
 func (p *hybridProvider) useOAuth() bool {
 	if p == nil || p.oauth == nil || p.oauth.auth == nil {
 		return false
+	}
+	if p.oauth.auth.hasCodexConnection() {
+		return true
 	}
 	credentials, err := p.oauth.auth.store.Load()
 	if err != nil {

@@ -34,10 +34,13 @@ func testOAuthCredentials(accessToken, refreshToken string, expiresAt time.Time)
 	}
 }
 
-func TestAuthStartRejectsNonLoopbackHost(t *testing.T) {
-	f := newConnectionFixture(t)
+func TestAuthStartAcceptsRemoteDeviceLogin(t *testing.T) {
+	f, u, _ := newUsageFixture(t)
+	mux := http.NewServeMux()
+	u.registerAuth(mux)
+	f.server = mux
 	out := f.request("POST", "/auth/start", `{"password":"correct-horse-battery","expected_active_profile_id":"`+f.id+`"}`, "everyoneagent.example.ts.net")
-	if out.Code != http.StatusForbidden {
+	if out.Code != http.StatusOK || !strings.Contains(out.Body.String(), "verification_url") || out.Header().Get("Location") != "" {
 		t.Fatalf("remote start: %d %s", out.Code, out.Body.String())
 	}
 }
@@ -125,8 +128,8 @@ func TestAuthStatusDoesNotExposeCredentials(t *testing.T) {
 	if err := json.NewDecoder(recorder.Body).Decode(&status); err != nil {
 		t.Fatalf("decode auth status: %v", err)
 	}
-	if !status.Connected || !status.OAuthSelected || !status.PlanUsageEnabled || status.Email != "" {
-		t.Fatalf("status = %#v, want connected without account details", status)
+	if status.Connected || !status.OAuthSelected || status.PlanUsageEnabled || status.Email != "" {
+		t.Fatalf("status = %#v, want legacy selection requiring Codex reconnect", status)
 	}
 	for _, forbidden := range []string{"access-secret", "refresh-secret", "owner@example.test", "client-secret"} {
 		if strings.Contains(recorder.Body.String(), forbidden) {
@@ -850,8 +853,7 @@ func TestOAuthPreferredSessionDoesNotFallBackUntilExplicitDisconnect(t *testing.
 	api := &openAICompatibleProvider{baseURL: fallbackServer.URL + "/v1", model: "fallback-model", client: fallbackServer.Client()}
 	hybrid := newHybridProvider(api, service)
 	_, err := hybrid.complete(context.Background(), []chatMessage{{Role: "user", Content: "Hi"}}, "")
-	var failure *providerFailure
-	if !errors.As(err, &failure) || failure.kind != "oauth_reauthorize" || fallbackCalls.Load() != 0 {
+	if !errors.Is(err, errChatGPTNotConnected) || fallbackCalls.Load() != 0 {
 		t.Fatalf("expired OAuth selection fell back unexpectedly: err=%#v calls=%d", err, fallbackCalls.Load())
 	}
 	stored, err := store.Load()
@@ -867,7 +869,7 @@ func TestOAuthPreferredSessionDoesNotFallBackUntilExplicitDisconnect(t *testing.
 	}
 }
 
-func TestResponsesProviderUsesOAuthModelsAndStreamingResponsesAPI(t *testing.T) {
+func TestLegacyResponsesProfileCannotUseModelsOrStreamingAPI(t *testing.T) {
 	const accessToken = "private-access-token"
 	var sawModelList, sawResponse, sawLegacy bool
 	var gotAuthorization string
@@ -915,24 +917,18 @@ func TestResponsesProviderUsesOAuthModelsAndStreamingResponsesAPI(t *testing.T) 
 	}
 
 	models, err := provider.models(t.Context())
-	if err != nil {
-		t.Fatalf("fetch models: %v", err)
-	}
-	if len(models) != 1 || models[0].ID != "model-test" || models[0].Name != "Test model" {
-		t.Fatalf("models = %#v, want the account model catalog", models)
+	if err != errChatGPTNotConnected || len(models) != 0 {
+		t.Fatalf("legacy models = %#v, %v; want Codex reconnect", models, err)
 	}
 	reply, err := provider.complete(t.Context(), []chatMessage{{Role: "user", Content: "Hi"}}, "model-test")
-	if err != nil {
-		t.Fatalf("complete with Responses API: %v", err)
+	if err != errChatGPTNotConnected || reply != "" {
+		t.Fatalf("legacy completion = %q, %v; want Codex reconnect", reply, err)
 	}
-	if reply != "Hello from ChatGPT" {
-		t.Fatalf("reply = %q, want streamed text", reply)
-	}
-	if !sawModelList || !sawResponse || sawLegacy || gotAuthorization != "Bearer "+accessToken {
+	if sawModelList || sawResponse || sawLegacy || gotAuthorization != "" {
 		t.Fatalf("models=%t responses=%t legacy=%t authorization=%q", sawModelList, sawResponse, sawLegacy, gotAuthorization)
 	}
-	if gotPayload.Model != "model-test" || !gotPayload.Stream || gotPayload.Store || len(gotPayload.Input) != 1 || gotPayload.Input[0].Content != "Hi" {
-		t.Fatalf("Responses API payload = %#v, want chosen model, stream=true, store=false, and input", gotPayload)
+	if gotPayload.Model != "" || len(gotPayload.Input) != 0 {
+		t.Fatalf("removed Responses API received payload = %#v", gotPayload)
 	}
 }
 

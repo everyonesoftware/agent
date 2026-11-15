@@ -12,7 +12,7 @@ func TestLocalAuthorizationStartStrictBody(t *testing.T) {
 	f := newConnectionFixture(t)
 	for _, body := range []string{
 		`null`, `[]`, ``, `{`, `{} {}`, `{"unexpected":true}`,
-		`{"expected_active_profile_id":42}`, `{"profile_id":"not-allowed"}`,
+		`{"expected_active_profile_id":42}`, `{"profile_id":42}`,
 		`{"expected_active_profile_id":"` + strings.Repeat("x", 4096) + `"}`,
 	} {
 		out := f.request("POST", "/auth/start?mode=add", body, "127.0.0.1:8080")
@@ -138,7 +138,11 @@ func TestLocalAuthorizationStartsDoNotConsumePasswordBudget(t *testing.T) {
 	f := newConnectionFixture(t)
 	for i := 0; i < 12; i++ {
 		out := f.request("POST", "/auth/start?mode=add", `{}`, "127.0.0.1:8080")
-		if out.Code != http.StatusServiceUnavailable {
+		want := http.StatusServiceUnavailable
+		if i >= 10 {
+			want = http.StatusTooManyRequests
+		}
+		if out.Code != want {
 			t.Fatalf("start %d: %d %s", i, out.Code, out.Body.String())
 		}
 	}

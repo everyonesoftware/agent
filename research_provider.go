@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -80,39 +79,15 @@ func newResearchModelSession(ctx context.Context, p modelProvider, messages []ch
 			items = append(items, m)
 		}
 		return &researchChatSession{v, items}, nil
-	case *responsesProvider:
-		if v == nil || v.auth == nil || v.auth.store == nil {
-			return nil, errModelNotConfigured
-		}
-		profileID, err := v.auth.store.ActiveProfileID()
-		if err != nil || profileID == "" {
-			return nil, errChatGPTNotConnected
-		}
-		models, err := v.auth.availableModelsForProfile(ctx, profileID)
-		if err != nil {
-			return nil, err
-		}
-		if model == "" {
-			model = v.defaultModel
-			if !containsModel(models, model) {
-				model = models[0].ID
-			}
-		}
-		if !containsModel(models, model) {
-			return nil, &providerFailure{kind: "model_unavailable"}
-		}
-		items := []any{}
-		for _, m := range messages {
-			items = append(items, m)
-		}
-		return &researchResponsesSession{auth: v.auth, profileID: profileID, model: model, input: items}, nil
+	case *codexProvider:
+		return newCodexModelSession(ctx, v, messages, model)
 	case *userScopedProvider:
 		if service, selected := v.oauthSelected(ctx); selected {
 			defaultModel := ""
 			if v.api != nil {
 				defaultModel = v.api.model
 			}
-			return newResearchModelSession(ctx, &responsesProvider{auth: service, defaultModel: defaultModel}, messages, model)
+			return newResearchModelSession(ctx, &codexProvider{auth: service, defaultModel: defaultModel}, messages, model)
 		}
 		return newResearchModelSession(ctx, v.api, messages, model)
 	case *hybridProvider:
@@ -263,167 +238,6 @@ func researchSafeRequest(body []byte) ([]byte, bool) {
 	payload["input"], _ = json.Marshal(safe)
 	out, _ := json.Marshal(payload)
 	return out, true
-}
-
-type researchResponsesSession struct {
-	auth      *siwcService
-	profileID string
-	model     string
-	input     []any
-}
-
-func (s *researchResponsesSession) step(ctx context.Context, tools []any) (researchTurn, error) {
-	var turn researchTurn
-	token, err := s.auth.accessTokenForProfile(ctx, s.profileID)
-	if err != nil {
-		return turn, err
-	}
-	flat := []any{}
-	for _, tool := range tools {
-		wrapped := tool.(map[string]any)
-		fn := wrapped["function"].(map[string]any)
-		v := map[string]any{"type": "function"}
-		for k, value := range fn {
-			v[k] = value
-		}
-		flat = append(flat, v)
-	}
-	resp, err := researchHTTP(ctx, s.auth.client, strings.TrimRight(s.auth.config.apiBaseURL, "/")+"/responses", token, "chatgpt", s.model, map[string]any{"model": s.model, "input": s.input, "tools": flat, "store": false, "stream": true, "parallel_tool_calls": false, "max_output_tokens": 4096, "include": []string{"reasoning.encrypted_content"}})
-	if err != nil {
-		return turn, err
-	}
-	defer resp.Body.Close()
-	turn, err = collectResearchResponse(resp)
-	if err != nil {
-		return turn, err
-	}
-	for _, item := range turn.Items {
-		s.input = append(s.input, item)
-	}
-	return turn, nil
-}
-func (s *researchResponsesSession) result(call researchCall, output string) {
-	s.input = append(s.input, map[string]any{"type": "function_call_output", "call_id": call.ID, "output": output})
-}
-func collectResearchResponse(resp *http.Response) (researchTurn, error) {
-	var turn researchTurn
-	scanner := bufio.NewScanner(io.LimitReader(resp.Body, 1<<20))
-	scanner.Buffer(make([]byte, 4096), 256<<10)
-	data := []string{}
-	completed := false
-	delta := strings.Builder{}
-	process := func() error {
-		if len(data) == 0 {
-			return nil
-		}
-		raw := strings.Join(data, "\n")
-		data = nil
-		if raw == "[DONE]" {
-			return nil
-		}
-		var event struct {
-			Type     string `json:"type"`
-			Delta    string `json:"delta"`
-			Response struct {
-				Status string            `json:"status"`
-				Output []json.RawMessage `json:"output"`
-				Usage  *RunUsage         `json:"usage"`
-			} `json:"response"`
-		}
-		if json.Unmarshal([]byte(raw), &event) != nil {
-			return errResearchProtocol
-		}
-		switch event.Type {
-		case "response.failed", "response.incomplete", "error":
-			return errResearchProtocol
-		case "response.output_text.delta":
-			if delta.Len()+len(event.Delta) > maxResearchOutputBytes {
-				return errResearchProtocol
-			}
-			delta.WriteString(event.Delta)
-		case "response.completed":
-			if completed || event.Response.Status != "completed" {
-				return errResearchProtocol
-			}
-			completed = true
-			turn.Usage = event.Response.Usage
-			for _, item := range event.Response.Output {
-				var out struct {
-					Type      string `json:"type"`
-					ID        string `json:"id"`
-					CallID    string `json:"call_id"`
-					Name      string `json:"name"`
-					Arguments string `json:"arguments"`
-					Role      string `json:"role"`
-					Content   []struct {
-						Type string `json:"type"`
-						Text string `json:"text"`
-					} `json:"content"`
-				}
-				if json.Unmarshal(item, &out) != nil {
-					return errResearchProtocol
-				}
-				switch out.Type {
-				case "reasoning":
-					turn.Items = append(turn.Items, item) // Ephemeral continuation only; never persisted in traces.
-				case "function_call":
-					turn.Calls = append(turn.Calls, researchCall{out.CallID, out.Name, out.Arguments})
-					if len(turn.Calls) > maxResearchToolCalls {
-						return errResearchProtocol
-					}
-					clean, _ := json.Marshal(map[string]any{"type": "function_call", "call_id": out.CallID, "name": out.Name, "arguments": out.Arguments, "id": out.ID})
-					turn.Items = append(turn.Items, clean)
-				case "message":
-					if out.Role != "assistant" {
-						return errResearchProtocol
-					}
-					content := []any{}
-					for _, part := range out.Content {
-						if part.Type == "output_text" {
-							turn.Text += part.Text
-							content = append(content, map[string]any{"type": "output_text", "text": part.Text})
-						}
-					}
-					clean, _ := json.Marshal(map[string]any{"type": "message", "role": "assistant", "content": content})
-					turn.Items = append(turn.Items, clean)
-				default:
-					return errResearchProtocol
-				}
-			}
-		}
-		return nil
-	}
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
-			if err := process(); err != nil {
-				return turn, err
-			}
-			if completed {
-				break
-			}
-			continue
-		}
-		if strings.HasPrefix(line, "data:") {
-			data = append(data, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
-		}
-	}
-	if scanner.Err() != nil {
-		return turn, errResearchProtocol
-	}
-	if err := process(); err != nil {
-		return turn, err
-	}
-	if !completed {
-		return turn, errResearchProtocol
-	}
-	if turn.Text == "" {
-		turn.Text = delta.String()
-	}
-	if len(turn.Text) > maxResearchOutputBytes || (strings.TrimSpace(turn.Text) == "" && len(turn.Calls) == 0) {
-		return turn, errResearchProtocol
-	}
-	return turn, nil
 }
 
 var researchURLPattern = regexp.MustCompile(`https?://[^\s<>"'\\]+`)
@@ -625,6 +439,9 @@ func (s *researchService) run(ctx context.Context, t *researchTask, p modelProvi
 	session, err := newResearchModelSession(ctx, p, messages, model)
 	if err != nil {
 		return "", err
+	}
+	if session, ok := session.(*codexModelSession); ok {
+		defer session.close()
 	}
 	// Legacy in-package fixture tasks may be constructed directly. Production
 	// tasks always carry their immutable, account-scoped client snapshot.

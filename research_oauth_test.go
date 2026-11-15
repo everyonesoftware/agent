@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -91,66 +92,38 @@ func TestResearchUserScopedOAuthNeverUsesAnotherUsersToken(t *testing.T) {
 		t.Fatal("foreign grant I/O", w.Code)
 	}
 	w = researchRequest(mux, cookies[0], "POST", "/api/chat", researchWithTask(payload, id))
-	if w.Code != 200 || ownerCalls.Load() != 2 || foreignCalls.Load() != 0 {
-		t.Fatal("owner scope failed", w.Code, w.Body.String(), ownerCalls.Load(), foreignCalls.Load())
+	if w.Code != 401 || !strings.Contains(w.Body.String(), "reauthorize") || ownerCalls.Load() != 0 || foreignCalls.Load() != 0 {
+		t.Fatal("legacy owner did not require Codex reconnect without transport", w.Code, w.Body.String(), ownerCalls.Load(), foreignCalls.Load())
 	}
 }
 
 func TestResearchOAuthResponsesStructuredLoop(t *testing.T) {
-	var calls atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer FIXTURE-ACCESS" {
-			t.Error("wrong OAuth owner token")
+	_, p, _, audit := codexInferenceFixture(t, "research")
+	web := &researchFixtureWeb{fetchFn: func(_ context.Context, url string) (string, error) {
+		if url != "https://example.com/evidence" {
+			t.Errorf("unexpected fetch %q", url)
 		}
-		if r.URL.Path == "/models" {
-			fmt.Fprint(w, `{"data":[{"id":"oauth-model","visibility":"list"}]}`)
-			return
-		}
-		if r.URL.Path != "/responses" {
-			t.Error(r.URL.Path)
-		}
-		var body map[string]json.RawMessage
-		json.NewDecoder(r.Body).Decode(&body)
-		if string(body["store"]) != "false" || string(body["stream"]) != "true" || strings.Contains(string(body["input"]), "old private history") {
-			t.Error("invalid OAuth request", string(body["input"]))
-		}
-		if !strings.Contains(string(body["tools"]), `"name":"web_search"`) || strings.Contains(string(body["tools"]), `"function":`) {
-			t.Error("wrong Responses function schema", string(body["tools"]))
-		}
-		w.Header().Set("Content-Type", "text/event-stream")
-		if calls.Add(1) == 1 {
-			fmt.Fprint(w, "data: {\"type\":\"response.reasoning.delta\",\"delta\":\"PRIVATE-REASONING\"}\n\n")
-			fmt.Fprint(w, `data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"reasoning","id":"rs_1","summary":[],"encrypted_content":"PRIVATE-ENCRYPTED"},{"type":"function_call","id":"fc_1","call_id":"call_search","name":"web_search","arguments":"{\"query\":\"public fixture query\"}"}],"usage":{"input_tokens":10,"output_tokens":4,"total_tokens":14}}}`+"\n\n")
-			return
-		}
-		if !strings.Contains(string(body["input"]), `"call_id":"call_search"`) || !strings.Contains(string(body["input"]), "function_call_output") || !strings.Contains(string(body["input"]), "PRIVATE-ENCRYPTED") {
-			t.Error("Responses continuation missing", string(body["input"]))
-		}
-		fmt.Fprint(w, `data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"OAuth fixture answer https://example.com/"}]}],"usage":{"input_tokens":20,"output_tokens":8,"total_tokens":28}}}`+"\n\n")
-	}))
-	defer server.Close()
-	creds := newFileCredentialStore(t.TempDir())
-	if err := creds.Save(testOAuthCredentials("FIXTURE-ACCESS", "FIXTURE-REFRESH", time.Now().Add(time.Hour))); err != nil {
-		t.Fatal(err)
-	}
-	service := newSIWCService(siwcConfig{apiBaseURL: server.URL}, creds)
-	service.client = server.Client()
-	p := &responsesProvider{auth: service}
-	web := &researchFixtureWeb{searchFn: func(context.Context, string) (string, error) {
-		return `{"results":[{"url":"https://example.com/","title":"fixture evidence"}]}`, nil
+		return `{"url":"https://example.com/evidence","title":"fixture evidence","content":"bounded public evidence"}`, nil
 	}}
 	h, c, _ := researchHarness(t, p, web)
-	payload := `{"messages":[{"role":"user","content":"old private history"},{"role":"assistant","content":"old answer"},{"role":"user","content":"Research public fixture query"}]}`
+	payload := `{"messages":[{"role":"user","content":"old private history"},{"role":"assistant","content":"old answer"},{"role":"user","content":"Read https://example.com/evidence"}]}`
 	id := researchApproved(t, h, c, payload)
 	w := researchRequest(h, c, "POST", "/api/chat", researchWithTask(payload, id))
-	if w.Code != 200 || !strings.Contains(w.Body.String(), "OAuth fixture answer") {
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "Codex fixture answer") {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	if calls.Load() != 2 || web.calls.Load() != 1 {
-		t.Fatal(calls.Load(), web.calls.Load())
+	if web.calls.Load() != 1 {
+		t.Fatal(web.calls.Load())
+	}
+	wire, err := os.ReadFile(audit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(wire), "old private history") || !strings.Contains(string(wire), "fixture evidence") || !strings.Contains(string(wire), "dynamicTools") {
+		t.Fatalf("unsafe/incomplete Codex continuation: %s", wire)
 	}
 	w = researchRequest(h, c, "GET", "/api/runs/"+w.Header().Get("X-Agent-Run-ID"), "")
-	if strings.Contains(w.Body.String(), "PRIVATE-") || strings.Contains(w.Body.String(), "FIXTURE-ACCESS") || !strings.Contains(w.Body.String(), `"total_tokens":42`) {
+	if strings.Contains(w.Body.String(), "PRIVATE-") || strings.Contains(w.Body.String(), "FIXTURE-ACCESS") || !strings.Contains(w.Body.String(), `"total_tokens":36`) {
 		t.Fatal("unsafe/incomplete OAuth trace", w.Body.String())
 	}
 }

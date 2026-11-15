@@ -261,13 +261,21 @@ func logProviderFailure(err error) {
 }
 
 func writeChatProviderError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errChatGPTNotConnected) {
+		writeChatJSON(w, http.StatusUnauthorized, map[string]string{"error": "Reconnect ChatGPT in Settings to continue. Codex manages this connection.", "action": "reauthorize"})
+		return
+	}
+	if errors.Is(err, errCodexUsageRPC) {
+		writeChatError(w, http.StatusServiceUnavailable, "The Codex connection could not complete this request. Check Settings and try again.")
+		return
+	}
 	var failure *providerFailure
 	if !errors.As(err, &failure) {
 		writeChatError(w, http.StatusBadGateway, "The model provider could not complete this request.")
 		return
 	}
 	switch failure.errorCode {
-	case "subscription_sharing_usage_limit_exceeded":
+	case "subscription_sharing_usage_limit_exceeded", "usage_limit_exceeded":
 		writeChatJSON(w, http.StatusTooManyRequests, map[string]string{
 			"error":  "The ChatGPT plan usage limit has been reached.",
 			"action": "manage_usage",
@@ -288,7 +296,7 @@ func writeChatProviderError(w http.ResponseWriter, err error) {
 		writeChatError(w, http.StatusBadRequest, "This model or request feature is not supported for ChatGPT plan usage. Change the selection or request before trying again.")
 		return
 	case "subscription_sharing_route_not_supported":
-		writeChatError(w, http.StatusForbidden, "This API route is not supported for ChatGPT plan usage. Use the supported Responses API route.")
+		writeChatError(w, http.StatusForbidden, "This model operation is not supported for ChatGPT plan usage. Review the Codex connection in Settings.")
 		return
 	case "subscription_sharing_invalid_user":
 		writeChatError(w, http.StatusUnauthorized, "ChatGPT could not validate the subscriber context. The connection was kept; check the server request ID and reconnect only after confirming revocation or a terminal refresh error.")

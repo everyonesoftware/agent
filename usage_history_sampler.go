@@ -109,7 +109,11 @@ func (s *usageService) sampleScopes(ctx context.Context) {
 			// A concurrent disconnect is authoritative, not the discovery snapshot.
 			if entry.record.ConnectionID == record.ConnectionID {
 				callCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-				s.status(callCtx, entry, profile.Email)
+				email := profile.Email
+				if s.accounts.codex == s {
+					email = ""
+				}
+				s.status(callCtx, entry, email)
 				cancel()
 				// Background workers must not occupy the eight shared slots between ticks.
 				// Pending device ceremonies retain their existing expiry/idle lifecycle.

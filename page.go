@@ -380,7 +380,7 @@ const homePage = `<!doctype html>
     .usage-subsection p, .usage-help { color:var(--muted); font-size:11px; }
     .usage-identity { font-size:12px!important; color:inherit!important; }
     .usage-footer, .usage-actions { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-top:14px; }
-    #disconnect-chatgpt, .usage-subsection button, .usage-subsection a, #usage-dialog button { min-height:44px; }
+    #disconnect-chatgpt, .usage-subsection button, .usage-subsection a, .device-panel button, .device-panel a { min-height:44px; }
     .usage-footer .danger { background:transparent; }
     .usage-help { margin-top:12px; }
     .usage-help summary { cursor:pointer; padding:6px 0; }
@@ -391,7 +391,8 @@ const homePage = `<!doctype html>
     .quota-fill { height:100%; background:var(--accent); }
     .quota-reset, #usage-updated { font-size:10px; color:var(--muted); }
     .usage-stale .quota-fill { background:#7b877d; }
-    .device-panel { margin:14px 0; padding:14px; border:1px solid var(--line); border-radius:5px; background:#202322; }
+    .device-panel { margin:14px 0; padding:14px; border:1px solid var(--line); border-radius:5px; background:#202322; font-size:12px; overflow-wrap:anywhere; }
+    .device-panel p { color:var(--muted); font-size:11px; }
     .device-code { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
     .device-code code { font:18px/1.5 Consolas,monospace; letter-spacing:1px; user-select:all; }
     #usage-verification { display:inline-flex; align-items:center; }
@@ -524,28 +525,8 @@ const homePage = `<!doctype html>
           <label id="account-select-label" for="account-select" hidden>Active ChatGPT account</label>
           <select class="model-select" id="account-select" hidden disabled><option value="">Loading accounts…</option></select>
           <p class="connection-status" id="connection-status" role="status">Checking ChatGPT connection…</p>
-          <div id="remote-connection-setup-slot">
-            <div class="connection-setup" id="remote-connection-setup" hidden>
-              <p class="setup-lead" id="remote-connection-heading">Connect from the computer running Agent</p>
-              <p class="setup-intro" id="remote-connection-intro">You’re viewing Agent remotely. ChatGPT sign-in must be completed in a browser on the computer hosting Agent.</p>
-              <ol>
-                <li><strong>On that computer, open Agent’s local address.</strong>
-                  <div class="local-connection-address" id="local-connection-address" hidden>
-                    <div><span class="connection-detail">Configured local address</span><code id="local-connection-url"></code></div>
-                    <button class="reset" id="copy-local-connection-url" type="button" aria-label="Copy Agent’s configured local address">Copy</button>
-                  </div>
-                </li>
-                <li><strong>Sign in to the same Agent account.</strong><span id="remote-connection-action">Open Settings, then choose Continue with ChatGPT.</span></li>
-                <li><strong>Approve the connection in ChatGPT.</strong><span>Then return here and select the status pill above to refresh.</span></li>
-              </ol>
-              <p class="setup-return">Once connected, you can use Agent from this address. You only need localhost again to add or reconnect a ChatGPT account.</p>
-              <details class="connection-help"><summary>Why can’t I connect from here?</summary><p>ChatGPT returns sign-in to a local address on the computer running your browser. On another device, that points to that device—not your Agent server. Open the address above on the computer running Agent, not on another device. If the server has no browser, use a localhost tunnel from a trusted computer for setup.</p></details>
-            </div>
-          </div>
-          <p class="connection-detail" id="local-connection-config-error" hidden>Local connection address unavailable. Ask the server operator to set SIWC_REDIRECT_URI to a valid loopback callback matching the published host port.</p>
-
+          <p class="connection-detail">Powered by Codex · One sign-in for conversations and allowance.</p>
           <div class="provider-actions" id="provider-actions">
-            <details class="connection-help" id="remote-connection-help" hidden><summary>Add or reconnect an account</summary><div id="remote-connection-help-slot"></div></details>
             <button class="send" id="connect-chatgpt" type="button" hidden>Continue with ChatGPT ↗</button>
             <button class="reset" id="add-chatgpt-account" type="button" hidden>Add account ↗</button>
 
@@ -553,16 +534,16 @@ const homePage = `<!doctype html>
           </div>
           <p id="provider-error" class="menu-error" role="alert" hidden></p>
           <p id="provider-feedback" role="status" aria-live="polite" hidden></p>
+          <div class="device-panel" id="usage-device" hidden aria-live="polite"><strong>Connect ChatGPT with Codex</strong><p>Open the OpenAI verification page, sign in to the intended ChatGPT account and workspace, and enter this code. Return here after approval. This connects both conversations and allowance.</p><div class="device-code"><code id="usage-code"></code><button class="reset" id="usage-copy" type="button">Copy code</button></div><div class="usage-actions"><a id="usage-verification" target="_blank" rel="noopener noreferrer" hidden>Open verification page ↗</a><button class="reset" id="usage-cancel" type="button">Cancel</button></div><p id="usage-expiry"></p><p id="device-feedback" role="status"></p></div>
           <section class="usage-subsection" id="usage-panel" aria-labelledby="usage-heading" hidden>
-            <div class="usage-heading"><h3 id="usage-heading">Allowance</h3><button id="usage-refresh" class="connection-refresh" type="button" aria-label="Refresh usage" title="Refresh usage"><span id="usage-badge" class="connection-badge off">Optional</span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button></div>
+            <div class="usage-heading"><h3 id="usage-heading">Allowance</h3><button id="usage-refresh" class="connection-refresh" type="button" aria-label="Refresh usage" title="Refresh usage"><span id="usage-badge" class="connection-badge off">Checking…</span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button></div>
             <button id="usage-history-open-chatgpt" class="reset usage-history-trigger" type="button" aria-haspopup="dialog" aria-controls="usage-history-dialog" disabled>View usage history</button>
-            <p id="usage-message">See remaining allowance and reset times with a separate Codex sign-in. Your conversation connection won’t change.</p>
+            <p id="usage-message">Allowance for your ChatGPT connection.</p>
             <p class="usage-identity" id="usage-identity" hidden></p>
-            <div class="device-panel" id="usage-device" hidden><strong>Approve your usage connection</strong><p>Open the OpenAI verification page, sign in to the intended ChatGPT account and workspace, and enter this code. Return here after approval.</p><div class="device-code"><code id="usage-code"></code><button class="reset" id="usage-copy" type="button">Copy code</button></div><div class="usage-actions"><a id="usage-verification" target="_blank" rel="noopener noreferrer" hidden>Open verification page ↗</a><button class="reset" id="usage-cancel" type="button">Cancel</button></div><p id="usage-expiry"></p></div>
             <div id="usage-windows"></div>
             <p id="usage-error" role="alert" hidden></p><p id="usage-feedback" role="status"></p>
-            <div class="usage-footer"><span id="usage-updated"></span><button class="reset" id="usage-connect" type="button">Connect usage account</button><button class="reset danger" id="usage-disconnect" type="button" aria-label="Disconnect usage connection" title="Disconnect usage connection" hidden>Disconnect</button></div>
-            <details class="usage-help"><summary>About this usage connection</summary><p>This separate Codex sign-in reads account and quota details only. It does not change conversation routing or the existing ChatGPT connection. Device sign-in can start here, including remotely.</p><p>Codex-reported windows may not cover every ChatGPT feature or Agent-specific limit. Matching email does not verify account or workspace identity. Use the intended account and workspace. This connection is optional; conversations work without it.</p></details>
+            <div class="usage-footer"><span id="usage-updated"></span></div>
+            <details class="usage-help"><summary>About allowance</summary><p>Codex reports allowance for the selected ChatGPT connection. Windows may not cover every ChatGPT feature or Agent-specific limit. Refresh failures retain explicitly marked last-known values; they do not create another connection.</p></details>
           </section>
 
 
@@ -733,9 +714,7 @@ const homePage = `<!doctype html>
     <div class="dialog-actions"><button class="reset" id="cancel-disconnect" type="button" autofocus>Cancel</button><button class="reset danger" id="confirm-disconnect" type="submit">Disconnect account</button></div>
     </form>
   </dialog>
-  <dialog class="connection-dialog" id="usage-dialog" aria-labelledby="usage-dialog-title" aria-describedby="usage-dialog-description">
-    <form id="usage-confirm-form"><h2 id="usage-dialog-title">Disconnect usage account?</h2><p id="usage-dialog-account"></p><p id="usage-dialog-description">Remove this usage connection from Agent. Your conversation connection and saved chats are kept. Remote revocation is not guaranteed.</p><label for="usage-password">Agent password</label><input id="usage-password" type="password" autocomplete="current-password" maxlength="72" required><p id="usage-confirm-error" class="menu-error" role="alert" hidden></p><div class="dialog-actions"><button class="reset" id="usage-dialog-cancel" type="button" autofocus>Cancel</button><button class="reset danger" id="usage-confirm" type="submit">Disconnect usage account</button></div></form>
-  </dialog>
+
   <dialog id="usage-history-dialog" aria-labelledby="usage-history-title">
     <header class="history-top"><div><h2 id="usage-history-title">Usage history</h2></div><div class="history-popup-actions"><label><span class="history-range-label">History</span><select id="usage-history-range"><option value="24h">24 hours</option><option value="week">1 week</option><option value="period">Entire period</option></select></label><button id="usage-history-close" type="button" aria-label="Close usage history">×</button></div></header>
     <div class="history-headline"><strong id="usage-history-value">Unavailable</strong><span id="usage-history-reset"></span></div>
@@ -761,10 +740,7 @@ const homePage = `<!doctype html>
       const disconnectButton = document.getElementById('disconnect-chatgpt');
       const checkConnectionButton = document.getElementById('check-chatgpt');
       const connectionBadge = document.getElementById('connection-badge');
-      const localConnectionAddress = document.getElementById('local-connection-address');
-      const localConnectionURL = document.getElementById('local-connection-url');
-      const localConnectionConfigError = document.getElementById('local-connection-config-error');
-      const copyLocalConnectionURL = document.getElementById('copy-local-connection-url');
+
       const providerError = document.getElementById('provider-error');
       const providerFeedback = document.getElementById('provider-feedback');
       const disconnectDialog = document.getElementById('disconnect-dialog');
@@ -781,7 +757,7 @@ const homePage = `<!doctype html>
       let profileCount = 0;
       let connectionAvailable = false;
       let pendingProfiles = [];
-      const localHost = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(window.location.hostname);
+
       const conversation = [];
       let busy = false;
       let researchFlow = false;
@@ -1406,17 +1382,18 @@ const homePage = `<!doctype html>
       window.addEventListener('pagehide',()=>{stopUsageMonitor();abortUsageHistory();});
       // END usage history refresh
 
-      // Usage authorization is independent of the conversation connection.
+      // Allowance shares the selected Codex connection with conversations.
       const usageElement = id => document.getElementById('usage-' + id);
-      const usagePanel = usageElement('panel'), usageDialog = usageElement('dialog');
+      const usagePanel = usageElement('panel');
       let usageProfile = '', usageData = null, usageEpoch = 0, usageTimer = null;
-      let usageBusy = false, usageTarget = null, usageSubmitting = false, usageController = null;
+      let usageBusy = false, usageController = null;
+      let deviceLogin = null, deviceEpoch = 0, deviceTimer = null, deviceController = null, deviceBusy = false, authorizationController = null;
       // BEGIN update reload safety
       // Only booleans and a revision leave this closure; drafts/passwords stay in memory.
       let updateDraftRevision = 0;
       document.addEventListener('input', () => { ++updateDraftRevision; });
       window.agentUpdateSafety = () => ({
-        pending: busy || loadingConversation || passwordBusy || authBusy || connectionBusy || connectionSubmitting || usageBusy || usageSubmitting || searchBusy || memoryBusy || memorySuggestionBusy,
+        pending: busy || loadingConversation || passwordBusy || authBusy || connectionBusy || connectionSubmitting || usageBusy || deviceBusy || Boolean(deviceLogin) || searchBusy || memoryBusy || memorySuggestionBusy,
         unsaved: Boolean(memorySuggestionState || !memoryEl('form').hidden || searchBudgetDirty() || searchKey.value || input.value || Array.from(document.querySelectorAll('input[type="password"], input[autocomplete="current-password"], input[autocomplete="new-password"]')).some(field => field.value) || document.querySelector('dialog[open]')),
         revision: updateDraftRevision,
       });
@@ -1437,6 +1414,7 @@ const homePage = `<!doctype html>
       }
       function usageVisible() { return !settingsPanel.hidden && !chatApp.hidden && !document.hidden && Boolean(activeProfileID); }
       function syncUsage() {
+        if (deviceLogin && !document.hidden && !settingsPanel.hidden && !chatApp.hidden && !deviceBusy) { clearTimeout(deviceTimer); deviceTimer = setTimeout(() => { void deviceRequest('status'); }, 2000); }
         startUsageMonitor();
         if (!usageVisible()) { stopUsage(true); usagePanel.hidden=true; startUsageMonitor(); return; }
         usagePanel.hidden = false;
@@ -1460,43 +1438,28 @@ const homePage = `<!doctype html>
         historyEl('open-chatgpt').disabled=!activeProfileID || Boolean(connectionRefresh) || connectionBusy;
         if (!usageData) {
           usageElement('badge').textContent = 'Checking…';
-          for (const id of ['connect', 'disconnect', 'device', 'identity']) usageElement(id).hidden = true;
+          usageElement('identity').hidden = true;
           usageElement('windows').replaceChildren();
           usageElement('message').textContent = 'Checking usage availability…';
           usageElement('updated').textContent = '';
         }
         const data = usageData || {}, state = data.state;
-        const mismatch = data.identity_match === 'different';
+
         const stale = Boolean(data.snapshot?.stale);
         const badge = usageElement('badge');
-        badge.textContent = usageBusy ? (usageData ? 'Refreshing…' : 'Checking…') : mismatch ? 'Review account' : stale ? 'Last known' : ({connected:'Connected',disconnected:'Optional',pending:'Awaiting approval',checking:'Checking…',expired:'Sign-in expired',unavailable:'Unavailable'}[state] || 'Unavailable');
-        badge.className = 'connection-badge' + (state === 'connected' && !mismatch && !stale ? '' : ['disconnected','unavailable'].includes(state) ? ' off' : ' warning');
-        usageElement('refresh').disabled = usageBusy || !usageData || !['connected','unavailable'].includes(state) || mismatch || usageDialog.open;
+        badge.textContent = usageBusy ? (usageData ? 'Refreshing…' : 'Checking…') : stale ? 'Last known' : ({connected:'Connected',disconnected:'Not connected',pending:'Awaiting approval',checking:'Checking…',expired:'Sign-in expired',unavailable:'Unavailable'}[state] || 'Unavailable');
+        badge.className = 'connection-badge' + (state === 'connected' && !stale ? '' : ['disconnected','unavailable'].includes(state) ? ' off' : ' warning');
+        usageElement('refresh').disabled = usageBusy || !usageData || !['connected','unavailable'].includes(state) || connectionBusy || Boolean(connectionRefresh) || Boolean(deviceLogin);
         usageElement('refresh').setAttribute('aria-busy', String(usageBusy));
-        usageElement('connect').hidden = !usageData || ['pending','checking'].includes(state) || (state === 'connected' && !mismatch);
-        usageElement('connect').disabled = usageBusy || data.available !== true || usageDialog.open;
-        usageElement('connect').textContent = mismatch ? 'Use another usage account' : state === 'expired' ? 'Reconnect usage account' : 'Connect usage account';
-        usageElement('disconnect').hidden = !data.connection_id || ['pending','checking'].includes(state);
-        usageElement('disconnect').disabled = usageBusy || usageDialog.open;
-        usageElement('message').textContent = mismatch ? 'This usage account is different. Allowance is hidden. Reconnect with the intended account and workspace, or disconnect usage.' : data.available === false ? 'Usage service unavailable. The Codex dependency is unavailable; your conversation connection is unchanged.' : stale ? 'Showing last-known allowance; these values may no longer be current.' : state === 'expired' ? 'Sign in again to see allowance. Your conversation connection is unchanged.' : state === 'connected' ? 'Codex-reported allowance. Account and workspace matching are not verified by email alone.' : state === 'checking' ? 'Checking the signed-in usage account…' : state === 'pending' ? 'Waiting for OpenAI approval. Your conversation connection is unchanged.' : 'See remaining allowance and reset times with a separate Codex sign-in. Your conversation connection won’t change.';
+        usageElement('message').textContent = data.available === false ? 'The Codex dependency is unavailable. ChatGPT conversations and allowance require Codex.' : stale ? 'Showing last-known allowance; these values may no longer be current.' : state === 'expired' ? 'Reconnect ChatGPT above to restore conversations and allowance.' : state === 'connected' ? 'Codex-reported allowance for your ChatGPT connection.' : state === 'checking' ? 'Checking your ChatGPT connection…' : state === 'pending' ? 'Waiting for OpenAI approval.' : 'Connect ChatGPT above to use conversations and allowance.';
         usageElement('identity').hidden = !data.identity;
-        usageElement('identity').textContent = data.identity ? 'Usage account: ' + (data.identity.email || 'Email unavailable') + (data.identity.plan_type ? ' · ' + data.identity.plan_type : '') + ' · separate Codex sign-in' : '';
+        usageElement('identity').textContent = data.identity ? 'ChatGPT account: ' + (data.identity.email || 'Email unavailable') + (data.identity.plan_type ? ' · ' + data.identity.plan_type : '') : '';
         usageElement('error').textContent = data.error || '';
         usageElement('error').hidden = !data.error;
-        const login = data.login;
-        usageElement('device').hidden = !login || !['pending','checking'].includes(state);
-        usageElement('code').textContent = typeof login?.user_code === 'string' ? login.user_code : '';
-        usageElement('expiry').textContent = usageDate(login?.expires_at) ? 'Code expires ' + usageDate(login.expires_at) + ' · local time' : 'Code expiry unavailable.';
-        const link = usageElement('verification');
-        link.hidden = true; link.removeAttribute('href');
-        try {
-          const url = new URL(login?.verification_url);
-          if (url.protocol === 'https:' && url.hostname === 'auth.openai.com' && !url.port && !url.username && !url.password && url.pathname === '/codex/device' && !url.search && !url.hash) { link.href = url.href; link.hidden = false; }
-        } catch (_) {}
-        usageElement('cancel').disabled = usageBusy;
+
         const windows = usageElement('windows'); windows.replaceChildren();
         windows.classList.toggle('usage-stale', stale);
-        if ((state === 'connected' || (state === 'unavailable' && stale)) && !mismatch) {
+        if (state === 'connected' || (state === 'unavailable' && stale)) {
           for (const window of Array.isArray(data.snapshot?.windows) ? data.snapshot.windows : []) {
             const row = document.createElement('div'); row.className = 'quota-window';
             const label = document.createElement('div'); label.className = 'quota-label';
@@ -1516,36 +1479,34 @@ const homePage = `<!doctype html>
           }
           if (!windows.childElementCount) { const unavailable = document.createElement('p'); unavailable.textContent = 'Allowance windows are unavailable. Refresh to try again.'; windows.append(unavailable); }
         }
-        usageElement('updated').textContent = !mismatch && data.snapshot ? (usageDate(data.snapshot.fetched_at) ? 'Updated ' + usageDate(data.snapshot.fetched_at) + ' · local time' : 'Update time unavailable') + (stale ? ' · stale' : '') : '';
+        usageElement('updated').textContent = data.snapshot ? (usageDate(data.snapshot.fetched_at) ? 'Updated ' + usageDate(data.snapshot.fetched_at) + ' · local time' : 'Update time unavailable') + (stale ? ' · stale' : '') : '';
       }
-      async function usageRequest(action, captured, quiet = false) {
+      async function usageRequest(action, _unused, quiet = false) {
         if (!usageVisible() || usageBusy || !usageProfile) return false;
         const priorState = usageData?.state;
         let firstFetch = false;
         const profile = usageProfile, epoch = ++usageEpoch;
-        const target = captured || {profile_id:profile,connection_id:usageData?.connection_id || ''};
+        const payload = {profile_id:profile,connection_id:usageData?.connection_id || ''};
         clearTimeout(usageTimer);
         usageBusy = true;
         const controller = new AbortController(); usageController=controller;
         const timeout = setTimeout(()=>controller.abort(),12000);
         if (!quiet) { usageElement('feedback').textContent = ''; renderUsage(); }
         try {
-          const payload = {...target};
-          if (action === 'connect') { payload.expected_connection_id = payload.connection_id; delete payload.connection_id; }
           const response = await fetch('/api/usage/' + action + (action === 'status' ? '?profile_id=' + encodeURIComponent(profile) : ''), action === 'status' ? {cache:'no-store',signal:controller.signal} : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal});
-          if ('password' in payload) payload.password = '';
           const result = await response.json();
           if (epoch !== usageEpoch || profile !== activeProfileID || profile !== usageProfile || !usageVisible()) return false;
           if (!response.ok) throw new Error(result.error || 'Usage request failed. Please try again.');
           if (result.profile_id !== profile) throw new Error('Usage account changed. Refresh Settings to retry.');
-          firstFetch = action === 'status' && ['pending','checking'].includes(priorState) && result.state === 'connected' && !result.snapshot && result.identity_match !== 'different';
+          firstFetch = action === 'status' && ['pending','checking'].includes(priorState) && result.state === 'connected' && !result.snapshot;
           usageData = result;
+          if (!deviceLogin && result.login && ['pending','checking'].includes(result.state)) beginDeviceLogin({...result.login,profile_id:profile,connection_id:result.connection_id});
           return true;
         } catch (error) {
           if (epoch !== usageEpoch || profile !== usageProfile || !usageVisible()) return false;
           if (usageData?.snapshot) usageData = {...usageData,snapshot:{...usageData.snapshot,stale:true},error:error.message};
           else usageData = {...(usageData || {profile_id:profile,available:false,state:'unavailable',connection_id:'',identity_match:'unverified'}),error:error.message};
-          if (action === 'disconnect' && usageDialog.open) { usageElement('confirm-error').textContent = error.message; usageElement('confirm-error').hidden = false; }
+
           // A failed mutation may already have saved a new connection record.
           // Reload its precondition before allowing retry, never retarget a dialog.
           if (action !== 'status') {
@@ -1561,48 +1522,85 @@ const homePage = `<!doctype html>
           return false;
         } finally {
           clearTimeout(timeout); if (usageController===controller) usageController=null;
-          if (captured && 'password' in captured) captured.password = '';
           if (epoch === usageEpoch) { usageBusy = false; renderUsage(); if (firstFetch) void usageRequest('refresh'); else usagePoll(); }
         }
       }
-      usageElement('connect').addEventListener('click', () => { void usageRequest('connect'); });
       usageElement('refresh').addEventListener('click', () => { void usageRequest(usageData?.state === 'unavailable' ? 'status' : 'refresh'); });
-      usageElement('cancel').addEventListener('click', () => {
-        if (usageData?.login) void usageRequest('cancel', {profile_id:usageProfile,connection_id:usageData.connection_id,login_id:usageData.login.login_id});
-      });
+      // Device login targets its own pending profile, which may not yet be active.
+      function stopDeviceLogin() {
+        ++deviceEpoch; clearTimeout(deviceTimer); deviceTimer = null;
+        deviceController?.abort(); deviceController = null;
+        deviceLogin = null; deviceBusy = false;
+        usageElement('device').hidden = true; usageElement('code').textContent = '';
+        usageElement('verification').hidden = true; usageElement('verification').removeAttribute('href');
+        document.getElementById('device-feedback').textContent = '';
+        updateConnectionControls();
+      }
+      function renderDeviceLogin() {
+        const login = deviceLogin;
+        usageElement('device').hidden = !login;
+        usageElement('code').textContent = login?.user_code || '';
+        usageElement('expiry').textContent = usageDate(login?.expires_at) ? 'Code expires ' + usageDate(login.expires_at) + ' · local time' : 'Code expiry unavailable.';
+        const link = usageElement('verification'); link.hidden = true; link.removeAttribute('href');
+        try {
+          const url = new URL(login?.verification_url);
+          if (url.protocol === 'https:' && url.hostname === 'auth.openai.com' && !url.port && !url.username && !url.password && url.pathname === '/codex/device' && !url.search && !url.hash) { link.href = url.href; link.hidden = false; }
+        } catch (_) {}
+        usageElement('cancel').disabled = deviceBusy;
+      }
+      function beginDeviceLogin(login) {
+        if (!login || typeof login.profile_id !== 'string' || !login.profile_id || typeof login.login_id !== 'string' || !login.login_id || typeof login.user_code !== 'string' || !login.user_code) throw new Error('Codex did not return a valid device code. Please try again.');
+        stopDeviceLogin(); deviceLogin = Object.freeze({...login});
+        renderDeviceLogin(); updateConnectionControls();
+        connectionFeedback('Waiting for OpenAI approval…');
+        deviceTimer = setTimeout(() => { void deviceRequest('status'); }, 2000);
+      }
+      async function deviceRequest(action) {
+        if (!deviceLogin || deviceBusy || chatApp.hidden || document.hidden || settingsPanel.hidden) return;
+        const login = deviceLogin, epoch = deviceEpoch;
+        clearTimeout(deviceTimer); deviceBusy = true;
+        const controller = new AbortController(); deviceController = controller;
+        const timeout = setTimeout(() => controller.abort(), 12000);
+        renderDeviceLogin();
+        try {
+          const response = await fetch('/api/usage/' + action + (action === 'status' ? '?profile_id=' + encodeURIComponent(login.profile_id) + '&connection_id=' + encodeURIComponent(login.connection_id || '') : ''), action === 'status' ? {cache:'no-store',signal:controller.signal} : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({profile_id:login.profile_id,connection_id:login.connection_id || '',login_id:login.login_id}),signal:controller.signal});
+          const result = await response.json();
+          if (epoch !== deviceEpoch || deviceLogin !== login || chatApp.hidden) return;
+          if (!response.ok) {
+            if ([401,403,404,409,410].includes(response.status)) {
+              stopDeviceLogin();
+              await refreshConnectionState();
+              connectionFeedback(result.error || 'The ChatGPT connection changed. Review Settings before starting sign-in again.', true);
+              if (!settingsPanel.hidden) (connectButton.hidden ? checkConnectionButton : connectButton).focus();
+              return;
+            }
+            throw new Error(result.error || 'Codex connection check failed. Please try again.');
+          }
+          if (result.profile_id !== login.profile_id) throw new Error('ChatGPT account changed. Cancel and retry sign-in.');
+          if (action !== 'cancel' && result.login && result.login.login_id !== login.login_id) throw new Error('This device code was replaced. Cancel and retry sign-in.');
+          if (action === 'cancel' || !['pending','checking'].includes(result.state)) {
+            stopDeviceLogin();
+            await refreshConnectionState();
+            connectionFeedback(action === 'cancel' ? 'Sign-in canceled.' : result.state === 'connected' ? 'Connected to ChatGPT with Codex.' : result.error || 'Sign-in expired or ended. Please try again.', result.state !== 'connected' && action !== 'cancel');
+            if (!settingsPanel.hidden) (connectButton.hidden ? checkConnectionButton : connectButton).focus();
+          } else {
+            document.getElementById('device-feedback').textContent = result.state === 'checking' ? 'Checking your ChatGPT account…' : 'Waiting for OpenAI approval…';
+          }
+        } catch (error) {
+          if (epoch === deviceEpoch && deviceLogin === login) document.getElementById('device-feedback').textContent = error.name === 'AbortError' ? 'Connection check timed out. Retrying; you can cancel sign-in.' : error.message;
+        } finally {
+          clearTimeout(timeout);
+          if (epoch === deviceEpoch && deviceLogin === login) {
+            deviceBusy = false; deviceController = null; renderDeviceLogin();
+            if (!chatApp.hidden && !document.hidden && !settingsPanel.hidden) deviceTimer = setTimeout(() => { void deviceRequest('status'); }, 2000);
+          }
+        }
+      }
+      usageElement('cancel').addEventListener('click', () => { void deviceRequest('cancel'); });
       usageElement('copy').addEventListener('click', async () => {
         const code = usageElement('code').textContent;
-        try { await navigator.clipboard.writeText(code); usageElement('feedback').textContent = 'Code copied.'; }
-        catch (_) { usageElement('feedback').textContent = 'Copy unavailable. Select and copy the code manually.'; }
-      });
-      usageElement('disconnect').addEventListener('click', () => {
-        if (usageBusy || !usageData?.connection_id) return;
-        usageTarget = Object.freeze({profile_id:usageProfile,connection_id:usageData.connection_id});
-        usageElement('password').value = '';
-        usageElement('confirm-error').hidden = true;
-        usageElement('dialog-account').textContent = (usageData.identity?.email || selectedProfile?.email || 'Selected account') + ' · usage connection only';
-        usageDialog.showModal(); renderUsage(); usageElement('dialog-cancel').focus();
-      });
-      usageElement('dialog-cancel').addEventListener('click', () => { if (!usageSubmitting) usageDialog.close(); });
-      usageDialog.addEventListener('cancel', event => { if (usageSubmitting) event.preventDefault(); });
-      usageDialog.addEventListener('close', () => {
-        if (usageDialog.open) return;
-        usageTarget = null; usageElement('password').value = ''; usageElement('confirm-error').textContent = ''; usageElement('confirm-error').hidden = true;
-        renderUsage();
-        if (usageVisible()) (usageElement('disconnect').hidden ? usageElement('connect') : usageElement('disconnect')).focus();
-      });
-      usageElement('confirm-form').addEventListener('submit', async event => {
-        event.preventDefault();
-        if (!usageTarget || usageSubmitting || !usageDialog.open) return;
-        const target = {...usageTarget,password:usageElement('password').value};
-        usageElement('password').value = '';
-        usageSubmitting = true;
-        usageElement('confirm-error').hidden = true;
-        const controls = Array.from(usageElement('confirm-form').elements);
-        controls.forEach(control => { control.disabled = true; });
-        usageElement('confirm-form').setAttribute('aria-busy','true');
-        try { if (await usageRequest('disconnect', target)) usageDialog.close(); }
-        finally { target.password = ''; usageElement('password').value = ''; usageSubmitting = false; controls.forEach(control => { control.disabled = false; }); usageElement('confirm-form').setAttribute('aria-busy','false'); if (usageDialog.open) usageElement('password').focus(); }
+        try { await navigator.clipboard.writeText(code); document.getElementById('device-feedback').textContent = 'Code copied.'; }
+        catch (_) { document.getElementById('device-feedback').textContent = 'Copy unavailable. Select and copy the code manually.'; }
       });
       document.addEventListener('visibilitychange', () => { if (document.hidden) stopUsage(true); else syncUsage(); });
 
@@ -2603,6 +2601,7 @@ const homePage = `<!doctype html>
           const response = await fetch('/api/auth/me', { cache: 'no-store' });
           if (!response.ok) throw new Error('signed out');
           const user = await response.json();
+          if (modelStorageKey !== 'everyoneagent.model' && modelStorageKey !== 'everyoneagent.model.' + user.id) { authorizationController?.abort(); authorizationController = null; stopDeviceLogin(); connectionBusy = false; }
           modelStorageKey = 'everyoneagent.model.' + user.id;
           document.getElementById('current-username').textContent = user.username;
           document.getElementById('user-avatar').textContent = Array.from(user.username || '?')[0].toLocaleUpperCase();
@@ -2612,7 +2611,7 @@ const homePage = `<!doctype html>
           connectionStatus.textContent = 'Signed in as ' + user.username + '.';
           await refreshConnectionState();
           await refreshConversations();
-        } catch (_) { stopUsage(); authGate.hidden = false; chatApp.hidden = true; }
+        } catch (_) { authorizationController?.abort(); authorizationController = null; stopUsage(); stopDeviceLogin(); connectionBusy = false; authGate.hidden = false; chatApp.hidden = true; }
       }
 
       document.getElementById('logout-button').addEventListener('click', async function () {
@@ -2626,7 +2625,7 @@ const homePage = `<!doctype html>
         try {
           const response = await fetch('/api/auth/logout', { method: 'POST' });
           if (!response.ok) throw new Error('Sign out failed. Please try again.');
-          stopUsage();
+          authorizationController?.abort(); authorizationController = null; stopUsage(); stopDeviceLogin();
           window.location.reload();
         } catch (_) { error.textContent = 'Sign out failed. Please try again.'; error.hidden = false; }
         finally { button.disabled = false; }
@@ -2818,11 +2817,13 @@ const homePage = `<!doctype html>
 
       function updateConnectionControls() {
         const pending = connectionBusy || Boolean(connectionRefresh);
-        for (const button of [connectButton, addAccountButton, disconnectButton, checkConnectionButton, copyLocalConnectionURL]) button.disabled = pending;
-        accountSelect.disabled = pending || profileCount === 0 || (profileCount === 1 && Boolean(activeProfileID));
-        connectionBadge.textContent = connectionRefresh ? 'Checking…' : connectionStateLabel;
+        for (const button of [connectButton, addAccountButton, disconnectButton]) button.disabled = pending || Boolean(deviceLogin);
+        checkConnectionButton.disabled = pending;
+        accountSelect.disabled = pending || Boolean(deviceLogin) || profileCount === 0 || (profileCount === 1 && Boolean(activeProfileID));
+        connectionBadge.textContent = connectionRefresh ? 'Checking…' : deviceLogin ? 'Awaiting approval' : connectionStateLabel;
+        if (deviceLogin) connectionBadge.className = 'connection-badge warning';
         checkConnectionButton.setAttribute('aria-busy', String(Boolean(connectionRefresh)));
-        checkConnectionButton.setAttribute('aria-label', connectionRefresh ? 'Checking ChatGPT connection status' : connectionStateLabel + '. Refresh ChatGPT connection status');
+        checkConnectionButton.setAttribute('aria-label', connectionRefresh ? 'Checking ChatGPT connection status' : connectionBadge.textContent + '. Refresh ChatGPT connection status');
       }
 
       function connectionFeedback(text, warning) {
@@ -2848,10 +2849,6 @@ const homePage = `<!doctype html>
         let oauthSelected = false;
         let planUsageEnabled = false;
         let statusAvailable = false;
-        let localURL = '';
-        localConnectionAddress.hidden = true;
-        localConnectionURL.textContent = '';
-        localConnectionConfigError.hidden = true;
 
         let profilesAvailable = false;
         selectedProfile = null;
@@ -2865,7 +2862,6 @@ const homePage = `<!doctype html>
           connected = Boolean(status.connected);
           oauthSelected = Boolean(status.oauth_selected);
           planUsageEnabled = Boolean(status.plan_usage_enabled);
-          localURL = typeof status.local_url === 'string' ? status.local_url : '';
           statusAvailable = true;
         } catch (_) {}
 
@@ -2905,20 +2901,9 @@ const homePage = `<!doctype html>
 
         document.getElementById('account-select-label').hidden = accountSelect.hidden;
         connectionAvailable = statusAvailable && profilesAvailable;
-        localConnectionURL.textContent = localURL;
-        localConnectionAddress.hidden = localHost || !localURL;
-        localConnectionConfigError.hidden = !statusAvailable || Boolean(localURL);
         const pendingProfile = selectedProfile?.registration_pending || (!activeProfileID && pendingProfiles.length > 0);
         const ready = connectionAvailable && connected && planUsageEnabled;
-        const remoteSetup = document.getElementById('remote-connection-setup');
-        const remoteHelp = document.getElementById('remote-connection-help');
-        const setupSlot = document.getElementById(ready ? 'remote-connection-help-slot' : 'remote-connection-setup-slot');
-        if (remoteSetup.parentElement !== setupSlot) setupSlot.appendChild(remoteSetup);
-        remoteSetup.hidden = localHost || !connectionAvailable;
-        remoteHelp.hidden = localHost || !ready;
-        document.getElementById('remote-connection-heading').hidden = ready;
-        document.getElementById('remote-connection-intro').hidden = ready;
-        connectionStatus.hidden = ready || (!localHost && connectionAvailable);
+        connectionStatus.hidden = ready;
         connectionStateLabel = !connectionAvailable ? 'Unavailable' : ready ? 'Connected' : pendingProfile ? 'Awaiting sign-in' : connected ? 'Permission required' : oauthSelected ? 'Sign-in required' : 'Not connected';
         connectionBadge.className = 'connection-badge' + (ready ? '' : (!connectionAvailable || pendingProfile || connected || oauthSelected) ? ' warning' : ' off');
         connectionStatus.textContent = !connectionAvailable
@@ -2927,22 +2912,14 @@ const homePage = `<!doctype html>
             ? 'Active account: ' + (selectedProfile?.label || 'ChatGPT account') + '.'
             : (connected
               ? 'Review ChatGPT permissions to enable plan access.'
-              : (localHost
-                ? 'Connect your ChatGPT account to Agent.'
-                : 'To connect, open Agent’s local address on the computer running it.')));
-        if (pendingProfile && connectionAvailable) connectionStatus.textContent = localHost
-          ? 'Select an incomplete account to finish sign-in.'
-          : 'To finish sign-in, open Agent’s local address on the computer running it.';
-        connectButton.hidden = !localHost || ready || !connectionAvailable;
+              : 'Connect your ChatGPT account to Agent with Codex.'));
+        if (pendingProfile && connectionAvailable) connectionStatus.textContent = 'Select an incomplete account to finish sign-in.';
+        connectButton.hidden = ready || !connectionAvailable;
         connectButton.textContent = pendingProfile ? 'Resume sign-in ↗' : connected ? 'Review ChatGPT permissions ↗' : oauthSelected ? 'Reconnect with ChatGPT ↗' : 'Continue with ChatGPT ↗';
-        document.getElementById('remote-connection-action').textContent = 'Open Settings, then choose ' + (ready ? 'Add account' : connectButton.textContent.replace(' ↗', '')) + '.';
-        addAccountButton.hidden = !localHost || profileCount === 0 || !connectionAvailable;
+        addAccountButton.hidden = profileCount === 0 || !connectionAvailable;
         disconnectButton.hidden = !oauthSelected || !selectedProfile || !connectionAvailable;
         const providerActions = document.getElementById('provider-actions');
-        providerActions.classList.toggle('with-guidance', !remoteHelp.hidden);
-        providerActions.hidden = remoteHelp.hidden && [connectButton, addAccountButton, disconnectButton].every(button => button.hidden);
-        if (!localHost && connectionAvailable && ready) connectionStatus.textContent = 'Add or reconnect from Agent’s local address on the computer running it.';
-        if (!localHost && connectionAvailable && connected && !planUsageEnabled) connectionStatus.textContent = 'To review permissions, open Agent’s local address on the computer running it.';
+        providerActions.hidden = [connectButton, addAccountButton, disconnectButton].every(button => button.hidden);
 
         try {
           const response = await fetch('/api/models', { cache: 'no-store' });
@@ -2973,17 +2950,6 @@ const homePage = `<!doctype html>
         }
       }
 
-      copyLocalConnectionURL.addEventListener('click', async function () {
-        const address = localConnectionURL.textContent;
-        if (localConnectionAddress.hidden || !address) return;
-        try {
-          await navigator.clipboard.writeText(address);
-          connectionFeedback('Local address copied.');
-        } catch (_) {
-          connectionFeedback('Copy unavailable. Select and copy the local address manually.', true);
-        }
-      });
-
       checkConnectionButton.addEventListener('click', async function () {
         if (connectionBusy || connectionRefresh) return;
         providerError.hidden = true;
@@ -3004,7 +2970,7 @@ const homePage = `<!doctype html>
         document.getElementById('disconnect-title').textContent = change.title;
         document.getElementById('disconnect-account').textContent = change.label;
         document.getElementById('disconnect-description').textContent = change.action === 'disconnect'
-          ? 'Your saved conversations and subscription are kept.'
+          ? 'Signs this account out of Codex for conversations and allowance. Your saved conversations and subscription are kept.'
           : 'Confirm with your Agent password, not your ChatGPT password.';
         const confirm = document.getElementById('confirm-disconnect');
         confirm.textContent = change.button;
@@ -3016,31 +2982,38 @@ const homePage = `<!doctype html>
       }
 
       async function startChatGPTAuthorization(path, trigger) {
-        if (!localHost || connectionBusy || connectionRefresh) return;
+        if (connectionBusy || connectionRefresh || deviceLogin) return;
         const expectedActive = activeProfileID;
+        const epoch = deviceEpoch;
         providerError.hidden = true;
         connectionFeedback('Opening ChatGPT sign-in…');
         connectionBusy = true;
         updateConnectionControls();
-        let leaving = false;
+        const controller = new AbortController(); authorizationController = controller;
+        const timeout = setTimeout(() => controller.abort(), 20000);
         try {
           const response = await fetch(path, {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify({ expected_active_profile_id: expectedActive })
+            body: JSON.stringify({ expected_active_profile_id: expectedActive }), signal: controller.signal
           });
           let result = {};
           if ((response.headers.get('content-type') || '').includes('application/json')) result = await response.json();
+          if (authorizationController !== controller || epoch !== deviceEpoch || expectedActive !== activeProfileID || chatApp.hidden) return;
           if (!response.ok) throw new Error(result.error || 'ChatGPT sign-in could not be started. Please try again.');
-          if (typeof result.authorization_url !== 'string' || !result.authorization_url) throw new Error('ChatGPT did not return a sign-in address. Please try again.');
-          window.location.assign(result.authorization_url);
-          leaving = true;
+          if (result.connected === true && typeof result.profile_id === 'string' && result.profile_id) {
+            await refreshConnectionState();
+            connectionFeedback('Connected to ChatGPT with Codex.');
+          } else beginDeviceLogin(result);
         } catch (failure) {
+          if (authorizationController !== controller || epoch !== deviceEpoch || chatApp.hidden) return;
           connectionFeedback('');
-          providerError.textContent = failure.message || 'ChatGPT sign-in could not be started. Please try again.';
+          providerError.textContent = failure.name === 'AbortError' ? 'ChatGPT sign-in timed out. Refresh the connection before trying again.' : failure.message || 'ChatGPT sign-in could not be started. Please try again.';
           providerError.hidden = false;
           await refreshConnectionState();
         } finally {
-          if (!leaving) {
+          clearTimeout(timeout);
+          if (authorizationController === controller && !chatApp.hidden) {
+            authorizationController = null;
             connectionBusy = false;
             updateConnectionControls();
             if (!settingsPanel.hidden) {
@@ -3052,7 +3025,7 @@ const homePage = `<!doctype html>
       }
 
       connectButton.addEventListener('click', function () {
-        if (!localHost || connectionBusy || connectionRefresh) return;
+        if (connectionBusy || connectionRefresh || deviceLogin) return;
         if (!activeProfileID && pendingProfiles.length > 1) {
           providerError.textContent = 'Select the incomplete ChatGPT account above to resume its sign-in.';
           providerError.hidden = false;
@@ -3063,22 +3036,17 @@ const homePage = `<!doctype html>
       });
 
       addAccountButton.addEventListener('click', function () {
-        if (!localHost || connectionBusy || connectionRefresh) return;
+        if (connectionBusy || connectionRefresh || deviceLogin) return;
         void startChatGPTAuthorization('/auth/start?mode=add', addAccountButton);
       });
 
       accountSelect.addEventListener('change', function () {
-        if (connectionBusy || connectionRefresh) return;
+        if (connectionBusy || connectionRefresh || deviceLogin) return;
         const profileID = accountSelect.value;
         const option = accountSelect.selectedOptions[0];
         accountSelect.value = activeProfileID;
         if (!profileID || profileID === activeProfileID) return;
         if (option?.dataset.registrationPending === 'true') {
-          if (!localHost) {
-            providerError.textContent = 'To finish sign-in, open Agent’s local address on the computer running it.';
-            providerError.hidden = false;
-            return;
-          }
           void startChatGPTAuthorization('/auth/start?mode=retry&profile_id=' + encodeURIComponent(profileID), accountSelect);
           return;
         }
@@ -3087,7 +3055,7 @@ const homePage = `<!doctype html>
       });
 
       disconnectButton.addEventListener('click', function () {
-        if (connectionBusy || connectionRefresh || !selectedProfile) return;
+        if (connectionBusy || connectionRefresh || deviceLogin || !selectedProfile) return;
         confirmConnectionChange({ action: 'disconnect', profileID: selectedProfile.id, title: 'Disconnect ChatGPT?',
           label: 'Disconnect ' + (selectedProfile.label || 'ChatGPT account') + (selectedProfile.email ? ' · ' + selectedProfile.email : '') + ' from Agent?',
           button: 'Disconnect account', trigger: disconnectButton });
@@ -3171,8 +3139,9 @@ const homePage = `<!doctype html>
 
       void requireSignIn();
       window.addEventListener('pageshow', function (event) {
-        // Back navigation may restore the page with its outgoing sign-in lock.
+        // Restore connection state, never revive an obsolete startup request.
         if (event.persisted && !disconnectDialog.open) {
+          authorizationController?.abort(); authorizationController = null;
           connectionBusy = false;
           void requireSignIn();
         }

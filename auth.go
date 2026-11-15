@@ -30,6 +30,7 @@ type authUser struct {
 type authContextKey struct{}
 
 type accountStore struct {
+	codex               *usageService
 	db                  *sql.DB
 	dataDir             string
 	oauthMu             sync.Mutex
@@ -90,6 +91,7 @@ func (s *accountStore) siwcForUser(base *siwcService, user authUser) *siwcServic
 
 	_ = os.MkdirAll(dir, 0700)
 	service := newSIWCService(base.config, newFileCredentialStore(dir))
+	service.codex, service.owner = s.codex, user
 	s.oauthServices[user.ID] = service
 	return service
 }

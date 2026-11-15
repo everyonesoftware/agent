@@ -234,7 +234,7 @@ const visibleSource=html.match(/function usageVisible\(\) \{[^\n]*\}/)[0];
 let closed=0,statusReads=0;
 const usageCalls=[];
 const pauseEnv=vm.createContext({usageEpoch:0,usageTimer:null,usageBusy:false,usageProfile:'p1',usageData:{state:'connected'},usagePanel:{hidden:false},usageController:null,historyDialog:{open:true},
-  settingsPanel:{hidden:false},chatApp:{hidden:false},document:{hidden:false},
+  settingsPanel:{hidden:false},chatApp:{hidden:false},document:{hidden:false},deviceLogin:null,
   usageHistoryClose(){closed++;},stopUsageMonitor(){},startUsageMonitor(){},clearTimeout(){},activeProfileID:'p1',historyEl:el,usageRequest(...args){statusReads++;usageCalls.push(args);}});
 vm.runInContext(visibleSource+'\n'+stopSource+'\n'+syncSource+'\nstopUsage(true);',pauseEnv);
 assert.equal(closed,0,'Hiding the document should pause reads, not close its native modal');

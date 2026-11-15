@@ -129,14 +129,11 @@ const server = createServer(async (req, res) => {
     if ('password' in payload) { json(400, { error: 'Authorization must not submit an Agent password.' }); return; }
     await new Promise(resolve => setTimeout(resolve, authorizationDelay));
     if (authorizationFailure) { json(503, { error: 'Test authorization start unavailable.' }); return; }
-    json(200, { authorization_url: origin + '/fixture/authorize' + url.search }); return;
-  }
-  if (url.pathname === '/fixture/authorize') {
-    // Emulate only the existing route handoff, never contact the real provider.
     let target = providerProfiles.find(p => p.id === (url.searchParams.get('profile_id') || activeProfile));
-    if (url.searchParams.get('mode') === 'add') { target = { id: 'p3', label: 'Added', email: 'added@example.com' }; providerProfiles.push(target); }
-    if (target) { Object.assign(target, { connected: true, oauth_selected: true, plan_usage_enabled: true, registration_pending: false }); activeProfile = target.id; }
-    res.writeHead(302, { Location: '/' }); res.end(); return;
+    if (url.searchParams.get('mode') === 'add') { target = { id: 'p3', label: 'Added', email: 'added@example.com',registration_pending:true }; providerProfiles.push(target); }
+    const login={profile_id:target.id,connection_id:'u-'+target.id,login_id:'login-'+target.id,verification_url:'https://auth.openai.com/codex/device',user_code:'TEST-CODE',expires_at:Math.floor(Date.now()/1000)+600};
+    usageRecords.set(target.id,{profile_id:target.id,available:true,state:'pending',connection_id:login.connection_id,login});
+    json(200,login); return;
   }
   if (url.pathname === '/api/auth/status') {
     await new Promise(resolve => setTimeout(resolve, connectionDelay));

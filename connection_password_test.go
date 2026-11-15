@@ -71,7 +71,11 @@ func (f connectionFixture) request(method, path, body, host string) *httptest.Re
 }
 
 func TestConnectionPasswordOAuthStartsArePOSTAndLocal(t *testing.T) {
-	f := newConnectionFixture(t)
+	f, u, _ := newUsageFixture(t)
+	mux := http.NewServeMux()
+	u.register(mux)
+	u.registerAuth(mux)
+	f.server = mux
 	out := f.request("GET", "/auth/start?password=correct-horse-battery", "", "127.0.0.1:8080")
 	if out.Code != 405 {
 		t.Fatalf("GET must never start OAuth: %d %s", out.Code, out.Body.String())
@@ -79,18 +83,28 @@ func TestConnectionPasswordOAuthStartsArePOSTAndLocal(t *testing.T) {
 	for _, mode := range []string{"", "?mode=add", "?mode=retry&profile_id=" + f.id} {
 		for _, host := range []string{"127.0.0.1:8080", "agent.example.test"} {
 			out = f.request("POST", "/auth/start"+mode, `{"expected_active_profile_id":"`+f.id+`"}`, host)
-			want := http.StatusServiceUnavailable // Fixture callback is intentionally invalid.
-			if host == "agent.example.test" {
-				want = http.StatusForbidden
+			var login struct {
+				LoginID      string `json:"login_id"`
+				ConnectionID string `json:"connection_id"`
+				URL          string `json:"verification_url"`
+				Code         string `json:"user_code"`
+				ProfileID    string `json:"profile_id"`
 			}
-			if out.Code != want {
-				t.Fatalf("password-free local start boundary: %s %s: %d %s", host, mode, out.Code, out.Body.String())
+			if out.Code != http.StatusOK || json.Unmarshal(out.Body.Bytes(), &login) != nil || login.LoginID == "" || login.URL == "" || login.Code == "" || login.ProfileID == "" || out.Header().Get("Location") != "" {
+				t.Fatalf("password-free device start: %s %s: %d %s", host, mode, out.Code, out.Body.String())
+			}
+			cancel := f.request("POST", "/api/usage/cancel", `{"profile_id":"`+login.ProfileID+`","connection_id":"`+login.ConnectionID+`","login_id":"`+login.LoginID+`"}`, host)
+			if cancel.Code != http.StatusOK {
+				t.Fatalf("cancel login: %d %s", cancel.Code, cancel.Body)
+			}
+			if err := f.store.SetActiveProfile(f.id); err != nil {
+				t.Fatal(err)
 			}
 		}
 	}
 	out = f.request("POST", "/auth/start", `{"password":"correct-horse-battery","expected_active_profile_id":"`+f.id+`"}`, "agent.example.test")
-	if out.Code != 403 || !strings.Contains(out.Body.String(), "loopback") || !strings.Contains(out.Header().Get("Content-Type"), "application/json") {
-		t.Fatalf("remote OAuth limitation: %d %s", out.Code, out.Body.String())
+	if out.Code != http.StatusOK || !strings.Contains(out.Body.String(), "verification_url") || !strings.Contains(out.Header().Get("Content-Type"), "application/json") || strings.Contains(out.Body.String(), "correct-horse-battery") {
+		t.Fatalf("remote device login: %d %s", out.Code, out.Body.String())
 	}
 }
 

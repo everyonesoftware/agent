@@ -32,7 +32,7 @@ func (s *usageService) register(mux *http.ServeMux) {
 				writeChatError(w, http.StatusForbidden, "Cross-site account requests are not allowed.")
 				return
 			}
-			payload := usageRequest{ProfileID: r.URL.Query().Get("profile_id")}
+			payload := usageRequest{ProfileID: r.URL.Query().Get("profile_id"), ConnectionID: r.URL.Query().Get("connection_id")}
 			if r.Method == http.MethodPost {
 				r.Body = http.MaxBytesReader(w, r.Body, 4096)
 				var body *usageRequest
@@ -48,6 +48,10 @@ func (s *usageService) register(mux *http.ServeMux) {
 				writeChatError(w, http.StatusBadRequest, "Select a valid ChatGPT account.")
 				return
 			}
+			if s.accounts.codex == s && r.URL.Path == "/api/usage/connect" {
+				writeChatError(w, http.StatusGone, "Use Continue with ChatGPT in Settings to start a device sign-in.")
+				return
+			}
 			user, _ := currentAuthUser(r.Context())
 			service := s.accounts.siwcForUser(s.base, user)
 			active, err := service.store.ActiveProfileID()
@@ -55,16 +59,25 @@ func (s *usageService) register(mux *http.ServeMux) {
 				writeChatError(w, 503, "ChatGPT account selection is unavailable.")
 				return
 			}
-			if active != payload.ProfileID {
-				writeChatError(w, 409, "The active ChatGPT account changed. Refresh Settings.")
-				return
-			}
 			profile, err := service.store.LoadProfile(payload.ProfileID)
 			if err != nil {
 				writeChatError(w, 409, "The ChatGPT account is unavailable.")
 				return
 			}
+			profileEmail := profile.Email
+			// Codex is the sole credential owner for a unified connection.
+			if s.accounts.codex == s {
+				profileEmail = ""
+			}
 			action := strings.TrimPrefix(r.URL.Path, "/api/usage/")
+			allowPending := profile.Credentials.RegistrationPending && (action == "status" || action == "cancel")
+			// Reconcile the exact captured ceremony even after another observer
+			// adopts its account. This never authorizes selecting that profile.
+			allowCaptured := payload.ConnectionID != "" && (action == "status" || action == "cancel")
+			if active != payload.ProfileID && !allowPending && !allowCaptured {
+				writeChatError(w, 409, "The active ChatGPT account changed. Refresh Settings.")
+				return
+			}
 			if action == "connect" && payload.ExpectedConnectionID == nil {
 				writeChatError(w, 400, "Confirm the current usage connection before connecting.")
 				return
@@ -86,7 +99,7 @@ func (s *usageService) register(mux *http.ServeMux) {
 			defer entry.mu.Unlock()
 			// Recheck selection after any password/worker wait, before an external action.
 			active, err = service.store.ActiveProfileID()
-			if err != nil || active != payload.ProfileID {
+			if err != nil || (active != payload.ProfileID && !allowPending && !allowCaptured) {
 				writeChatError(w, 409, "The active ChatGPT account changed. Refresh Settings.")
 				return
 			}
@@ -97,7 +110,7 @@ func (s *usageService) register(mux *http.ServeMux) {
 				}
 				ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 				defer cancel()
-				s.status(ctx, entry, profile.Email)
+				s.status(ctx, entry, profileEmail)
 				history, err := s.history(entry, r.URL.Query().Get("range"), r.URL.Query().Get("window_id"))
 				if err != nil {
 					if errors.Is(err, errUsageHistoryUnavailable) {
@@ -111,6 +124,10 @@ func (s *usageService) register(mux *http.ServeMux) {
 				return
 			}
 			if action != "status" && action != "connect" && (payload.ConnectionID == "" || payload.ConnectionID != entry.record.ConnectionID) {
+				writeChatError(w, 409, "The usage connection changed. Refresh Settings.")
+				return
+			}
+			if action == "status" && payload.ConnectionID != "" && payload.ConnectionID != entry.record.ConnectionID {
 				writeChatError(w, 409, "The usage connection changed. Refresh Settings.")
 				return
 			}
@@ -141,7 +158,13 @@ func (s *usageService) register(mux *http.ServeMux) {
 					return
 				}
 			case "cancel":
-				if entry.view.Login == nil || entry.view.Login.LoginID != payload.LoginID {
+				if entry.view.Login == nil {
+					// A completed ceremony can only be observed here, not logged out.
+					s.status(ctx, entry, profileEmail)
+					writeChatJSON(w, http.StatusOK, s.view(entry))
+					return
+				}
+				if entry.view.Login.LoginID != payload.LoginID {
 					writeChatError(w, 409, "The usage sign-in request changed. Refresh Settings.")
 					return
 				}
@@ -157,15 +180,21 @@ func (s *usageService) register(mux *http.ServeMux) {
 					return
 				}
 			case "status":
-				s.status(ctx, entry, profile.Email)
+				s.status(ctx, entry, profileEmail)
 			case "refresh":
 				// Cached snapshots do not authorize skipping an account check on refresh.
 				entry.lastRead = time.Time{}
 				entry.lastAttempt = time.Time{}
 				before := entry.view.Snapshot
-				s.status(ctx, entry, profile.Email)
+				s.status(ctx, entry, profileEmail)
 				if entry.view.State == "connected" && entry.view.Snapshot == before {
 					s.refreshQuota(ctx, entry)
+				}
+			}
+			if s.accounts.codex == s {
+				if err := s.adoptCodexIdentity(service, entry); err != nil {
+					writeChatError(w, 503, "ChatGPT profile metadata could not be saved.")
+					return
 				}
 			}
 			writeChatJSON(w, http.StatusOK, s.view(entry))

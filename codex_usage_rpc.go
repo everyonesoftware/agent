@@ -23,6 +23,8 @@ type usageRPC interface {
 }
 
 type codexUsageRPC struct {
+	inference  bool
+	events     chan codexEvent
 	cmd        *exec.Cmd
 	stdin      io.WriteCloser
 	stdout     io.ReadCloser
@@ -71,6 +73,10 @@ func codexUsageCommand(executable, home string) (*exec.Cmd, error) {
 // The command constructor is internal so tests can exercise a real child binary
 // without adding a production environment switch or configurable CLI arguments.
 func startCodexUsageCommand(ctx context.Context, cmd *exec.Cmd) (usageRPC, error) {
+	return startCodexProtocolCommand(ctx, cmd, false)
+}
+
+func startCodexProtocolCommand(ctx context.Context, cmd *exec.Cmd, inference bool) (usageRPC, error) {
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, errCodexUsageRPC
@@ -86,13 +92,13 @@ func startCodexUsageCommand(ctx context.Context, cmd *exec.Cmd) (usageRPC, error
 		stdout.Close()
 		return nil, errCodexUsageRPC
 	}
-	r := &codexUsageRPC{cmd: cmd, stdin: stdin, stdout: stdout, pending: make(map[uint64]chan json.RawMessage), writes: make(chan []byte, 64), done: make(chan struct{}), reaped: make(chan struct{}), readerDone: make(chan struct{}), writerDone: make(chan struct{})}
+	r := &codexUsageRPC{inference: inference, events: make(chan codexEvent, 128), cmd: cmd, stdin: stdin, stdout: stdout, pending: make(map[uint64]chan json.RawMessage), writes: make(chan []byte, 64), done: make(chan struct{}), reaped: make(chan struct{}), readerDone: make(chan struct{}), writerDone: make(chan struct{})}
 	go func() { _ = cmd.Wait(); r.stop(); close(r.reaped) }()
 	go r.read()
 	go r.write()
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	if err := r.call(ctx, "initialize", map[string]any{"clientInfo": map[string]string{"name": "everyoneagent_usage", "version": "1.0.0"}}, nil); err != nil {
+	if err := r.call(ctx, "initialize", map[string]any{"clientInfo": map[string]string{"name": "everyoneagent_usage", "version": "1.0.0"}, "capabilities": map[string]bool{"experimentalApi": true}}, nil); err != nil {
 		r.Close()
 		return nil, errCodexUsageRPC
 	}
@@ -200,7 +206,11 @@ func (r *codexUsageRPC) read() {
 	defer close(r.readerDone)
 	defer r.stop()
 	scanner := bufio.NewScanner(r.stdout)
-	scanner.Buffer(make([]byte, 4096), 1024*1024)
+	maxRecord := 1024 * 1024
+	if r.inference {
+		maxRecord = 2 * 1024 * 1024
+	}
+	scanner.Buffer(make([]byte, 4096), maxRecord)
 	// A final unterminated record is not a complete newline JSON message.
 	scanner.Split(func(data []byte, atEOF bool) (int, []byte, error) {
 		if index := bytes.IndexByte(data, '\n'); index >= 0 {
@@ -215,11 +225,22 @@ func (r *codexUsageRPC) read() {
 		var response struct {
 			ID     json.RawMessage
 			Method string
+			Params json.RawMessage
 		}
 		if json.Unmarshal(scanner.Bytes(), &response) != nil {
 			continue
 		}
 		if response.Method != "" {
+			if r.inference {
+				select {
+				case r.events <- codexEvent{ID: response.ID, Method: response.Method, Params: append(json.RawMessage(nil), response.Params...)}:
+				case <-r.done:
+					return
+				default:
+					return
+				}
+				continue
+			}
 			if len(response.ID) > 0 && string(response.ID) != "null" {
 				// No tools, approval, or token-refresh requests are supported.
 				message, _ := json.Marshal(map[string]any{"id": response.ID, "error": map[string]any{"code": -32601, "message": "Method not supported"}})
