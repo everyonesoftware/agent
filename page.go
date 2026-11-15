@@ -457,7 +457,7 @@ const homePage = `<!doctype html>
       .history-popup-actions label { gap:4px; font-size:10px; }
       .history-range-label { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
       #usage-history-dialog button, #usage-history-dialog select { min-height:44px; padding:5px 8px; }
-      #usage-history-range { width:90px; max-width:90px; font-size:11px; }
+      #usage-history-range { width:auto; min-width:120px; max-width:none; font-size:11px; }
       #usage-history-close { width:44px; flex-shrink:0; }
       #usage-history-details summary { width:44px; height:44px; }
       .history-headline { flex-wrap:wrap; gap:7px; margin-top:18px; }
