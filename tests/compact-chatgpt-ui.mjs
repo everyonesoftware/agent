@@ -1,0 +1,24 @@
+// Compact ChatGPT Settings contracts against the production page, not the mockup.
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import vm from 'node:vm';
+const source = await readFile(new URL('../page.go', import.meta.url), 'utf8');
+const card = source.slice(source.indexOf('<section class="settings-card" aria-labelledby="connection-title">'), source.indexOf('<section class="settings-card" id="research-settings-card"'));
+assert.doesNotMatch(card, /Powered by Codex|One sign-in for conversations and allowance/, 'Approved compact card removes implementation explanation');
+assert.match(card, /<label class="visually-hidden" id="account-select-label" for="account-select" hidden>Active ChatGPT account<\/label>/, 'Keep an accessible account label without a visible row');
+assert.doesNotMatch(card, /id="usage-identity"/, 'The selected account must not be repeated in allowance');
+assert.match(card, /class="usage-heading"[^\n]*id="usage-updated"[^\n]*id="usage-refresh"/, 'Freshness and an accessible refresh action share the Allowance heading');
+assert.ok(card.indexOf('id="usage-history-open-chatgpt"') > card.indexOf('id="usage-windows"'), 'History follows the compact quota rows');
+console.log('PASS approved compact ChatGPT card structure and accessible account label');
+const classes = new Set();
+const providerFeedback = {classList:{toggle(name,on){if(on)classes.add(name);else classes.delete(name);}}};
+const context = vm.createContext({providerFeedback});
+vm.runInContext(source.match(/function connectionFeedback\(text, warning\) \{[\s\S]*?\n      \}/)[0], context);
+vm.runInContext("connectionFeedback('Connected to ChatGPT with Codex.');", context);
+assert.ok(classes.has('visually-hidden'), 'Successful sign-in is announced without restoring a redundant connected row');
+assert.equal(providerFeedback.hidden, false, 'Success remains available to the live region');
+vm.runInContext("connectionFeedback('Sign-in failed. Please retry.', true);", context);
+assert.ok(!classes.has('visually-hidden') && classes.has('warning'), 'Warnings remain visible after a successful sign-in');
+vm.runInContext("connectionFeedback('Sign-in canceled.');", context);
+assert.ok(!classes.has('visually-hidden'), 'Other account-action feedback remains visible');
+console.log('PASS concise sign-in success preserves accessible announcements and visible errors');

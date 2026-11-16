@@ -3,6 +3,7 @@
 // All API data is confined to this local test server, never production storage.
 import assert from 'node:assert/strict';
 import './codex-connection-ui.mjs';
+import './compact-chatgpt-ui.mjs';
 import { spawnTestBrowser, waitForTestBrowser, stopTestBrowser } from './browser-launcher.mjs';
 import { existsSync } from 'node:fs';
 import { readFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -537,12 +538,14 @@ try {
   approveDevice('p1'); authorizationAutoApprove=true;
   await expectEventually("document.querySelector('#usage-device').hidden && document.querySelector('#usage-windows [role=meter]')?.getAttribute('aria-valuenow')==='68' && document.querySelector('#connection-badge').textContent==='Connected'", 'Approval polling did not refresh connection, models and allowance');
   ok(!calls.some(c=>c.path==='/api/usage/connect'), 'Unified authentication never requires a second usage sign-in');
-  ok(await js("document.querySelector('#usage-panel').closest('.settings-card').querySelector('#connection-title') && !document.querySelector('#usage-panel .connection-heading') && document.querySelector('#usage-updated').textContent.includes('local time')"), 'Allowance is integrated without altering primary heading selectors');
+  ok(await js("document.querySelector('#usage-panel').closest('.settings-card').querySelector('#connection-title') && !document.querySelector('#usage-panel .connection-heading') && document.querySelector('#usage-updated').title.includes('local time')"), 'Allowance is integrated with exact local freshness available on demand');
+  ok(await js("document.querySelector('#account-select-label').classList.contains('visually-hidden') && document.querySelector('#account-select').labels[0].textContent==='Active ChatGPT account' && document.querySelector('#usage-message').hidden && document.querySelector('#usage-badge').classList.contains('visually-hidden') && !document.querySelector('#usage-identity') && !document.querySelector('[aria-labelledby=connection-title]').innerText.includes('Powered by Codex')"), 'Compact connected card removes redundant copy while preserving the accessible account name');
   await js("document.querySelector('#settings-panel').scrollTop=0");
   await screenshot('agent-allowance-integrated-desktop');
   await js("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.copiedUsageCode=value;}}})");
   for (const [width,height] of [[1280,850],[390,640],[320,640]]) {
     await viewport(width,height);
+    ok(await js("Array.from(document.querySelectorAll('.quota-window')).every(row=>{const label=row.querySelector('.quota-label').getBoundingClientRect(),reset=row.querySelector('.quota-reset');return Math.abs(label.top-reset.getBoundingClientRect().top)<8 && row.querySelector('.quota-label strong').textContent==='68% remaining' && reset.textContent.startsWith('Resets in ');}) && document.querySelector('#usage-history-open-chatgpt').getBoundingClientRect().top>=document.querySelector('#usage-windows').getBoundingClientRect().bottom && document.querySelector('#usage-refresh').getBoundingClientRect().height>=44"), `Compact allowance rows, inline resets and history fit ${width}px`);
     ok(await js("document.querySelector('#disconnect-chatgpt').getBoundingClientRect().height>=44 && document.querySelector('#settings-panel').scrollWidth<=document.querySelector('#settings-panel').clientWidth && document.documentElement.scrollWidth<=innerWidth"), `Unified Disconnect and allowance fit ${width}px`);
     await js("document.querySelector('#usage-panel').scrollIntoView({block:'start'})");
     await screenshot('agent-allowance-connected-'+width);
@@ -621,7 +624,7 @@ try {
   mismatched.snapshot.windows[0].used_percent=null;
   await click('#check-chatgpt');
   await expectEventually("document.querySelector('#usage-windows').textContent.includes('Unavailable')", 'Null quota was treated as full allowance');
-  ok(await js("!document.querySelector('#usage-windows [role=meter]') && !document.querySelector('#usage-identity img') && document.querySelector('#usage-identity').textContent.includes('<img')"), 'Invalid percent remains unavailable and usage identities are rendered as text');
+  ok(await js("!document.querySelector('#usage-windows [role=meter]') && !document.querySelector('#usage-identity') && !document.querySelector('#usage-panel img') && !document.querySelector('#usage-panel').textContent.includes('<img')"), 'Invalid percent remains unavailable and unused identity payload is never rendered');
   // A delayed status from Personal must never replace Other after a switch.
   usageDelay=900;
   await click('#check-chatgpt');
@@ -630,7 +633,7 @@ try {
   await changeAccount('p2');
   await expectEventually("document.querySelector('#account-select').value==='p2' && !document.querySelector('#check-chatgpt').disabled && !document.querySelector('#usage-refresh').disabled", 'Switch with delayed usage read failed');
   await new Promise(r=>setTimeout(r,1000));
-  ok(await js("document.querySelector('#usage-identity').hidden && !document.querySelector('#usage-windows [role=meter]') && document.querySelector('#usage-badge').textContent==='Connected'"), 'Delayed allowance response cannot replace another account');
+  ok(await js("!document.querySelector('#usage-identity') && !document.querySelector('#usage-windows [role=meter]') && document.querySelector('#usage-badge').textContent==='Connected'"), 'Delayed allowance response cannot replace another account');
   await changeAccount('p1'); await expectEventually("document.querySelector('#account-select').value==='p1' && !document.querySelector('#check-chatgpt').disabled", 'Restore Personal usage failed');
   await click('#disconnect-chatgpt');
   activeProfile='p2'; await js("window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}))");
@@ -1056,7 +1059,7 @@ try {
   ok(!providerProfiles.find(p => p.id === 'p1').connected && authenticated, 'Remote disconnect changes only the selected connection and preserves Agent sign-in');
   ok(await js("!document.querySelector('#connect-chatgpt').hidden && !document.querySelector('#provider-actions').hidden && !document.querySelector('#local-connection-address')"), 'Disconnected remote users can reconnect directly from their current device');
   await click('#connect-chatgpt');
-  await expectEventually("document.querySelector('#usage-device').hidden && document.querySelector('#connection-badge').textContent==='Connected' && !document.querySelector('#check-chatgpt').disabled", 'Remote device approval did not restore conversations and allowance');
+  await expectEventually("document.querySelector('#usage-device').hidden && document.querySelector('#connection-badge').textContent==='Connected' && !document.querySelector('#check-chatgpt').disabled && !document.querySelector('#model-select').disabled && document.querySelector('#usage-windows [role=meter]')?.getAttribute('aria-valuenow')==='68'", 'Remote device approval did not restore conversations and allowance');
   ok(providerProfiles.find(p=>p.id==='p1').connected && await js("!document.querySelector('#model-select').disabled && document.querySelector('#usage-windows [role=meter]')?.getAttribute('aria-valuenow')==='68'"), 'Remote approval refreshes the model picker and allowance without navigating away');
   for (const [width,height] of [[1280,850],[390,640],[360,640]]) {
     await viewport(width,height);

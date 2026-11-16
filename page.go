@@ -378,18 +378,23 @@ const homePage = `<!doctype html>
     .usage-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
     .usage-heading h3 { margin:0; font-size:14px; font-weight:500; }
     .usage-subsection p, .usage-help { color:var(--muted); font-size:11px; }
-    .usage-identity { font-size:12px!important; color:inherit!important; }
+    .allowance-tools { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin-left:auto; }
+    #usage-refresh { min-width:44px; padding:8px; border:0; background:transparent; }
+    #usage-refresh svg { width:16px; height:16px; }
+    #usage-badge::before { content:none; }
     .usage-footer, .usage-actions { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-top:14px; }
     #disconnect-chatgpt, .usage-subsection button, .usage-subsection a, .device-panel button, .device-panel a { min-height:44px; }
     .usage-footer .danger { background:transparent; }
     .usage-help { margin-top:12px; }
     .usage-help summary { cursor:pointer; padding:6px 0; }
-    .quota-window { margin:18px 0; }
-    .quota-label { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; }
-    .quota-label strong { font-size:14px; font-weight:500; color:var(--accent); }
+    .quota-window { margin:14px 0; }
+    .quota-summary { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+    .quota-label { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px; min-width:0; }
+    .quota-label strong { font-size:12px; font-weight:500; color:var(--accent); }
     .quota-track { height:6px; border-radius:3px; background:#39403b; margin:8px 0 5px; overflow:hidden; }
     .quota-fill { height:100%; background:var(--accent); }
     .quota-reset, #usage-updated { font-size:10px; color:var(--muted); }
+    .quota-reset { text-align:right; flex-shrink:0; }
     .usage-stale .quota-fill { background:#7b877d; }
     .device-panel { margin:14px 0; padding:14px; border:1px solid var(--line); border-radius:5px; background:#202322; font-size:12px; overflow-wrap:anywhere; }
     .device-panel p { color:var(--muted); font-size:11px; }
@@ -522,10 +527,10 @@ const homePage = `<!doctype html>
         </section>
         <section class="settings-card" aria-labelledby="connection-title">
           <div class="connection-heading"><h2 id="connection-title">ChatGPT connection</h2><button class="connection-refresh" id="check-chatgpt" type="button" title="Refresh connection status" aria-label="Refresh ChatGPT connection status" aria-busy="true"><span class="connection-badge off" id="connection-badge">Checking…</span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button></div>
-          <label id="account-select-label" for="account-select" hidden>Active ChatGPT account</label>
+          <label class="visually-hidden" id="account-select-label" for="account-select" hidden>Active ChatGPT account</label>
           <select class="model-select" id="account-select" hidden disabled><option value="">Loading accounts…</option></select>
           <p class="connection-status" id="connection-status" role="status">Checking ChatGPT connection…</p>
-          <p class="connection-detail">Powered by Codex · One sign-in for conversations and allowance.</p>
+
           <div class="provider-actions" id="provider-actions">
             <button class="send" id="connect-chatgpt" type="button" hidden>Continue with ChatGPT ↗</button>
             <button class="reset" id="add-chatgpt-account" type="button" hidden>Add account ↗</button>
@@ -536,13 +541,12 @@ const homePage = `<!doctype html>
           <p id="provider-feedback" role="status" aria-live="polite" hidden></p>
           <div class="device-panel" id="usage-device" hidden aria-live="polite"><strong>Connect ChatGPT with Codex</strong><p>Open the OpenAI verification page, sign in to the intended ChatGPT account and workspace, and enter this code. Return here after approval. This connects both conversations and allowance.</p><div class="device-code"><code id="usage-code"></code><button class="reset" id="usage-copy" type="button">Copy code</button></div><div class="usage-actions"><a id="usage-verification" target="_blank" rel="noopener noreferrer" hidden>Open verification page ↗</a><button class="reset" id="usage-cancel" type="button">Cancel</button></div><p id="usage-expiry"></p><p id="device-feedback" role="status"></p></div>
           <section class="usage-subsection" id="usage-panel" aria-labelledby="usage-heading" hidden>
-            <div class="usage-heading"><h3 id="usage-heading">Allowance</h3><button id="usage-refresh" class="connection-refresh" type="button" aria-label="Refresh usage" title="Refresh usage"><span id="usage-badge" class="connection-badge off">Checking…</span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button></div>
-            <button id="usage-history-open-chatgpt" class="reset usage-history-trigger" type="button" aria-haspopup="dialog" aria-controls="usage-history-dialog" disabled>View usage history</button>
+            <div class="usage-heading"><h3 id="usage-heading">Allowance</h3><div class="allowance-tools"><span id="usage-updated"></span><button id="usage-refresh" class="connection-refresh" type="button" aria-label="Refresh allowance" title="Refresh allowance"><span id="usage-badge" class="visually-hidden">Checking…</span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button></div></div>
             <p id="usage-message">Allowance for your ChatGPT connection.</p>
-            <p class="usage-identity" id="usage-identity" hidden></p>
+
             <div id="usage-windows"></div>
             <p id="usage-error" role="alert" hidden></p><p id="usage-feedback" role="status"></p>
-            <div class="usage-footer"><span id="usage-updated"></span></div>
+            <button id="usage-history-open-chatgpt" class="reset usage-history-trigger" type="button" aria-haspopup="dialog" aria-controls="usage-history-dialog" disabled>View usage history</button>
             <details class="usage-help"><summary>About allowance</summary><p>Codex reports allowance for the selected ChatGPT connection. Windows may not cover every ChatGPT feature or Agent-specific limit. Refresh failures retain explicitly marked last-known values; they do not create another connection.</p></details>
           </section>
 
@@ -1438,7 +1442,7 @@ const homePage = `<!doctype html>
         historyEl('open-chatgpt').disabled=!activeProfileID || Boolean(connectionRefresh) || connectionBusy;
         if (!usageData) {
           usageElement('badge').textContent = 'Checking…';
-          usageElement('identity').hidden = true;
+
           usageElement('windows').replaceChildren();
           usageElement('message').textContent = 'Checking usage availability…';
           usageElement('updated').textContent = '';
@@ -1448,12 +1452,12 @@ const homePage = `<!doctype html>
         const stale = Boolean(data.snapshot?.stale);
         const badge = usageElement('badge');
         badge.textContent = usageBusy ? (usageData ? 'Refreshing…' : 'Checking…') : stale ? 'Last known' : ({connected:'Connected',disconnected:'Not connected',pending:'Awaiting approval',checking:'Checking…',expired:'Sign-in expired',unavailable:'Unavailable'}[state] || 'Unavailable');
-        badge.className = 'connection-badge' + (state === 'connected' && !stale ? '' : ['disconnected','unavailable'].includes(state) ? ' off' : ' warning');
+        badge.className = state === 'connected' && !stale ? 'visually-hidden' : 'connection-badge warning';
         usageElement('refresh').disabled = usageBusy || !usageData || !['connected','unavailable'].includes(state) || connectionBusy || Boolean(connectionRefresh) || Boolean(deviceLogin);
         usageElement('refresh').setAttribute('aria-busy', String(usageBusy));
+        usageElement('refresh').setAttribute('aria-label', badge.textContent + '. Refresh allowance');
         usageElement('message').textContent = data.available === false ? 'The Codex dependency is unavailable. ChatGPT conversations and allowance require Codex.' : stale ? 'Showing last-known allowance; these values may no longer be current.' : state === 'expired' ? 'Reconnect ChatGPT above to restore conversations and allowance.' : state === 'connected' ? 'Codex-reported allowance for your ChatGPT connection.' : state === 'checking' ? 'Checking your ChatGPT connection…' : state === 'pending' ? 'Waiting for OpenAI approval.' : 'Connect ChatGPT above to use conversations and allowance.';
-        usageElement('identity').hidden = !data.identity;
-        usageElement('identity').textContent = data.identity ? 'ChatGPT account: ' + (data.identity.email || 'Email unavailable') + (data.identity.plan_type ? ' · ' + data.identity.plan_type : '') : '';
+        usageElement('message').hidden = state === 'connected' && !stale && data.available !== false;
         usageElement('error').textContent = data.error || '';
         usageElement('error').hidden = !data.error;
 
@@ -1463,23 +1467,28 @@ const homePage = `<!doctype html>
           for (const window of Array.isArray(data.snapshot?.windows) ? data.snapshot.windows : []) {
             const row = document.createElement('div'); row.className = 'quota-window';
             const label = document.createElement('div'); label.className = 'quota-label';
-            const name = document.createElement('span'); name.textContent = window.label || 'Codex quota window';
+            const name = document.createElement('span'); name.textContent = window.window_minutes === 300 ? '5-hour window' : window.window_minutes === 10080 ? 'Weekly window' : window.label || 'Allowance window';
             const amount = document.createElement('strong');
             const valid = typeof window.used_percent === 'number' && Number.isFinite(window.used_percent) && window.used_percent >= 0 && window.used_percent <= 100;
             const remaining = valid ? Math.round((100 - window.used_percent) * 10) / 10 : null;
-            amount.textContent = valid ? remaining + '% left' : 'Unavailable';
-            label.append(name, amount); row.append(label);
+            amount.textContent = valid ? remaining + '% remaining' : 'Unavailable';
+            label.append(amount, document.createTextNode(' · '), name);
+            const reset = document.createElement('span'); reset.className = 'quota-reset';
+            const now = Math.floor(Date.now() / 1000);
+            reset.textContent = typeof window.reset_at === 'number' && Number.isFinite(window.reset_at) && window.reset_at > now ? 'Resets in ' + historyDuration(window.reset_at - now) : 'Reset time unavailable';
+            reset.title = (usageDate(window.reset_at) ? 'Resets ' + usageDate(window.reset_at) + ' · local time' : 'Reset time unavailable') + (typeof window.window_minutes === 'number' && Number.isFinite(window.window_minutes) && window.window_minutes > 0 ? ' · ' + window.window_minutes + '-minute window' : '');
+            const summary = document.createElement('div'); summary.className = 'quota-summary'; summary.append(label, reset); row.append(summary);
             if (valid) {
               const track = document.createElement('div'); track.className = 'quota-track'; track.setAttribute('role', 'meter'); track.setAttribute('aria-label', name.textContent + ' remaining' + (stale ? ' (last known)' : '')); track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', '100'); track.setAttribute('aria-valuenow', String(remaining));
               const fill = document.createElement('div'); fill.className = 'quota-fill'; fill.style.width = remaining + '%'; track.append(fill); row.append(track);
             }
-            const reset = document.createElement('div'); reset.className = 'quota-reset';
-            reset.textContent = (usageDate(window.reset_at) ? 'Resets ' + usageDate(window.reset_at) + ' · local time' : 'Reset time unavailable') + (typeof window.window_minutes === 'number' && Number.isFinite(window.window_minutes) && window.window_minutes > 0 ? ' · ' + window.window_minutes + '-minute window' : '');
-            row.append(reset); windows.append(row);
+            windows.append(row);
           }
           if (!windows.childElementCount) { const unavailable = document.createElement('p'); unavailable.textContent = 'Allowance windows are unavailable. Refresh to try again.'; windows.append(unavailable); }
         }
-        usageElement('updated').textContent = data.snapshot ? (usageDate(data.snapshot.fetched_at) ? 'Updated ' + usageDate(data.snapshot.fetched_at) + ' · local time' : 'Update time unavailable') + (stale ? ' · stale' : '') : '';
+        const fetchedAt = data.snapshot?.fetched_at, age = Math.floor(Date.now() / 1000) - fetchedAt;
+        usageElement('updated').textContent = data.snapshot ? (typeof fetchedAt === 'number' && Number.isFinite(fetchedAt) && usageDate(fetchedAt) ? age < 60 ? 'Updated just now' : 'Updated ' + historyDuration(age) + ' ago' : 'Update time unavailable') + (stale ? ' · stale' : '') : '';
+        usageElement('updated').title = data.snapshot && usageDate(fetchedAt) ? 'Updated ' + usageDate(fetchedAt) + ' · local time' : '';
       }
       async function usageRequest(action, _unused, quiet = false) {
         if (!usageVisible() || usageBusy || !usageProfile) return false;
@@ -2830,6 +2839,7 @@ const homePage = `<!doctype html>
         providerFeedback.textContent = text;
         providerFeedback.hidden = !text;
         providerFeedback.classList.toggle('warning', Boolean(warning));
+        providerFeedback.classList.toggle('visually-hidden', !warning && text === 'Connected to ChatGPT with Codex.');
       }
 
       function refreshConnectionState() {
