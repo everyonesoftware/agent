@@ -1068,18 +1068,25 @@ const homePage = `<!doctype html>
         const timestamp = v => typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
         const ledger = data.provider === 'brave', gap = data.gap_seconds > 0 ? data.gap_seconds : 180;
         const start = range === 'period' ? Math.min(now,timestamp(data.period_start) || timestamp(data.tracking_started_at) || now) : now - (range === 'week' ? 604800 : 86400);
-        function groupPoints(points) {
+        function groupPoints(points, maxGap = gap) {
           const all = (Array.isArray(points) ? points : []).filter(p => p && Number.isFinite(p.at) && p.at > 0 && p.at <= now && valid(p.remaining_percent)).sort((a,b) => a.at-b.at).filter((p,i,a) => i === a.length-1 || p.at !== a[i+1].at);
           const groups = [];
           for (const p of all) {
             const group = groups[groups.length-1], prev = group?.[group.length-1];
-            if (!prev || (!ledger && p.at-prev.at > gap) || (prev.reset_at && p.at >= prev.reset_at) || (p.reset_at && prev.reset_at && p.reset_at !== prev.reset_at) || p.remaining_percent > prev.remaining_percent) groups.push([p]);
+            if (!prev || (!ledger && p.at-prev.at > maxGap) || (prev.reset_at && p.at >= prev.reset_at) || (p.reset_at && prev.reset_at && p.reset_at !== prev.reset_at) || p.remaining_percent > prev.remaining_percent) groups.push([p]);
             else group.push(p);
           }
           return groups;
         }
         const groups = groupPoints(data.points);
         const segments = groups.map(g => g.filter(p => p.at >= start)).filter(g=>g.length);
+        // Display continuity is deliberately looser than forecast coverage.
+        const displaySegments = groupPoints(data.points,3599).map(g => g.filter(p => p.at >= start)).filter(g=>g.length);
+        const gapConnectors = [];
+        for (let i=1; i<displaySegments.length; i++) {
+          const a=displaySegments[i-1].at(-1), b=displaySegments[i][0];
+          if (!ledger && b.at-a.at >= 3600 && groupPoints([a,b],Infinity).length === 1) gapConnectors.push([a,b]);
+        }
         const milestones = [];
         for (const g of segments) for (let i=1; i<g.length; i++) {
           const a=g[i-1], b=g[i];
@@ -1111,7 +1118,7 @@ const homePage = `<!doctype html>
         }
         const average = project(86400,'forecast',true), hourly = project(3600,'forecast hourly');
         const dailyBudget = !data.stale && fresh && valid(data.remaining_percent) && data.reset_at > now ? data.remaining_percent*86400/(data.reset_at-now) : null;
-        return {start,now,segments,milestones,forecast:average.forecast,forecastHourly:hourly.forecast,forecastReason:average.reason,hourlyReason:hourly.reason,dailyBudget,ledger};
+        return {start,now,segments,displaySegments,gapConnectors,milestones,forecast:average.forecast,forecastHourly:hourly.forecast,forecastReason:average.reason,hourlyReason:hourly.reason,dailyBudget,ledger};
       }
       function usageHistoryTrend(segment, ledger = false) {
         if (segment.length < 2) return segment.slice();
@@ -1219,7 +1226,7 @@ const homePage = `<!doctype html>
         historyEl('rate').textContent = forecast ? 'Recent average: ' + historyPercent(forecast.rate*86400) + ' percentage points/day, including idle time across ' + historyDuration(forecast.seconds) + ' of continuous recorded history.' : model.forecastReason;
         historyEl('hourly-rate').textContent = model.forecastHourly ? model.forecastHourly.rate === 0 ? 'Last hour: no usage recorded.' : 'Last hour: ' + historyPercent(model.forecastHourly.rate*3600) + ' percentage points used. If that pace continues: ' + (model.forecastHourly.end.at === data.reset_at ? 'resets before running out.' : 'about ' + historyDuration(model.forecastHourly.end.at-now) + ' left.') : 'Last hour: ' + model.hourlyReason;
         const earlier = data.tracking_started_at > model.start || (!model.ledger && model.segments[0]?.[0]?.at > model.start);
-        historyEl('note').textContent = (data.provider === 'brave' ? 'Agent cap · ' : '') + 'Recorded line is a time-smoothed trend (15-minute minimum window); inspection shows exact readings. Threshold markers use raw readings. ' + (earlier ? 'Earlier history unavailable · ' : '') + 'Estimates only.';
+        historyEl('note').textContent = (data.provider === 'brave' ? 'Agent cap · ' : '') + 'Recorded line is a time-smoothed trend (15-minute minimum window); inspection shows exact readings. ' + (model.ledger ? '' : 'Dotted connectors bridge gaps of an hour or more; shorter gaps are connected solidly. Connectors are not additional readings or forecast evidence. ') + 'Threshold markers use raw readings. ' + (earlier ? 'Earlier history unavailable · ' : '') + 'Estimates only.';
         const plot = historyEl('plot');
         if (!model.segments.length || (data.provider === 'brave' && !current)) {
           plot.innerHTML = ''; historyView = null; historyClearSelection();
@@ -1243,17 +1250,17 @@ const homePage = `<!doctype html>
         let previous = -Infinity;
         for (const [at,label] of markers) if (at>=model.start && x(at)-previous>85 && x(now)-x(at)>5) { previous=x(at); svg += line(at,'marker-'+at,'3 5','var(--muted)')+text(x(at),top-17,label,at===model.start?'start':'end'); }
         svg += line(now,'now','','#dce4dc')+text(x(now),bottom+23,'Now','middle','#dce4dc');
-        for (const segment of model.segments) {
+        for (const segment of model.displaySegments) {
           const path = usageHistoryPath(usageHistoryTrend(segment,model.ledger),x,y);
           svg += '<path class="usage-history-recorded" d="'+path+'" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>';
-          if (segment.length === 1) svg += '<circle cx="'+x(segment[0].at)+'" cy="'+y(segment[0].remaining_percent)+'" r="3" fill="var(--accent)"/>';
         }
+        for (const [a,b] of model.gapConnectors) svg += '<path class="usage-history-gap" d="M '+x(a.at)+' '+y(a.remaining_percent)+' L '+x(b.at)+' '+y(b.remaining_percent)+'" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="1 5" stroke-linecap="round"/>';
         if (model.forecast) { const at=Math.min(end,model.forecast.end.at), remaining=Math.max(0,data.remaining_percent-model.forecast.rate*(at-now)); svg += '<path id="usage-history-forecast" d="M '+x(now)+' '+y(data.remaining_percent)+' L '+x(at)+' '+y(remaining)+'" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="5 6"/>'; }
         for (const [i,p] of options.entries()) if (p.kind.includes('milestone')) svg += '<circle class="usage-history-milestone" data-index="'+i+'" cx="'+x(p.at)+'" cy="'+y(p.remaining_percent)+'" r="4" fill="var(--field)" stroke="var(--accent)" stroke-width="1.7" tabindex="0" role="button" aria-label="'+p.remaining_percent+'% remaining threshold'+(p.kind.startsWith('forecast')?' · Recent average':'')+'. Press Enter to pin."/>';
         if (data.reset_at > now && data.reset_at <= end) svg += line(data.reset_at,'reset-marker','6 4','#c6ad7d')+text(x(data.reset_at),top-17,'Reset','end','#c6ad7d');
         else if (data.reset_at > end) historyEl('reset').textContent += ' · beyond chart';
         svg += '<g id="usage-history-cursor" visibility="hidden" pointer-events="none"><line id="usage-history-cursor-line" y1="'+top+'" y2="'+bottom+'" stroke="#dce4dc" stroke-dasharray="2 3"/><circle id="usage-history-cursor-point" r="5" fill="var(--accent)" stroke="var(--field)" stroke-width="2"/></g>';
-        plot.innerHTML = '<svg id="usage-history-chart" viewBox="0 0 '+width+' '+height+'" tabindex="0" role="group" aria-label="Remaining allowance. Recorded history is solid; the recent-average projection is dashed green." aria-describedby="usage-history-instructions">'+svg+'</svg>';
+        plot.innerHTML = '<svg id="usage-history-chart" viewBox="0 0 '+width+' '+height+'" tabindex="0" role="group" aria-label="Remaining allowance. Recorded history is solid; gaps of an hour or more are dotted; the recent-average projection is dashed green." aria-describedby="usage-history-instructions">'+svg+'</svg>';
         bindUsageHistoryChart();
         if (historyPinned && historySelection) historyInspect(historySelection);
         else historyClearSelection();

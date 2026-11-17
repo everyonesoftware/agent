@@ -38,9 +38,20 @@ const gapped = points.filter((_,i)=>i<20||i>30);
 m=context.model({...data,points:gapped},'24h',now);
 assert.equal(m.segments.length,2,'Do not draw invented history through missing samples');
 assert.equal(m.forecast.seconds,29*60,'Estimate only from the contiguous observations after the gap');
+assert.equal(m.displaySegments.length,1,'Connect readings less than an hour apart without changing forecast coverage');
+assert.equal(m.gapConnectors.length,0);
+const sparsePoints=[{at:now-7500,remaining_percent:80,reset_at:data.reset_at},{at:now-7200,remaining_percent:79,reset_at:data.reset_at},{at:now-3600,remaining_percent:70,reset_at:data.reset_at},{at:now,remaining_percent:60,reset_at:data.reset_at}];
+const sparse=context.model({...data,remaining_percent:60,points:sparsePoints},'24h',now);
+assert.equal(sparse.displaySegments.length,3,'An hour or more separates solid display segments');
+assert.equal(sparse.displaySegments[0].length,2,'Five-minute readings connect solidly');
+assert.equal(sparse.gapConnectors.length,2,'Connect long gaps with explicit dotted bridges');
+assert.equal(sparse.forecast,null,'Display bridges must not supply forecast evidence');
+assert.equal(context.model({...data,points:[sparsePoints[0],{...sparsePoints[1],at:now-3901}]},'24h',now).displaySegments.length,1,'A 3599-second gap remains solid');
 const resetPoints=points.map((p,i)=>({...p,reset_at:i<30?now-1800:now+7200,remaining_percent:i<30?100-i:130-i}));
 m=context.model({...data,remaining_percent:70,points:resetPoints},'24h',now);
 assert.equal(m.segments.length,2,'Reset must split history');assert.equal(m.forecast.seconds,30*60,'Only the current reset interval contributes to the average');
+assert.equal(m.displaySegments.length,2,'Display must still break at resets');
+assert.equal(m.gapConnectors.length,0,'Never bridge a reset or balance increase');
 const brave={...data,provider:'brave',gap_seconds:0,points:[{at:now-7200,remaining_percent:100},{at:now-1800,remaining_percent:90},{at:now,remaining_percent:80}],remaining_percent:80};
 m=context.model(brave,'week',now);assert.equal(m.segments.length,1);assert.equal(m.forecastHourly.rate,20/3600,'Ledger uses the last known hour-start balance, not invented interpolation');
 const sameSecond={...brave,points:[{at:now-7200,remaining_percent:100},{at:now-7200,remaining_percent:95},{at:now-1800,remaining_percent:90},{at:now,remaining_percent:80}]};
@@ -227,6 +238,15 @@ assert.match(el('usage-history-tip-text').textContent,/90% remaining.*Recorded/,
 assert.match(el('usage-history-hourly-rate').textContent,/Last hour: 20 percentage points/,'Ledger forecast math remains unchanged');
 env.closeHistory();
 console.log('PASS Brave smoothing with exact search counts, ledger inspection and forecasts');
+env.fetch=async()=>({ok:true,json:async()=>({...data,remaining_percent:60,points:sparsePoints})});
+await env.openHistory('chatgpt',el('usage-history-open-chatgpt'));
+const sparseHTML=el('usage-history-plot').innerHTML;
+assert.equal((sparseHTML.match(/class="usage-history-gap"/g)||[]).length,2,'Render dotted connectors across hour-long gaps');
+assert.match(sparseHTML,/class="usage-history-gap"[^>]*stroke-dasharray="1 5"[^>]*stroke-linecap="round"/,'Missing-history bridges are dotted, distinct from the forecast');
+assert.doesNotMatch(sparseHTML,/<circle[^>]*r="3"/,'Do not clutter sparse history with standalone filled sample circles');
+assert.match(el('usage-history-note').textContent,/Dotted.*hour/i,'Explain long-gap connectors in details');
+env.closeHistory();
+console.log('PASS sparse display connections without sample dots or invented forecast evidence');
 assert.match(html, /id="usage-history-open-chatgpt"[^>]* disabled/,'History cannot open while the active profile is still being discovered');
 const stopSource=html.match(/function stopUsage\([^)]*\) \{[\s\S]*?\n      \}/)[0];
 const syncSource=html.match(/function syncUsage\(\) \{[\s\S]*?\n      \}/)[0];
@@ -271,7 +291,7 @@ if (process.argv.includes('--browser')) {
   const dialog=html.match(/<dialog id="usage-history-dialog"[\s\S]*?<\/dialog>/)[0];
   const buttons=['chatgpt','brave'].map(p=>html.match(new RegExp('<button id="usage-history-open-'+p+'"[^>]*>[\\s\\S]*?<\\/button>'))[0].replace(' disabled','')).join('');
   const page='<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>'+style+'</style>'+buttons+dialog+'<script>let activeProfileID="p1";const settingsPanel={hidden:false},chatApp={hidden:false};'+modelSource+controllerSource+'</script>';
-  const calls=[];let capDisabled=false,sparseHistory=false,dailyHistory=false,readingDelay=0;
+  const calls=[];let capDisabled=false,sparseHistory=false,dailyHistory=false,readingDelay=0,gapHistory=false;
   const server=createServer((req,res)=>{
     if(req.url==='/'){res.writeHead(200,{'Content-Type':'text/html'});res.end(page);return;}
     calls.push(req.url);
@@ -282,6 +302,7 @@ if (process.argv.includes('--browser')) {
     if(url.pathname==='/api/research/history')Object.assign(result,{provider:'brave',scope:'Brave Search · Agent cap',gap_seconds:0,remaining_count:80,remaining_percent:80,points:[{at:t-7200,remaining_percent:100},{at:t-1800,remaining_percent:90},{at:t,remaining_percent:80}],...(capDisabled?{remaining_percent:null,points:[],warning:'Agent cap is disabled'}:{})});
     if(url.searchParams.get('window_id')==='five')Object.assign(result,{scope:'ChatGPT · 5-hour allowance',window_id:'five'});
     if(sparseHistory)result.points=result.points.slice(-4);
+    if(gapHistory)Object.assign(result,{remaining_percent:60,points:sparsePoints.map(p=>({...p,at:p.at-now+t,reset_at:t+7200}))});
     if(readingDelay && result.provider==='chatgpt')Object.assign(result,{observed_at:t-readingDelay,stale:readingDelay>180,points:result.points.map(p=>({...p,at:p.at-readingDelay}))});
     res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(result));
   });
@@ -300,6 +321,15 @@ if (process.argv.includes('--browser')) {
     await until("!!document.getElementById('usage-history-open-chatgpt')");
     await js("document.getElementById('usage-history-open-chatgpt').click()");
     await until("!!document.getElementById('usage-history-forecast')");
+    gapHistory=true;
+    await js('usageHistoryRead()');
+    assert.equal(await js("document.querySelectorAll('.usage-history-gap').length"),2,'Chromium draws dotted hour-gap connectors');
+    assert.match(await js("document.querySelector('.usage-history-recorded').getAttribute('d')"),/ C /,'Chromium connects five-minute readings solidly');
+    assert.equal(await js("document.querySelectorAll('#usage-history-chart circle[r=\"3\"]').length"),0,'Chromium removes isolated sample dots');
+    assert.equal(await js("!!document.getElementById('usage-history-forecast')"),false,'Display connectors cannot create forecast evidence');
+    gapHistory=false;
+    await js('usageHistoryRead()');
+    console.log('PASS Chromium solid nearby readings, dotted hour gaps and no isolated sample circles');
     for(const age of [90,181,0]) {
       readingDelay=age;
       await js('usageHistoryRead()');
