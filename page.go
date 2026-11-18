@@ -1083,6 +1083,9 @@ const homePage = `<!doctype html>
           return groups;
         }
         const groups = groupPoints(data.points);
+        // Reset annotations use recorded provider timestamps, not inferred
+        // replenishment values or synthetic observations across missing data.
+        const resets = [...new Set(groups.flat().filter(p => timestamp(p.reset_at) >= start && p.reset_at <= now && p.reset_at >= p.at).map(p => p.reset_at))].sort((a,b)=>a-b);
         const segments = groups.map(g => g.filter(p => p.at >= start)).filter(g=>g.length);
         // Display continuity is deliberately looser than forecast coverage.
         const displaySegments = groupPoints(data.points,3599).map(g => g.filter(p => p.at >= start)).filter(g=>g.length);
@@ -1137,7 +1140,7 @@ const homePage = `<!doctype html>
         const average = project(86400,'forecast',true), hourly = project(3600,'forecast hourly');
         const dailyBudget = !data.stale && fresh && valid(data.remaining_percent) && data.reset_at > now ? data.remaining_percent*86400/(data.reset_at-now) : null;
         const sessions = !ledger && Array.isArray(data.sessions) ? data.sessions.filter(s=>s && Number.isFinite(s.start_at) && Number.isFinite(s.end_at) && s.start_at>0 && s.end_at>s.start_at && s.end_at<=now && s.end_at>=start && valid(s.used_percent) && s.used_percent>0 && s.estimated===true).map(s=>({...s,current:s.current===true && fresh && !data.stale})) : [];
-        return {start,now,segments,displaySegments,gapConnectors,milestones,forecast:average.forecast,forecastHourly:hourly.forecast,forecastReason:average.reason,hourlyReason:hourly.reason,dailyBudget,ledger,sessions};
+        return {start,now,resets,segments,displaySegments,gapConnectors,milestones,forecast:average.forecast,forecastHourly:hourly.forecast,forecastReason:average.reason,hourlyReason:hourly.reason,dailyBudget,ledger,sessions};
       }
       function usageHistoryTrend(segment, ledger = false) {
         if (segment.length < 2) return segment.slice();
@@ -1295,6 +1298,7 @@ const homePage = `<!doctype html>
         for (const [i,p] of options.entries()) if (p.kind.includes('milestone')) svg += '<circle class="usage-history-milestone" data-index="'+i+'" cx="'+x(p.at)+'" cy="'+y(p.remaining_percent)+'" r="4" fill="var(--field)" stroke="var(--accent)" stroke-width="1.7" tabindex="0" role="button" aria-label="'+p.remaining_percent+'% remaining threshold'+(p.kind.startsWith('forecast')?' · Recent average':'')+'. Press Enter to pin."/>';
         if (data.reset_at > now && data.reset_at <= end) svg += line(data.reset_at,'reset-marker','6 4','#c6ad7d')+text(x(data.reset_at),top-17,'Reset','end','#c6ad7d');
         else if (data.reset_at > end) historyEl('reset').textContent += ' · beyond chart';
+        for (const at of model.resets) svg += line(at,'past-reset-'+at,'6 4','#c6ad7d')+text(x(at),top-32,'Reset',x(at)-left<40?'start':'end','#c6ad7d');
         svg += '<g id="usage-history-cursor" visibility="hidden" pointer-events="none"><line id="usage-history-cursor-line" y1="'+top+'" y2="'+bottom+'" stroke="#dce4dc" stroke-dasharray="2 3"/><circle id="usage-history-cursor-point" r="5" fill="var(--accent)" stroke="var(--field)" stroke-width="2"/></g>';
         plot.innerHTML = '<svg id="usage-history-chart" viewBox="0 0 '+width+' '+height+'" tabindex="0" role="group" aria-label="Remaining allowance. Recorded history is solid; gaps of an hour or more are dotted; the recent-average projection is dashed green." aria-describedby="usage-history-instructions">'+svg+'</svg>';
         bindUsageHistoryChart();

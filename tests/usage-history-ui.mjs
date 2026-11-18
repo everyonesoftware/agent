@@ -53,6 +53,13 @@ m=context.model({...data,remaining_percent:70,points:resetPoints},'24h',now);
 assert.equal(m.segments.length,2,'Reset must split history');assert.equal(m.forecast.seconds,59*60,'Combine consumption measured separately within both reset periods');
 assert.equal(m.displaySegments.length,2,'Display must still break at resets');
 assert.equal(m.gapConnectors.length,0,'Never bridge a reset or balance increase');
+for (const range of ['24h','week']) {
+  const resetHistory=context.model({...data,remaining_percent:70,points:resetPoints},range,now);
+  assert.deepEqual(Array.from(resetHistory.resets),[now-1800],'Keep one historical reset marker from repeated recorded reset times');
+}
+assert.deepEqual(Array.from(context.model({...data,points:[{at:now-90000,remaining_percent:10,reset_at:now-88000},...resetPoints]},'24h',now).resets),[now-1800],'Exclude resets outside the selected history range');
+assert.deepEqual(Array.from(context.model({...data,points:[{at:now-90000,remaining_percent:10,reset_at:now-88000},...resetPoints]},'week',now).resets),[now-88000,now-1800],'The week view includes earlier resets');
+assert.deepEqual(Array.from(context.model(data,'24h',now).resets),[],'Future resets are not historical markers');
 const brave={...data,provider:'brave',gap_seconds:0,points:[{at:now-7200,remaining_percent:100},{at:now-1800,remaining_percent:90},{at:now,remaining_percent:80}],remaining_percent:80};
 m=context.model(brave,'week',now);assert.equal(m.segments.length,1);assert.equal(m.forecastHourly.rate,20/3600,'Ledger uses the last known hour-start balance, not invented interpolation');
 const sameSecond={...brave,points:[{at:now-7200,remaining_percent:100},{at:now-7200,remaining_percent:95},{at:now-1800,remaining_percent:90},{at:now,remaining_percent:80}]};
@@ -321,6 +328,18 @@ env.fetch=async()=>({ok:true,json:async()=>({...data,stale:true})});await env.re
 assert.equal(el('usage-history-tooltip').hidden,true,'A stale forecast must also dismiss its pinned projected point');
 env.closeHistory();
 console.log('PASS estimated sessions in floating inspection and outside disclosure dismissal');
+env.fetch=async()=>({ok:true,json:async()=>({...data,remaining_percent:70,points:resetPoints})});
+await env.openHistory('chatgpt',el('usage-history-open-chatgpt'));
+for (const range of ['24h','week']) {
+  el('usage-history-range').value=range;await el('usage-history-range').listeners.change();
+  const plot=el('usage-history-plot').innerHTML;
+  assert.equal((plot.match(/id="usage-history-past-reset-/g)||[]).length,1,'Render a deduplicated past reset in '+range);
+  assert.match(plot,new RegExp('id="usage-history-past-reset-'+(now-1800)+'"[^>]*stroke-dasharray="6 4"'),'Use the recorded reset timestamp and reset line style');
+  assert.match(plot,/id="usage-history-reset-marker"/,'Keep the future reset marker too');
+  assert.equal((plot.match(/class="usage-history-recorded"/g)||[]).length,2,'Do not join history across the reset');
+}
+env.closeHistory();
+console.log('PASS historical reset annotations in 24-hour and week views');
 // Native dialog, SVG pointer capture and real keyboard focus are not emulated by
 // the VM. --browser exercises the exact production controller/CSS in isolation;
 // the production-router suite separately covers auth, storage and ledger reads.
@@ -329,7 +348,7 @@ if (process.argv.includes('--browser')) {
   const dialog=html.match(/<dialog id="usage-history-dialog"[\s\S]*?<\/dialog>/)[0];
   const buttons=['chatgpt','brave'].map(p=>html.match(new RegExp('<button id="usage-history-open-'+p+'"[^>]*>[\\s\\S]*?<\\/button>'))[0].replace(' disabled','')).join('');
   const page='<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>'+style+'</style>'+buttons+dialog+'<script>let activeProfileID="p1";const settingsPanel={hidden:false},chatApp={hidden:false};'+modelSource+controllerSource+'</script>';
-  const calls=[];let capDisabled=false,sparseHistory=false,dailyHistory=false,readingDelay=0,gapHistory=false,sessionHistory=false;
+  const calls=[];let capDisabled=false,sparseHistory=false,dailyHistory=false,readingDelay=0,gapHistory=false,sessionHistory=false,resetHistory=false;
   const server=createServer((req,res)=>{
     if(req.url==='/'){res.writeHead(200,{'Content-Type':'text/html'});res.end(page);return;}
     calls.push(req.url);
@@ -341,6 +360,7 @@ if (process.argv.includes('--browser')) {
     if(url.searchParams.get('window_id')==='five')Object.assign(result,{scope:'ChatGPT · 5-hour allowance',window_id:'five'});
     if(sparseHistory)result.points=result.points.slice(-4);
     if(gapHistory)Object.assign(result,{remaining_percent:60,points:sparsePoints.map(p=>({...p,at:p.at-now+t,reset_at:t+7200}))});
+    if(resetHistory)Object.assign(result,{remaining_percent:70,points:resetPoints.map(p=>({...p,at:p.at-now+t,reset_at:p.reset_at-now+t}))});
     if(sessionHistory && result.provider==='chatgpt')result.sessions=[{start_at:t-3600,end_at:t,last_used_at:t,used_percent:60,current:true,estimated:true}];
     if(readingDelay && result.provider==='chatgpt')Object.assign(result,{observed_at:t-readingDelay,stale:readingDelay>180,points:result.points.map(p=>({...p,at:p.at-readingDelay}))});
     res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(result));
@@ -369,6 +389,23 @@ if (process.argv.includes('--browser')) {
     gapHistory=false;
     await js('usageHistoryRead()');
     console.log('PASS Chromium solid nearby readings, dotted hour gaps and no isolated sample circles');
+    resetHistory=true;
+    for(const range of ['24h','week']) {
+      await js("document.getElementById('usage-history-range').value="+JSON.stringify(range)+";usageHistoryRead()");
+      assert.equal(await js("document.querySelectorAll('[id^=usage-history-past-reset-]').length"),1,'Chromium shows a past reset in '+range);
+      assert.equal(await js("document.querySelectorAll('.usage-history-recorded').length"),2,'Reset remains a history break');
+      assert.equal(await js("document.querySelector('[id^=usage-history-past-reset-]').getAttribute('stroke-dasharray')"),'6 4');
+      assert.equal(await js("(()=>{const m=document.querySelector('[id^=usage-history-past-reset-]'),n=document.getElementById('usage-history-now');return +m.getAttribute('x1')<+n.getAttribute('x1')&&m.nextElementSibling.textContent==='Reset';})()"),true,'Label the reset before Now');
+      for(const width of [1280,390]) {
+        await cdp('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:width<500});
+        await js('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+        assert.equal(await js("(()=>{const t=document.querySelector('[id^=usage-history-past-reset-]').nextElementSibling.getBBox();return t.y>=0;})()"),true,'Past reset label fits the chart');
+      }
+    }
+    resetHistory=false;
+    await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:844,deviceScaleFactor:1,mobile:false});
+    await js("document.getElementById('usage-history-range').value='24h';usageHistoryRead()");
+    console.log('PASS Chromium past reset markers in 24-hour and week views at desktop and narrow widths');
     for(const age of [90,181,0]) {
       readingDelay=age;
       await js('usageHistoryRead()');
