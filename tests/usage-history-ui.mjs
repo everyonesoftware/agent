@@ -199,6 +199,11 @@ assert.match(el('usage-history-rate').textContent,/idle time.*1 day/,'Explain th
 assert.match(el('usage-history-hourly-rate').textContent,/Last hour: 12%/,'Hourly pace moves into details');
 el('usage-history-chart').onkeydown({key:'End',target:el('usage-history-chart'),preventDefault(){},stopPropagation(){}});
 assert.match(el('usage-history-tip-text').textContent,/Recent average/,'The single projection can be inspected and identified');
+dom.activeElement=el('usage-history-chart');
+vm.runInContext('renderUsageHistory();',env);
+el('usage-history-chart').onkeydown({key:'Enter',target:el('usage-history-chart'),preventDefault(){},stopPropagation(){}});
+assert.match(el('usage-history-tip-text').textContent,/Recent average.*pinned/,'A redraw between End and Enter preserves the keyboard forecast selection');
+dom.activeElement=null;
 env.closeHistory();
 env.fetch=async()=>({ok:true,json:async()=>idleHourData});
 await env.openHistory('chatgpt',el('usage-history-open-chatgpt'));
@@ -411,7 +416,7 @@ if (process.argv.includes('--browser')) {
     await until("!!document.getElementById('usage-history-forecast')");
     assert.equal(await js("document.querySelectorAll('#usage-history-forecast-daily').length"),0);
     assert.equal(await js("document.getElementById('usage-history-forecast').getAttribute('stroke-dasharray')"),'5 6');
-    await js("document.getElementById('usage-history-chart').focus()");await press('End');await press('Enter');
+    await js("document.getElementById('usage-history-chart').focus()");await press('End');await js('renderUsageHistory()');await press('Enter');
     assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),/Recent average.*pinned/,'Real keyboard inspection identifies the recent-average projection');
     await press('Escape');
     for(const [width,height] of [[1280,844],[900,600],[390,844],[320,640]]){

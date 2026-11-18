@@ -1274,8 +1274,9 @@ const homePage = `<!doctype html>
         const options = [...model.segments.flat().map(p=>({...p,kind:'sample'})),...model.milestones.filter(p=>p.at<=end)];
         if (forecast) options.push({...forecast.end,at:Math.min(end,forecast.end.at),remaining_percent:Math.max(0,data.remaining_percent-forecast.rate*(Math.min(end,forecast.end.at)-now))});
         options.sort((a,b)=>a.at-b.at);
-        historyView = {x,y,width,height,options,sessions:model.sessions,top,bottom}; historyIndex = Math.max(0,options.findLastIndex(p=>p.at<=now));
         const focused = document.activeElement?.id === 'usage-history-chart';
+        const selectedIndex=focused && historySelection ? options.findIndex(p=>p.kind===historySelection.kind && (p.kind==='forecast' || (p.remaining_percent===historySelection.remaining_percent && (p.kind.startsWith('forecast') || p.at===historySelection.at)))) : -1;
+        historyView = {x,y,width,height,options,sessions:model.sessions,top,bottom}; historyIndex = selectedIndex>=0?selectedIndex:Math.max(0,options.findLastIndex(p=>p.at<=now));
         const text = (px,py,label,anchor='start',color='var(--muted)') => '<text x="'+px+'" y="'+py+'" text-anchor="'+anchor+'" fill="'+color+'" font-size="10">'+label+'</text>';
         const line = (at,kind,dash,color) => '<line id="usage-history-'+kind+'" x1="'+x(at)+'" x2="'+x(at)+'" y1="'+(top-4)+'" y2="'+bottom+'" stroke="'+color+'"'+(dash?' stroke-dasharray="'+dash+'"':'')+'/>';
         let svg = '';
@@ -1303,6 +1304,7 @@ const homePage = `<!doctype html>
             else {const at=Math.min(historySelection.at,forecast.end.at);historyInspect({...historySelection,at,remaining_percent:Math.max(0,data.remaining_percent-forecast.rate*(at-now))});}
           }else historyInspect(historySelection);
         }
+        else if(focused && selectedIndex>=0)historyInspect(options[historyIndex]);
         else historyClearSelection();
         if (focused) historyEl('chart')?.focus({preventScroll:true});
       }
