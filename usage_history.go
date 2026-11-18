@@ -9,27 +9,30 @@ type usageHistoryPoint struct {
 	At               int64   `json:"at"`
 	RemainingPercent float64 `json:"remaining_percent"`
 	ResetAt          int64   `json:"reset_at,omitempty"`
+	WindowMinutes    int64   `json:"window_minutes,omitempty"`
 }
 type usageHistoryWindow struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
 }
 type usageHistory struct {
-	Provider          string               `json:"provider"`
-	Scope             string               `json:"scope"`
-	ObservedAt        int64                `json:"observed_at"`
-	TrackingStartedAt int64                `json:"tracking_started_at"`
-	PeriodStart       int64                `json:"period_start"`
-	ResetAt           int64                `json:"reset_at"`
-	RemainingPercent  *float64             `json:"remaining_percent"`
-	RemainingCount    *int64               `json:"remaining_count,omitempty"`
-	WindowID          string               `json:"window_id,omitempty"`
-	Windows           []usageHistoryWindow `json:"windows,omitempty"`
-	Points            []usageHistoryPoint  `json:"points"`
-	ForecastPoints    []usageHistoryPoint  `json:"forecast_points,omitempty"`
-	Stale             bool                 `json:"stale"`
-	GapSeconds        int64                `json:"gap_seconds"`
-	Warning           string               `json:"warning,omitempty"`
+	Provider          string                `json:"provider"`
+	Scope             string                `json:"scope"`
+	ObservedAt        int64                 `json:"observed_at"`
+	TrackingStartedAt int64                 `json:"tracking_started_at"`
+	PeriodStart       int64                 `json:"period_start"`
+	ResetAt           int64                 `json:"reset_at"`
+	RemainingPercent  *float64              `json:"remaining_percent"`
+	RemainingCount    *int64                `json:"remaining_count,omitempty"`
+	WindowID          string                `json:"window_id,omitempty"`
+	Windows           []usageHistoryWindow  `json:"windows,omitempty"`
+	Points            []usageHistoryPoint   `json:"points"`
+	ForecastPoints    []usageHistoryPoint   `json:"forecast_points,omitempty"`
+	Sessions          []usageHistorySession `json:"sessions,omitempty"`
+	SessionsTruncated bool                  `json:"sessions_truncated,omitempty"`
+	Stale             bool                  `json:"stale"`
+	GapSeconds        int64                 `json:"gap_seconds"`
+	Warning           string                `json:"warning,omitempty"`
 }
 
 func historyRangeStart(value string, now time.Time, periodStart int64) (int64, error) {

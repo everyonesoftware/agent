@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
+import './usage-history-daily.mjs';
 const page = await readFile(new URL('../page.go', import.meta.url), 'utf8');
 const source = page.split('// BEGIN usage history model')[1].split('// END usage history model')[0];
 const env = vm.createContext({});

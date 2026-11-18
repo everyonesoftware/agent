@@ -431,7 +431,7 @@ const homePage = `<!doctype html>
     #usage-history-message:empty { display:none; }
     #usage-history-chart-wrap { position:relative; margin-top:10px; touch-action:pan-y; }
     #usage-history-chart { display:block; width:100%; overflow:visible; cursor:crosshair; }
-    #usage-history-tooltip { position:absolute; top:7px; z-index:2; width:218px; max-width:calc(100% - 8px); padding:10px 30px 10px 12px; border:1px solid #394139; border-radius:6px; background:var(--field); box-shadow:0 6px 22px #0003; pointer-events:none; font-size:11px; line-height:1.6; }
+    #usage-history-tooltip { position:absolute; top:7px; z-index:2; width:260px; max-width:calc(100% - 8px); padding:10px 30px 10px 12px; border:1px solid #394139; border-radius:6px; background:var(--field); box-shadow:0 6px 22px #0003; pointer-events:none; font-size:11px; line-height:1.6; white-space:pre-line; }
     #usage-history-tooltip.pinned { border-color:var(--accent); }
     #usage-history-unpin { position:absolute; top:3px; right:3px; min-height:28px!important; padding:0 6px!important; border:0!important; pointer-events:auto; }
     .history-bottom { display:flex; justify-content:space-between; align-items:center; gap:16px; border-top:1px solid var(--line); padding-top:8px; margin-top:8px; }
@@ -451,6 +451,10 @@ const homePage = `<!doctype html>
     .history-legend span { display:inline-flex; align-items:center; gap:6px; }
     .history-legend i { width:20px; border-top:2px solid var(--accent); }
     .history-legend .projected { border-top-style:dashed; }
+    .usage-history-session { fill:#b4d6a312; stroke:#b4d6a340; cursor:pointer; }
+    .usage-history-session.current { fill:#b4d6a326; stroke:#b4d6a366; }
+    .usage-history-session:hover, .usage-history-session:focus-visible { fill:#b4d6a340; stroke:var(--accent); outline:none; }
+    .history-legend i.session { min-height:11px; width:18px; padding:0; border:1px solid #b4d6a366; background:#b4d6a326; }
     @media(min-width:601px) and (max-height:700px) {
       #usage-history-dialog { padding:16px; max-height:calc(100dvh - 32px); }
       .history-headline { margin-top:12px; }
@@ -726,7 +730,7 @@ const homePage = `<!doctype html>
     <p id="usage-history-message" role="status"></p>
     <div id="usage-history-chart-wrap"><div id="usage-history-plot"></div><div id="usage-history-tooltip" role="status" hidden><span id="usage-history-tip-text"></span><button id="usage-history-unpin" type="button" aria-label="Unpin selected point" hidden>×</button></div></div>
     <p id="usage-history-instructions" class="visually-hidden">Hover to inspect. Click or tap to pin. Drag to explore. Use arrow keys, Home and End to select points; Enter or Space to pin; Escape to clear selection.</p>
-    <div class="history-bottom"><div class="history-forecast"><p id="usage-history-basis"></p><details id="usage-history-details"><summary id="usage-history-details-toggle" aria-label="Forecast details">i</summary><div class="history-details-body"><p id="usage-history-scope" hidden></p><label id="usage-history-window-label" hidden>Allowance window <select id="usage-history-window"></select></label><p id="usage-history-rate"></p><p id="usage-history-hourly-rate"></p><p id="usage-history-note">Estimates only.</p><p class="history-assumptions">The recent average uses up to 24 hours of available continuous history, including idle time, and projects until reset or depletion. Short history may overrepresent a busy or quiet session. Gaps and resets break coverage. Daily budget divides remaining allowance by days until reset; daily rates are percentage points of the total allowance, not a percentage of the remaining balance. Smoothing changes only the drawing between recorded readings, not the readings or forecast.</p></div></details></div><div class="history-legend"><span><i></i>Recorded</span><span><i class="projected"></i>Recent average</span></div></div>
+    <div class="history-bottom"><div class="history-forecast"><p id="usage-history-basis"></p><details id="usage-history-details"><summary id="usage-history-details-toggle" aria-label="Forecast details">i</summary><div class="history-details-body"><p id="usage-history-scope" hidden></p><label id="usage-history-window-label" hidden>Allowance window <select id="usage-history-window"></select></label><p id="usage-history-rate"></p><p id="usage-history-hourly-rate"></p><p id="usage-history-note">Estimates only.</p><p class="history-assumptions">The forecast combines consumption measured separately within covered portions of the past 24 hours, including observed idle time. Resets do not erase earlier comparable history; replenishment is not consumption. Missing intervals are excluded, never counted as idle time. Short or partial history may be unrepresentative. Daily budget divides remaining allowance by days until reset; % / day refers to the total allowance, not the remaining balance. Session bands estimate activity from allowance decreases separated by 30 minutes without an observed decrease; gaps and resets split them. They are not individual chats, and usage outside Agent can contribute. Smoothing changes only the drawing, not the readings or forecast.</p></div></details></div><div class="history-legend"><span><i></i>Recorded</span><span><i class="projected"></i>Recent average</span><span id="usage-history-session-legend" hidden><i class="session"></i>Sessions</span></div></div>
     <div id="usage-history-selection" class="visually-hidden" aria-live="polite"></div>
   </dialog>
   <script>
@@ -1073,7 +1077,7 @@ const homePage = `<!doctype html>
           const groups = [];
           for (const p of all) {
             const group = groups[groups.length-1], prev = group?.[group.length-1];
-            if (!prev || (!ledger && p.at-prev.at > maxGap) || (prev.reset_at && p.at >= prev.reset_at) || (p.reset_at && prev.reset_at && p.reset_at !== prev.reset_at) || p.remaining_percent > prev.remaining_percent) groups.push([p]);
+            if (!prev || (!ledger && p.at-prev.at > maxGap) || (prev.reset_at && p.at >= prev.reset_at) || (p.reset_at && prev.reset_at && p.reset_at !== prev.reset_at) || (p.window_minutes && prev.window_minutes && p.window_minutes !== prev.window_minutes) || p.remaining_percent > prev.remaining_percent) groups.push([p]);
             else group.push(p);
           }
           return groups;
@@ -1102,23 +1106,38 @@ const homePage = `<!doctype html>
           // A delayed provider poll is not evidence of idle time. Measure its
           // pace through the last actual observation, not through wall time.
           const measuredAt = ledger ? now : last.at;
-          let baseline = g.filter(p=>p.at<=measuredAt-window).pop();
-          if (!baseline || (!ledger && measuredAt-window-baseline.at > gap)) {
-            if (!available) return {forecast:null,reason:'Needs a complete hour of recent history.'};
-            baseline = g.find(p=>p.at>=measuredAt-window);
+          let seconds=0, consumed=0, depletedSeconds=0, resetCount=0, previousCoveredReset=null, firstComparableAt=measuredAt;
+          const cutoff=measuredAt-window, evidence=available?forecastGroups:[g];
+          for (let index=0; index<evidence.length; index++) {
+            const group=evidence[index], tail=group.at(-1);
+            if (last.window_minutes && tail.window_minutes && last.window_minutes!==tail.window_minutes) continue;
+            if(tail.at>=cutoff)firstComparableAt=Math.min(firstComparableAt,group[0].at);
+            const before=seconds;
+            for (let i=1; i<group.length; i++) {
+              const a=group[i-1], b=group[i], from=Math.max(cutoff,a.at), to=Math.min(measuredAt,b.at);
+              if (!(to>from)) continue;
+              const duration=to-from;
+              seconds+=duration;
+              consumed+=(a.remaining_percent-b.remaining_percent)*(ledger?1:duration/(b.at-a.at));
+              if(a.remaining_percent===0 && b.remaining_percent===0) depletedSeconds+=duration;
+            }
+            if(seconds>before){if(available && previousCoveredReset!==null && previousCoveredReset!==group[0].reset_at)resetCount++;previousCoveredReset=tail.reset_at;}
           }
-          const seconds = baseline ? (ledger && baseline.at<=measuredAt-window ? window : measuredAt-baseline.at) : 0;
-          if (!(seconds > 0) || baseline.at >= last.at) return {forecast:null,reason:'A second timestamped allowance reading is needed to measure a pace.'};
-          const rate = (baseline.remaining_percent-data.remaining_percent)/seconds;
+          // The local ledger observes idle time through Now, unlike a sampled provider.
+          if(ledger && last.at<measuredAt){const duration=measuredAt-Math.max(cutoff,last.at);if(duration>0){firstComparableAt=Math.min(firstComparableAt,last.at);seconds+=duration;if(last.remaining_percent===0)depletedSeconds+=duration;}}
+          if (!(seconds > 0)) return {forecast:null,reason:'A second timestamped allowance reading is needed to measure a pace.'};
+          if (!available && seconds<window) return {forecast:null,reason:'Needs a complete hour of recent history.'};
+          const rate = consumed/seconds;
           if (rate < 0) return {forecast:null,reason:'Remaining allowance increased during the projection window.'};
           const endAt = data.remaining_percent === 0 ? now : rate > 0 ? Math.min(data.reset_at,now+data.remaining_percent/rate) : data.reset_at;
           const end = {at:endAt,remaining_percent:Math.max(0,data.remaining_percent-rate*(endAt-now)),kind};
           if (available) for (const level of [90,75,50,25,10]) if (rate > 0 && data.remaining_percent > level && end.remaining_percent <= level) milestones.push({at:now+(data.remaining_percent-level)/rate,remaining_percent:level,kind:kind+' milestone'});
-          return {forecast:{rate,seconds,start:{at:now,remaining_percent:data.remaining_percent,kind},end},reason:''};
+          return {forecast:{rate,seconds,consumed,depletedSeconds,resetCount,lookback:Math.min(window,measuredAt-firstComparableAt),start:{at:now,remaining_percent:data.remaining_percent,kind},end},reason:''};
         }
         const average = project(86400,'forecast',true), hourly = project(3600,'forecast hourly');
         const dailyBudget = !data.stale && fresh && valid(data.remaining_percent) && data.reset_at > now ? data.remaining_percent*86400/(data.reset_at-now) : null;
-        return {start,now,segments,displaySegments,gapConnectors,milestones,forecast:average.forecast,forecastHourly:hourly.forecast,forecastReason:average.reason,hourlyReason:hourly.reason,dailyBudget,ledger};
+        const sessions = !ledger && Array.isArray(data.sessions) ? data.sessions.filter(s=>s && Number.isFinite(s.start_at) && Number.isFinite(s.end_at) && s.start_at>0 && s.end_at>s.start_at && s.end_at<=now && s.end_at>=start && valid(s.used_percent) && s.used_percent>0 && s.estimated===true).map(s=>({...s,current:s.current===true && fresh && !data.stale})) : [];
+        return {start,now,segments,displaySegments,gapConnectors,milestones,forecast:average.forecast,forecastHourly:hourly.forecast,forecastReason:average.reason,hourlyReason:hourly.reason,dailyBudget,ledger,sessions};
       }
       function usageHistoryTrend(segment, ledger = false) {
         if (segment.length < 2) return segment.slice();
@@ -1179,6 +1198,10 @@ const homePage = `<!doctype html>
         const value = Number((n/(n < 86400 ? 3600 : 86400)).toFixed(1));
         return historyPercent(value) + (n < 86400 ? ' hour' : ' day') + (value === 1 ? '' : 's');
       }
+      function historyCoverage(seconds) {
+        const minutes=Math.floor(seconds/60), hours=Math.floor(minutes/60), rest=minutes%60;
+        return hours>0 ? hours+' hour'+(hours===1?'':'s')+(rest?' '+rest+' min':'') : historyDuration(seconds);
+      }
       function historyClearSelection() {
         historyPinned = false; historyDragging = false; historySelection = null;
         historyEl('tooltip').hidden = true; historyEl('unpin').hidden = true;
@@ -1188,12 +1211,18 @@ const homePage = `<!doctype html>
         if (!point || !historyView) return;
         historySelection = point;
         const projected = point.kind?.startsWith('forecast'), milestone = point.kind?.includes('milestone');
-        const text = historyPercent(point.remaining_percent) + '% remaining · ' + new Date(point.at*1000).toLocaleString() + ' · ' + (projected ? 'Projected · Recent average' : milestone ? (historyData.provider === 'brave' ? 'Recorded threshold crossing' : 'Approximate threshold crossing') : 'Recorded') + (historyPinned ? ' · pinned' : '');
+        const session=point.session ? historyView.sessions.find(s=>s.start_at===point.session.start_at) : (!projected && historyView.sessions.find(s=>point.at>=s.start_at && point.at<=s.end_at));
+        if(point.kind==='session' && !session){historyClearSelection();return;}
+        if(point.kind==='session'){point={...point,at:session.end_at,session};historySelection=point;}
+        const sessionText=session ? (session.current?'Current session':'Session')+' · estimated\n'+historyPercent(session.used_percent)+'% used · '+historyDuration(session.end_at-session.start_at)+(session.current?' · ongoing':'')+'\n'+new Date(session.start_at*1000).toLocaleString()+' – '+new Date(session.end_at*1000).toLocaleString() : '';
+        const text = (point.kind==='session'?sessionText:historyPercent(point.remaining_percent) + '% remaining · ' + new Date(point.at*1000).toLocaleString() + ' · ' + (projected ? 'Projected · Recent average' : milestone ? (historyData.provider === 'brave' ? 'Recorded threshold crossing' : 'Approximate threshold crossing') : 'Recorded')+(sessionText?'\n\n'+sessionText:'')) + (historyPinned ? ' · pinned' : '');
         historyEl('tip-text').textContent = text;
         const tip = historyEl('tooltip'); tip.hidden = false; tip.classList.toggle('pinned',historyPinned);
         historyEl('unpin').hidden = !historyPinned;
-        tip.style.left = Math.max(4,Math.min(historyView.width-230,historyView.x(point.at)-105)) + 'px';
-        historyEl('cursor')?.setAttribute('visibility','visible');
+        const tipWidth=tip.offsetWidth||260, tipHeight=tip.offsetHeight||100;
+        tip.style.left = Math.max(4,Math.min(historyView.width-tipWidth-4,historyView.x(point.at)-tipWidth/2)) + 'px';
+        tip.style.top = Math.max(4,Math.min(historyView.height-tipHeight-4,historyView.y(point.remaining_percent)-tipHeight-12)) + 'px';
+        historyEl('cursor')?.setAttribute('visibility',point.kind==='session'?'hidden':'visible');
         for (const key of ['x1','x2']) historyEl('cursor-line')?.setAttribute(key,historyView.x(point.at));
         historyEl('cursor-point')?.setAttribute('cx',historyView.x(point.at));
         historyEl('cursor-point')?.setAttribute('cy',historyView.y(point.remaining_percent));
@@ -1216,17 +1245,22 @@ const homePage = `<!doctype html>
         for (const w of availableWindows) { const option = document.createElement('option'); option.value = w.id; option.textContent = w.label; select.append(option); }
         select.value = historyWindow;
         const forecast = model.forecast, overBudget = !!forecast && forecast.end.at < data.reset_at;
+        historyEl('session-legend').hidden=!model.sessions.length;
         historyEl('estimate').textContent = forecast ? data.remaining_percent === 0 ? 'Allowance depleted' : forecast.rate === 0 ? 'No usage recorded in the observed history' : overBudget ? 'May run out in about ' + historyDuration(forecast.end.at-now) : 'About ' + historyPercent(forecast.end.remaining_percent) + '% projected at reset' : 'Forecast unavailable';
         historyEl('estimate').classList.toggle('over-budget',overBudget);
-        historyEl('basis').textContent = forecast ? 'Based on ' + historyDuration(forecast.seconds) + ' of recorded history' : model.forecastReason;
+        const shortHistory=forecast && forecast.lookback<86400, partialHistory=forecast && forecast.lookback-forecast.seconds>1;
+        historyEl('basis').textContent = forecast ? 'Forecast: '+(shortHistory?'recent '+historyCoverage(forecast.lookback):'past 24 hours')+' · '+historyCoverage(forecast.seconds)+' covered'+(forecast.resetCount?' · spans a reset':'') : model.forecastReason;
         historyEl('budget').textContent = model.dailyBudget !== null ? 'Daily budget: ' + historyPercent(model.dailyBudget) + '% / day' : 'Daily budget unavailable';
-        historyEl('average').textContent = forecast ? 'Recent average: ' + historyPercent(forecast.rate*86400) + '% / day' : '';
-        historyEl('comparison').textContent = forecast && model.dailyBudget !== null ? (overBudget ? 'Above budget' : 'Within budget') : '';
+        historyEl('average').textContent = forecast ? (shortHistory?'Short-term pace: ':partialHistory?'Covered-history pace: ':'Past 24 hours: ') + historyPercent(forecast.rate*86400) + '% / day' : '';
+        historyEl('comparison').textContent = forecast && model.dailyBudget !== null ? (overBudget ? 'Above budget' : 'Within budget')+(partialHistory?' · partial coverage':'') : '';
         historyEl('comparison').classList.toggle('over-budget',overBudget);
-        historyEl('rate').textContent = forecast ? 'Recent average: ' + historyPercent(forecast.rate*86400) + ' percentage points/day, including idle time across ' + historyDuration(forecast.seconds) + ' of continuous recorded history.' : model.forecastReason;
-        historyEl('hourly-rate').textContent = model.forecastHourly ? model.forecastHourly.rate === 0 ? 'Last hour: no usage recorded.' : 'Last hour: ' + historyPercent(model.forecastHourly.rate*3600) + ' percentage points used. If that pace continues: ' + (model.forecastHourly.end.at === data.reset_at ? 'resets before running out.' : 'about ' + historyDuration(model.forecastHourly.end.at-now) + ' left.') : 'Last hour: ' + model.hourlyReason;
+        historyEl('rate').textContent = forecast ? historyPercent(forecast.consumed)+'% consumed, including observed idle time across '+historyDuration(forecast.seconds)+' of covered history. Pace: '+historyPercent(forecast.rate*86400)+'% / day.'+(forecast.depletedSeconds?' Allowance was depleted for '+historyCoverage(forecast.depletedSeconds)+'; consumption excludes demand blocked by the limit.':'') : model.forecastReason;
+        historyEl('hourly-rate').textContent = model.forecastHourly ? model.forecastHourly.rate === 0 ? 'Last hour: no usage recorded.' : 'Last hour: ' + historyPercent(model.forecastHourly.rate*3600) + '% used. If that pace continues: ' + (model.forecastHourly.end.at === data.reset_at ? 'resets before running out.' : 'about ' + historyDuration(model.forecastHourly.end.at-now) + ' left.') : 'Last hour: ' + model.hourlyReason;
         const earlier = data.tracking_started_at > model.start || (!model.ledger && model.segments[0]?.[0]?.at > model.start);
         historyEl('note').textContent = (data.provider === 'brave' ? 'Agent cap · ' : '') + 'Recorded line is a time-smoothed trend (15-minute minimum window); inspection shows exact readings. ' + (model.ledger ? '' : 'Dotted connectors bridge gaps of an hour or more; shorter gaps are connected solidly. Connectors are not additional readings or forecast evidence. ') + 'Threshold markers use raw readings. ' + (earlier ? 'Earlier history unavailable · ' : '') + 'Estimates only.';
+        const currentSession=model.sessions.find(s=>s.current);
+        if(currentSession){const duration=currentSession.end_at-currentSession.start_at, pace=currentSession.used_percent/duration;historyEl('hourly-rate').textContent+='\nCurrent session · estimated: '+historyPercent(currentSession.used_percent)+'% used over '+historyDuration(duration)+'. If sustained continuously: '+historyDuration(data.remaining_percent/pace)+' until depletion, or reset if sooner. This is not the daily forecast.';}
+        if(data.sessions_truncated)historyEl('note').textContent+=' Session coverage is bounded; earlier sessions or session beginnings may be incomplete.';
         const plot = historyEl('plot');
         if (!model.segments.length || (data.provider === 'brave' && !current)) {
           plot.innerHTML = ''; historyView = null; historyClearSelection();
@@ -1240,11 +1274,12 @@ const homePage = `<!doctype html>
         const options = [...model.segments.flat().map(p=>({...p,kind:'sample'})),...model.milestones.filter(p=>p.at<=end)];
         if (forecast) options.push({...forecast.end,at:Math.min(end,forecast.end.at),remaining_percent:Math.max(0,data.remaining_percent-forecast.rate*(Math.min(end,forecast.end.at)-now))});
         options.sort((a,b)=>a.at-b.at);
-        historyView = {x,y,width,height,options}; historyIndex = Math.max(0,options.findLastIndex(p=>p.at<=now));
+        historyView = {x,y,width,height,options,sessions:model.sessions,top,bottom}; historyIndex = Math.max(0,options.findLastIndex(p=>p.at<=now));
         const focused = document.activeElement?.id === 'usage-history-chart';
         const text = (px,py,label,anchor='start',color='var(--muted)') => '<text x="'+px+'" y="'+py+'" text-anchor="'+anchor+'" fill="'+color+'" font-size="10">'+label+'</text>';
         const line = (at,kind,dash,color) => '<line id="usage-history-'+kind+'" x1="'+x(at)+'" x2="'+x(at)+'" y1="'+(top-4)+'" y2="'+bottom+'" stroke="'+color+'"'+(dash?' stroke-dasharray="'+dash+'"':'')+'/>';
         let svg = '';
+        for(const [index,s] of model.sessions.entries())svg+='<rect class="usage-history-session'+(s.current?' current':'')+'" data-session-index="'+index+'" x="'+x(Math.max(model.start,s.start_at))+'" y="'+top+'" width="'+Math.max(.75,x(s.end_at)-x(Math.max(model.start,s.start_at)))+'" height="'+(bottom-top)+'" rx="2" tabindex="0" role="button" aria-label="'+(s.current?'Current session':'Session')+', estimated, '+historyPercent(s.used_percent)+'% used. Press Enter for details."/>';
         for (const value of [100,50,0]) svg += '<line x1="'+left+'" x2="'+right+'" y1="'+y(value)+'" y2="'+y(value)+'" stroke="var(--line)"/>'+text(left-7,y(value)+4,value+'%','end');
         const markers = [[model.start,historyEl('range').value==='period'?'Period start':historyEl('range').value==='week'?'1 week ago':'24 hours ago'],[now-86400,'24 hours ago'],[now-3600,'1 hour ago']];
         let previous = -Infinity;
@@ -1262,7 +1297,12 @@ const homePage = `<!doctype html>
         svg += '<g id="usage-history-cursor" visibility="hidden" pointer-events="none"><line id="usage-history-cursor-line" y1="'+top+'" y2="'+bottom+'" stroke="#dce4dc" stroke-dasharray="2 3"/><circle id="usage-history-cursor-point" r="5" fill="var(--accent)" stroke="var(--field)" stroke-width="2"/></g>';
         plot.innerHTML = '<svg id="usage-history-chart" viewBox="0 0 '+width+' '+height+'" tabindex="0" role="group" aria-label="Remaining allowance. Recorded history is solid; gaps of an hour or more are dotted; the recent-average projection is dashed green." aria-describedby="usage-history-instructions">'+svg+'</svg>';
         bindUsageHistoryChart();
-        if (historyPinned && historySelection) historyInspect(historySelection);
+        if (historyPinned && historySelection) {
+          if(historySelection.kind?.startsWith('forecast')){
+            if(!forecast || historySelection.at<now)historyClearSelection();
+            else {const at=Math.min(historySelection.at,forecast.end.at);historyInspect({...historySelection,at,remaining_percent:Math.max(0,data.remaining_percent-forecast.rate*(at-now))});}
+          }else historyInspect(historySelection);
+        }
         else historyClearSelection();
         if (focused) historyEl('chart')?.focus({preventScroll:true});
       }
@@ -1270,6 +1310,10 @@ const homePage = `<!doctype html>
         const svg = historyEl('chart'); if (!svg || !historyView) return;
         const nearest = event => {
           const r=svg.getBoundingClientRect(), px=(event.clientX-r.left)/r.width*historyView.width, py=(event.clientY-r.top)/r.height*historyView.height;
+          const closeSamples=historyView.options.filter(p=>p.kind==='sample' && Math.abs(historyView.x(p.at)-px)<=8 && Math.abs(historyView.y(p.remaining_percent)-py)<=12);
+          if(closeSamples.length)return closeSamples.reduce((a,b)=>Math.hypot(historyView.x(b.at)-px,historyView.y(b.remaining_percent)-py)<Math.hypot(historyView.x(a.at)-px,historyView.y(a.remaining_percent)-py)?b:a);
+          const session=historyView.sessions.find(s=>px>=historyView.x(s.start_at) && px<=historyView.x(s.end_at) && py>=historyView.top && py<=historyView.bottom);
+          if(session && (!event.target || event.target.classList?.contains('usage-history-session'))){const point=historyView.options.findLast(p=>p.at<=session.end_at && !p.kind.startsWith('forecast'));return {at:session.end_at,remaining_percent:point?.remaining_percent??50,kind:'session',session};}
           return historyView.options.reduce((a,b)=>{
             const ax=Math.abs(historyView.x(a.at)-px), bx=Math.abs(historyView.x(b.at)-px);
             return bx < ax || (bx === ax && Math.abs(historyView.y(b.remaining_percent)-py) < Math.abs(historyView.y(a.remaining_percent)-py)) ? b : a;
@@ -1294,6 +1338,12 @@ const homePage = `<!doctype html>
           dot.onfocus=()=>{if(!historyPinned)historyInspect(point,true);};
           dot.onclick=event=>{event.stopPropagation();historyPinned=true;historyInspect(point,true);};
           dot.onkeydown=event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();event.stopPropagation();historyPinned=true;historyInspect(point,true);}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();if(historySelection)historyClearSelection();else usageHistoryClose();}};
+        }
+        for(const band of svg.querySelectorAll('.usage-history-session')){
+          const session=historyView.sessions[Number(band.dataset.sessionIndex)];
+          const point={at:session.end_at,remaining_percent:50,kind:'session',session};
+          band.onfocus=()=>{if(!historyPinned)historyInspect(point,true);};
+          band.onkeydown=event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();event.stopPropagation();historyPinned=true;historyInspect(point,true);}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();if(historySelection)historyClearSelection();else usageHistoryClose();}};
         }
       }
       function abortUsageHistory() { ++historyEpoch; historyController?.abort(); historyController=null; }
@@ -1339,10 +1389,15 @@ const homePage = `<!doctype html>
       for (const provider of ['chatgpt','brave']) historyEl('open-'+provider)?.addEventListener('click',()=>{void usageHistoryOpen(provider,historyEl('open-'+provider));});
       historyEl('close')?.addEventListener('click',()=>usageHistoryClose());
       historyEl('unpin')?.addEventListener('click',historyClearSelection);
+      document.addEventListener('pointerdown',event=>{
+        if(!historyDialog.open)return;
+        if(historyEl('details').open && !historyEl('details').contains(event.target))historyEl('details').open=false;
+        if(!historyEl('chart-wrap').contains(event.target))historyClearSelection();
+      });
       historyEl('details')?.addEventListener('keydown',event=>{if(event.key==='Escape' && historyEl('details').open){event.preventDefault();event.stopPropagation();historyEl('details').open=false;historyEl('details-toggle').focus({preventScroll:true});}});
       historyEl('range')?.addEventListener('change',()=>{historyClearSelection();historyData=null;historyEl('plot').innerHTML='';return usageHistoryRead();});
       historyEl('window')?.addEventListener('change',()=>{historyWindow=historyEl('window').value;historyClearSelection();historyData=null;historyEl('plot').innerHTML='';return usageHistoryRead();});
-      historyDialog?.addEventListener('cancel',event=>{event.preventDefault();if(historySelection)historyClearSelection();else usageHistoryClose();});
+      historyDialog?.addEventListener('cancel',event=>{event.preventDefault();if(historyEl('details').open){historyEl('details').open=false;historyEl('details-toggle').focus({preventScroll:true});}else if(historySelection)historyClearSelection();else usageHistoryClose();});
       historyDialog?.addEventListener('close',()=>{if(!historyDialog.open && historyProvider)usageHistoryClose();});
       historyDialog?.addEventListener('click',event=>{if(event.target===historyDialog){const r=historyDialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)usageHistoryClose();}});
       if (typeof ResizeObserver !== 'undefined' && historyEl('chart-wrap')) new ResizeObserver(()=>{if(historyDialog.open)renderUsageHistory();}).observe(historyEl('chart-wrap'));

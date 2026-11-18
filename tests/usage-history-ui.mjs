@@ -37,7 +37,8 @@ assert.equal(context.model({...data,points:points.slice(-4)},'24h',now).forecast
 const gapped = points.filter((_,i)=>i<20||i>30);
 m=context.model({...data,points:gapped},'24h',now);
 assert.equal(m.segments.length,2,'Do not draw invented history through missing samples');
-assert.equal(m.forecast.seconds,29*60,'Estimate only from the contiguous observations after the gap');
+assert.equal(m.forecast.seconds,48*60,'Combine covered intervals on both sides, excluding the missing 12 minutes');
+assert.equal(m.forecast.consumed,48,'Do not attribute the gap decrease to observed consumption');
 assert.equal(m.displaySegments.length,1,'Connect readings less than an hour apart without changing forecast coverage');
 assert.equal(m.gapConnectors.length,0);
 const sparsePoints=[{at:now-7500,remaining_percent:80,reset_at:data.reset_at},{at:now-7200,remaining_percent:79,reset_at:data.reset_at},{at:now-3600,remaining_percent:70,reset_at:data.reset_at},{at:now,remaining_percent:60,reset_at:data.reset_at}];
@@ -49,7 +50,7 @@ assert.equal(sparse.forecast,null,'Display bridges must not supply forecast evid
 assert.equal(context.model({...data,points:[sparsePoints[0],{...sparsePoints[1],at:now-3901}]},'24h',now).displaySegments.length,1,'A 3599-second gap remains solid');
 const resetPoints=points.map((p,i)=>({...p,reset_at:i<30?now-1800:now+7200,remaining_percent:i<30?100-i:130-i}));
 m=context.model({...data,remaining_percent:70,points:resetPoints},'24h',now);
-assert.equal(m.segments.length,2,'Reset must split history');assert.equal(m.forecast.seconds,30*60,'Only the current reset interval contributes to the average');
+assert.equal(m.segments.length,2,'Reset must split history');assert.equal(m.forecast.seconds,59*60,'Combine consumption measured separately within both reset periods');
 assert.equal(m.displaySegments.length,2,'Display must still break at resets');
 assert.equal(m.gapConnectors.length,0,'Never bridge a reset or balance increase');
 const brave={...data,provider:'brave',gap_seconds:0,points:[{at:now-7200,remaining_percent:100},{at:now-1800,remaining_percent:90},{at:now,remaining_percent:80}],remaining_percent:80};
@@ -67,8 +68,8 @@ assert.equal(daily.forecast.rate,12/86400,'Recent average includes idle hours');
 assert.equal(daily.forecast.end.at,now+52/(12/86400),'Recent-average projection stops at depletion');
 assert.equal(context.model({...dailyData,points:dailyPoints.slice(-61)},'24h',now).forecast.seconds,3600,'Short history is labeled with its measured duration, not a full day');
 assert.equal(context.model({...dailyData,stale:true},'24h',now).forecast,null,'Stale readings disable the forecast');
-assert.equal(context.model({...dailyData,points:dailyPoints.filter((_,i)=>i<100||i>110)},'24h',now).forecast.seconds,1330*60,'Average restarts after missing coverage');
-assert.equal(context.model({...dailyData,points:dailyPoints.map((p,i)=>({...p,reset_at:i<100?now-80000:p.reset_at}))},'24h',now).forecast.seconds,1341*60,'Average restarts after a reset');
+assert.equal(context.model({...dailyData,points:dailyPoints.filter((_,i)=>i<100||i>110)},'24h',now).forecast.seconds,1428*60,'Missing coverage is excluded without discarding earlier observed idle time');
+assert.equal(context.model({...dailyData,points:dailyPoints.map((p,i)=>({...p,reset_at:i<100?now-80000:p.reset_at}))},'24h',now).forecast.seconds,1439*60,'A reset excludes its crossing interval, not the previous recorded period');
 const idleDaily=context.model({...dailyData,remaining_percent:52,points:dailyPoints.map(p=>({...p,remaining_percent:52}))},'24h',now);
 assert.equal(idleDaily.forecast.end.at,dailyData.reset_at,'No daily consumption projects a flat balance until reset');
 assert.equal(idleDaily.forecast.end.remaining_percent,52);
@@ -92,6 +93,7 @@ class Element {
   replaceChildren(){this.children=[];}
   append(...nodes){(this.children ||= []).push(...nodes);}
   querySelectorAll(){return [];}
+  contains(node){return node===this;}
   showModal(){this.open=true;}
   close(){this.open=false;this.listeners.close?.({});}
   focus(){this.focused=true;}
@@ -99,7 +101,8 @@ class Element {
 }
 const nodes=new Map();const el=id=>{if(!nodes.has(id))nodes.set(id,new Element(id));return nodes.get(id);};
 let requests=[],delayed=null,timers=new Map(),timerID=0,metadataRenders=0;
-const dom={hidden:false,getElementById:el,createElement:tag=>new Element(tag),addEventListener(){},activeElement:null};
+const documentListeners={};
+const dom={hidden:false,getElementById:el,createElement:tag=>new Element(tag),addEventListener(type,fn){documentListeners[type]=fn;},activeElement:null};
 const env=vm.createContext({document:dom,window:{addEventListener(){}},Date,AbortController,URLSearchParams,Number,Math,
   activeProfileID:'p1',settingsPanel:{hidden:false},chatApp:{hidden:false},usageData:null,
   searchBusy:false,searchData:{revision:'saved'},searchEpoch:0,
@@ -170,9 +173,9 @@ assert.equal(el('usage-history-dialog').open,true,'A queued close event from a p
 assert.doesNotMatch(el('usage-history-note').textContent,/Forecast stops/,'Keep detailed forecast assumptions out of the compact visible footer');
 const chartHTML=el('usage-history-plot').innerHTML;
 assert.match(el('usage-history-estimate').textContent,/May run out in about/,'Familiar shows the recent-average outcome, not an hourly headline');
-assert.match(el('usage-history-basis').textContent,/Based on 1 hour of recorded history/,'Label the actual measured duration');
+assert.match(el('usage-history-basis').textContent,/Forecast:.*1 hour.*covered/,'Label forecast coverage, not all stored history');
 assert.match(el('usage-history-budget').textContent,/Daily budget: 480% \/ day/,'Show the remaining allowance divided by time until reset');
-assert.match(el('usage-history-average').textContent,/Recent average: 1,440% \/ day/);
+assert.match(el('usage-history-average').textContent,/Short-term pace: 1,440% \/ day/);
 assert.doesNotMatch(historyMarkup,/>1h pace<|>24h pace</,'Only the recent-average series appears in the legend');
 assert.match(chartHTML,/class="usage-history-recorded"[^>]*d="[^"]* C /,'Production rendering uses a smooth curve for sampled readings');
 const recordedPath=chartHTML.match(/class="usage-history-recorded" d="([^"]+)"/)[1];
@@ -192,8 +195,8 @@ env.fetch=async()=>({ok:true,json:async()=>dailyData});
 await env.openHistory('chatgpt',el('usage-history-open-chatgpt'));
 assert.doesNotMatch(el('usage-history-plot').innerHTML,/id="usage-history-forecast-daily"/,'The familiar chart has one forecast, not competing hourly and daily lines');
 assert.match(el('usage-history-estimate').textContent,/May run out/);
-assert.match(el('usage-history-rate').textContent,/idle time across 1 day/,'Explain that the average includes idle time and its actual duration');
-assert.match(el('usage-history-hourly-rate').textContent,/Last hour: 12 percentage points/,'Hourly pace moves into details');
+assert.match(el('usage-history-rate').textContent,/idle time.*1 day/,'Explain that the average includes idle time and its actual duration');
+assert.match(el('usage-history-hourly-rate').textContent,/Last hour: 12%/,'Hourly pace moves into details');
 el('usage-history-chart').onkeydown({key:'End',target:el('usage-history-chart'),preventDefault(){},stopPropagation(){}});
 assert.match(el('usage-history-tip-text').textContent,/Recent average/,'The single projection can be inspected and identified');
 env.closeHistory();
@@ -235,7 +238,7 @@ assert.match(el('usage-history-note').textContent,/Agent cap.*time-smoothed.*exa
 assert.equal(el('usage-history-value').textContent,'80 searches left','Smoothing cannot alter the exact search count');
 key('Home');key('ArrowRight');
 assert.match(el('usage-history-tip-text').textContent,/90% remaining.*Recorded/,'Inspection retains the original ledger event balance');
-assert.match(el('usage-history-hourly-rate').textContent,/Last hour: 20 percentage points/,'Ledger forecast math remains unchanged');
+assert.match(el('usage-history-hourly-rate').textContent,/Last hour: 20%/,'Ledger forecast math remains unchanged');
 env.closeHistory();
 console.log('PASS Brave smoothing with exact search counts, ledger inspection and forecasts');
 env.fetch=async()=>({ok:true,json:async()=>({...data,remaining_percent:60,points:sparsePoints})});
@@ -283,6 +286,36 @@ const budgetEnv=vm.createContext({searchData:{budget},searchBusy:false,searchBud
 vm.runInContext(budgetSource+'\nrenderSearchBudget(true);',budgetEnv);
 assert.equal(dirtyWrites,0,'Metadata refresh must not rewrite dirty cap fields, including focused timezone text');
 console.log('PASS cap drafts are not rewritten by automatic metadata rendering');
+env.fetch=async()=>({ok:true,json:async()=>({...data,sessions:[{start_at:now-3600,end_at:now,last_used_at:now,used_percent:60,current:true,estimated:true}]})});
+await env.openHistory('chatgpt',el('usage-history-open-chatgpt'));
+assert.match(el('usage-history-plot').innerHTML,/class="usage-history-session current"/,'Draw estimated sessions behind the recorded line');
+assert.equal(el('usage-history-session-legend').hidden,false);
+const sessionRect=el('usage-history-plot').innerHTML.match(/class="usage-history-session current"[^>]*x="([\d.]+)"[^>]*width="([\d.]+)"/);
+const sessionX=Number(sessionRect[1])+Number(sessionRect[2])/2;
+el('usage-history-chart').onpointerdown({button:0,pointerId:7,clientX:sessionX,clientY:180});
+el('usage-history-chart').onpointerup({pointerId:7,clientX:sessionX,clientY:180});
+assert.match(el('usage-history-tip-text').textContent,/Current session.*estimated[\s\S]*60% used/,'Cursor popup includes estimated session usage, not a footer caption');
+assert.ok(el('usage-history-tooltip').style.top,'Position the popup near the inspected point');
+const inspectedChart=el('usage-history-chart');inspectedChart.onkeydown({key:'Escape',target:inspectedChart,preventDefault(){},stopPropagation(){}});
+const exactSampleX=Number(sessionRect[1])+Number(sessionRect[2])*40/60, exactSampleY=(293-60*232/100)*400/330;
+inspectedChart.onpointermove({clientX:exactSampleX,clientY:exactSampleY,target:{classList:{contains:()=>true}}});
+assert.match(el('usage-history-tip-text').textContent,/60% remaining.*Recorded/,'A raw reading near the cursor wins over the full-height session band');
+assert.match(el('usage-history-tip-text').textContent,/Current session.*estimated/,'Exact inspection still includes session context');
+inspectedChart.onpointerdown({button:0,pointerId:8,clientX:sessionX,clientY:100});inspectedChart.onpointerup({pointerId:8,clientX:sessionX,clientY:100});
+env.fetch=async()=>({ok:true,json:async()=>({...data,stale:true,sessions:[{start_at:now-3600,end_at:now,last_used_at:now,used_percent:60,current:true,estimated:true}]})});
+await env.readHistory();
+assert.doesNotMatch(el('usage-history-tip-text').textContent,/Current session/,'A pinned session must reconcile freshness on refresh');
+el('usage-history-details').open=true;
+documentListeners.pointerdown({target:el('usage-history-value')});
+assert.equal(el('usage-history-details').open,false,'Outside pointer interaction dismisses information');
+assert.equal(el('usage-history-tooltip').hidden,true,'Outside pointer interaction dismisses the pinned chart popup');
+env.closeHistory();
+env.fetch=async()=>({ok:true,json:async()=>data});await env.openHistory('chatgpt',el('usage-history-open-chatgpt'));
+const forecastChart=el('usage-history-chart');forecastChart.onkeydown({key:'End',target:forecastChart,preventDefault(){},stopPropagation(){}});forecastChart.onkeydown({key:'Enter',target:forecastChart,preventDefault(){},stopPropagation(){}});
+env.fetch=async()=>({ok:true,json:async()=>({...data,stale:true})});await env.readHistory();
+assert.equal(el('usage-history-tooltip').hidden,true,'A stale forecast must also dismiss its pinned projected point');
+env.closeHistory();
+console.log('PASS estimated sessions in floating inspection and outside disclosure dismissal');
 // Native dialog, SVG pointer capture and real keyboard focus are not emulated by
 // the VM. --browser exercises the exact production controller/CSS in isolation;
 // the production-router suite separately covers auth, storage and ledger reads.
@@ -291,7 +324,7 @@ if (process.argv.includes('--browser')) {
   const dialog=html.match(/<dialog id="usage-history-dialog"[\s\S]*?<\/dialog>/)[0];
   const buttons=['chatgpt','brave'].map(p=>html.match(new RegExp('<button id="usage-history-open-'+p+'"[^>]*>[\\s\\S]*?<\\/button>'))[0].replace(' disabled','')).join('');
   const page='<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>'+style+'</style>'+buttons+dialog+'<script>let activeProfileID="p1";const settingsPanel={hidden:false},chatApp={hidden:false};'+modelSource+controllerSource+'</script>';
-  const calls=[];let capDisabled=false,sparseHistory=false,dailyHistory=false,readingDelay=0,gapHistory=false;
+  const calls=[];let capDisabled=false,sparseHistory=false,dailyHistory=false,readingDelay=0,gapHistory=false,sessionHistory=false;
   const server=createServer((req,res)=>{
     if(req.url==='/'){res.writeHead(200,{'Content-Type':'text/html'});res.end(page);return;}
     calls.push(req.url);
@@ -303,6 +336,7 @@ if (process.argv.includes('--browser')) {
     if(url.searchParams.get('window_id')==='five')Object.assign(result,{scope:'ChatGPT · 5-hour allowance',window_id:'five'});
     if(sparseHistory)result.points=result.points.slice(-4);
     if(gapHistory)Object.assign(result,{remaining_percent:60,points:sparsePoints.map(p=>({...p,at:p.at-now+t,reset_at:t+7200}))});
+    if(sessionHistory && result.provider==='chatgpt')result.sessions=[{start_at:t-3600,end_at:t,last_used_at:t,used_percent:60,current:true,estimated:true}];
     if(readingDelay && result.provider==='chatgpt')Object.assign(result,{observed_at:t-readingDelay,stale:readingDelay>180,points:result.points.map(p=>({...p,at:p.at-readingDelay}))});
     res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(result));
   });
@@ -422,7 +456,7 @@ if (process.argv.includes('--browser')) {
     await cdp('Emulation.setTouchEmulationEnabled',{enabled:false});
     await js("document.getElementById('usage-history-close').click()");assert.equal(await js('document.activeElement.id'),'usage-history-open-chatgpt');dailyHistory=false;
     sparseHistory=true;await js("document.getElementById('usage-history-open-chatgpt').click()");await until("!!document.getElementById('usage-history-forecast')");
-    assert.match(await js("document.getElementById('usage-history-basis').textContent"),/Based on 3 min/,'Sparse history still gives an estimate with its measured duration');
+    assert.match(await js("document.getElementById('usage-history-basis').textContent"),/Forecast:.*3 min.*covered/,'Sparse history still gives an estimate with its measured duration');
     assert.equal(await js("document.getElementById('usage-history-dialog').innerText.includes('Needs a complete hour')"),false,'Hourly explanation is hidden until requested');
     await js("document.getElementById('usage-history-details-toggle').click()");
     assert.equal(await js("document.getElementById('usage-history-dialog').innerText.includes('Needs a complete hour')"),true,'The unavailable hourly detail does not prevent a recent-average forecast');
@@ -432,7 +466,7 @@ if (process.argv.includes('--browser')) {
     assert.match(await js("document.querySelector('.usage-history-recorded').getAttribute('d')"),/ C /,'Native Brave chart uses smoothed history');
     assert.doesNotMatch(await js("document.querySelector('.usage-history-recorded').getAttribute('d')"),/ [HV] /,'Native Brave chart no longer renders steps');
     assert.match(await js("document.getElementById('usage-history-note').textContent"),/Agent cap.*time-smoothed.*exact readings/);
-    assert.match(await js("document.getElementById('usage-history-hourly-rate').textContent"),/Last hour: 20 percentage points/);
+    assert.match(await js("document.getElementById('usage-history-hourly-rate').textContent"),/Last hour: 20%/);
     await js("document.getElementById('usage-history-chart').focus()");await press('Home');await press('Enter');
     assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),/100% remaining.*Recorded.*pinned/,'Keyboard still inspects the exact ledger baseline');
     await press('Escape');
@@ -451,6 +485,35 @@ if (process.argv.includes('--browser')) {
     }
     await js("document.getElementById('usage-history-close').click()");
     assert.equal(await js('document.activeElement.id'),'usage-history-open-brave');
+    sessionHistory=true;
+    await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:844,deviceScaleFactor:1,mobile:false});
+    await js("document.getElementById('usage-history-open-chatgpt').click()");await until("!!document.querySelector('.usage-history-session.current')");
+    const sessionPoint=await js("(()=>{const r=document.querySelector('.usage-history-session.current').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()");
+    await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',...sessionPoint});
+    assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),/Current session.*estimated[\s\S]*60% used/,'Real hover shows session details in the cursor popup');
+    await cdp('Input.dispatchMouseEvent',{type:'mousePressed',...sessionPoint,button:'left',clickCount:1});await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',...sessionPoint,button:'left',clickCount:1});
+    assert.equal(await js("document.getElementById('usage-history-unpin').hidden"),false,'Click pins session details');
+    assert.equal(await js("(()=>{const t=document.getElementById('usage-history-tooltip').getBoundingClientRect(),c=document.getElementById('usage-history-chart').getBoundingClientRect();return t.left>=c.left&&t.right<=c.right&&t.top>=c.top&&t.bottom<=c.bottom})()"),true,'Session popup is contained within the chart');
+    if(process.env.UI_SCREENSHOTS){const {data}=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(join(process.env.UI_SCREENSHOTS,'history-session-popup-desktop.png'),Buffer.from(data,'base64'));}
+    const outsidePoint=await js("(()=>{const r=document.getElementById('usage-history-value').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()");
+    await cdp('Input.dispatchMouseEvent',{type:'mousePressed',...outsidePoint,button:'left',clickCount:1});await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',...outsidePoint,button:'left',clickCount:1});
+    assert.equal(await js("document.getElementById('usage-history-tooltip').hidden"),true,'Outside mouse click dismisses pinned session popup');
+    await js("document.querySelector('.usage-history-session.current').focus()");await press('Enter');assert.equal(await js("document.getElementById('usage-history-unpin').hidden"),false,'Keyboard pins a session');await press('Escape');await press('Escape');
+    assert.equal(await js("document.getElementById('usage-history-dialog').open"),false,'Second Escape from session focus closes the dialog');
+    assert.equal(await js("document.activeElement.id"),'usage-history-open-chatgpt');
+    await js("document.getElementById('usage-history-open-chatgpt').click()");await until("!!document.querySelector('.usage-history-session.current')");
+    await js("document.getElementById('usage-history-details-toggle').click()");
+    await cdp('Input.dispatchMouseEvent',{type:'mousePressed',...outsidePoint,button:'left',clickCount:1});await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',...outsidePoint,button:'left',clickCount:1});
+    assert.equal(await js("document.getElementById('usage-history-details').open"),false,'Outside click dismisses information without closing usage history');
+    await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await cdp('Emulation.setTouchEmulationEnabled',{enabled:true});
+    await js('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+    const sessionTouch=await js("(()=>{const r=document.querySelector('.usage-history-session.current').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()");
+    await cdp('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[sessionTouch]});await cdp('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+    assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),/Current session.*estimated[\s\S]*60% used/,'Real touch pins session details');
+    assert.equal(await js("document.getElementById('usage-history-unpin').hidden"),false);
+    assert.equal(await js("(()=>{const t=document.getElementById('usage-history-tooltip').getBoundingClientRect(),c=document.getElementById('usage-history-chart').getBoundingClientRect();return t.left>=c.left&&t.right<=c.right&&t.top>=c.top&&t.bottom<=c.bottom})()"),true,'Touch session popup fits the narrow chart');
+    await cdp('Emulation.setTouchEmulationEnabled',{enabled:false});await js("document.getElementById('usage-history-close').click()");sessionHistory=false;
+    console.log('PASS Chromium session hover, mouse/touch pinning, keyboard, popup bounds and outside disclosure dismissal');
     capDisabled=true;await js("document.getElementById('usage-history-open-brave').click()");await until("document.getElementById('usage-history-message').textContent.includes('disabled')");
     assert.equal(await js("document.getElementById('usage-history-plot').childElementCount"),0);assert.equal(await js("document.getElementById('usage-history-window-label').hidden"),true);
     assert.equal(await js("document.getElementById('usage-history-details').open"),false,'Reopening a provider resets the details disclosure');
@@ -458,5 +521,5 @@ if (process.argv.includes('--browser')) {
     assert.equal(await js("(()=>{const p=document.querySelector('.history-details-body').getBoundingClientRect(),d=document.getElementById('usage-history-dialog').getBoundingClientRect();return p.top>=d.top&&p.bottom<=d.bottom;})()"),true,'Details remain readable even without a chart');
     assert.deepEqual(errors,[]);assert.ok(calls.every(c=>!c.includes('/check')&&!c.includes('/refresh')));
     console.log('PASS native Chromium focus, chart inspection, keyboard details, scoped windows, sparse/empty history and scroll-free 1280/900/390/320px layout');
-  } finally {for(const job of jobs.values())clearTimeout(job.timer);socket?.close();await stopTestBrowser(browser);await rm(profile,{recursive:true,force:true});await new Promise(r=>server.close(r));}
+  } finally {for(const job of jobs.values())clearTimeout(job.timer);socket?.close();await stopTestBrowser(browser);await rm(profile,{recursive:true,force:true,maxRetries:3,retryDelay:100});await new Promise(r=>server.close(r));}
 }

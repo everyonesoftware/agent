@@ -144,13 +144,13 @@ func (s *usageService) history(entry *usageSession, rangeID, windowID string) (u
 	// the newest bounded suffix preserves genuine gaps without introducing gaps
 	// through downsampling, and shortens the labeled duration for dense bursts.
 	forecastArgs := append(append([]any{}, args...), s.now().Add(-24*time.Hour).Unix()-h.GapSeconds, s.now().Unix())
-	rows, err = s.accounts.db.Query(`SELECT at,remaining,reset_at FROM (SELECT at,remaining,reset_at FROM usage_observations WHERE `+scope+` AND window_id=? AND at>=? AND at<=? ORDER BY at DESC LIMIT 4096) ORDER BY at`, forecastArgs...)
+	rows, err = s.accounts.db.Query(`SELECT at,remaining,reset_at,minutes FROM (SELECT at,remaining,reset_at,minutes FROM usage_observations WHERE `+scope+` AND window_id=? AND at>=? AND at<=? ORDER BY at DESC LIMIT 4096) ORDER BY at`, forecastArgs...)
 	if err != nil {
 		return h, errUsageHistoryUnavailable
 	}
 	for rows.Next() {
 		var p usageHistoryPoint
-		if rows.Scan(&p.At, &p.RemainingPercent, &p.ResetAt) != nil {
+		if rows.Scan(&p.At, &p.RemainingPercent, &p.ResetAt, &p.WindowMinutes) != nil {
 			rows.Close()
 			return h, errUsageHistoryUnavailable
 		}
@@ -163,5 +163,8 @@ func (s *usageService) history(entry *usageSession, rangeID, windowID string) (u
 	}
 	h.Stale = s.now().Unix()-h.ObservedAt > h.GapSeconds || (h.ResetAt > 0 && h.ResetAt <= s.now().Unix()) || entry.view.State != "connected" || entry.view.Error != ""
 	h.Warning = entry.view.Error
+	if err = s.historySessions(&h, args, start+h.GapSeconds); err != nil {
+		return h, err
+	}
 	return h, nil
 }

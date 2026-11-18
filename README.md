@@ -138,10 +138,22 @@ remaining-search history is reconstructed from the account's successful-request
 ledger and requires an enabled Agent cap; it is not Brave's billing balance.
 History reads never issue Brave searches or model requests.
 
-Visible Settings and popups refresh metadata about every 30 seconds. Forecasts
-require a complete recent hour of observations, stop at reset or depletion, and
-are omitted when evidence is insufficient or stale. No token-to-allowance
-conversion is assumed.
+Visible Settings and popups refresh allowance/history about once per minute.
+The main forecast uses covered portions of a rolling 24-hour window, including
+observed idle time. Consumption is measured separately within compatible quota
+periods, then added across resets; replenishment and missing intervals are never
+counted as consumption or idle time. The popup distinguishes the lookback from
+actual coverage, labels short-term or partial estimates, and discloses time spent
+depleted. Estimates stop at reset or depletion and disappear when evidence is
+insufficient or stale. No token-to-allowance conversion is assumed.
+
+ChatGPT session bands are estimated usage clusters from raw allowance readings,
+not individual conversations: 30 minutes without an observed decrease separates
+sessions, as do collection gaps, resets and allowance-definition changes. Other
+clients can contribute to the provider's allowance. Hover, click/tap, or keyboard
+inspection shows session usage and duration in a floating chart popup; no session
+caption is added below the chart. Outside interaction dismisses chart and
+information popups; Escape dismisses disclosures before the history dialog.
 
 Verify the history UI and production-router/SQLite integration with:
 
