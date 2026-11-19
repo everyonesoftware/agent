@@ -179,6 +179,11 @@ el('usage-history-dialog').listeners.close({});
 assert.equal(el('usage-history-dialog').open,true,'A queued close event from a previous opening must not close the new modal');
 assert.doesNotMatch(el('usage-history-note').textContent,/Forecast stops/,'Keep detailed forecast assumptions out of the compact visible footer');
 const chartHTML=el('usage-history-plot').innerHTML;
+assert.match(chartHTML,/viewBox="0 20 800 306"/,'Crop blank SVG margins, not the data plot');
+const axis=chartHTML.match(/id="usage-history-now"[^>]*y1="([\d.]+)" y2="([\d.]+)"/);
+assert.equal(Number(axis[2])-Number(axis[1])-4,232,'Preserve the original desktop data-axis height');
+assert.match(html,/#usage-history-dialog \{[^}]*width:min\(900px,[^}]*padding:18px 20px/,'Compact padding must not enlarge the existing 900px desktop popup');
+assert.match(html,/\.history-headline \{[^}]*margin-top:10px/,'Reclaim the oversized headline gap');
 assert.match(el('usage-history-estimate').textContent,/May run out in about/,'Familiar shows the recent-average outcome, not an hourly headline');
 assert.match(el('usage-history-basis').textContent,/Forecast:.*1 hour.*covered/,'Label forecast coverage, not all stored history');
 assert.match(el('usage-history-budget').textContent,/Daily budget: 480% \/ day/,'Show the remaining allowance divided by time until reset');
@@ -196,7 +201,13 @@ const key=k=>svg.onkeydown({key:k,target:svg,preventDefault(){},stopPropagation(
 key('Home');assert.match(el('usage-history-tip-text').textContent,/100%/);key('Enter');assert.equal(el('usage-history-unpin').hidden,false);
 svg.onpointerleave();assert.equal(el('usage-history-tooltip').hidden,false,'Pinned selection survives pointer leave');
 key('Escape');assert.equal(el('usage-history-tooltip').hidden,true);assert.equal(el('usage-history-dialog').open,true);
-svg.onpointerdown({button:0,pointerId:1,clientX:400});svg.onpointermove({clientX:500});svg.onpointerup({pointerId:1,clientX:500});assert.equal(el('usage-history-unpin').hidden,false,'Pointer drag release pins a real point');
+svg.onpointermove({clientX:200,clientY:180});
+assert.equal(el('usage-history-tooltip').hidden,true,'Hovering blank full-height chart space must not inspect distant readings');
+svg.onpointerdown({button:0,pointerId:1,clientX:200,clientY:180});svg.onpointerup({pointerId:1,clientX:200,clientY:180});
+assert.equal(el('usage-history-tooltip').hidden,true,'Clicking blank space must not pin a distant reading');
+const rawPointer={clientX:487.6,clientY:(293-40*232/100-20)*400/306};
+svg.onpointerdown({button:0,pointerId:1,...rawPointer});svg.onpointermove(rawPointer);svg.onpointerup({pointerId:1,...rawPointer});assert.equal(el('usage-history-unpin').hidden,false,'Pointer drag release pins a real point');
+assert.match(el('usage-history-tip-text').textContent,/40% remaining.*Recorded.*pinned/,'Pointer inspection uses the exact raw reading after the crop');
 key('Escape');key('Escape');assert.equal(el('usage-history-dialog').open,false,'A second Escape closes the modal after clearing the chart selection');
 env.fetch=async()=>({ok:true,json:async()=>dailyData});
 await env.openHistory('chatgpt',el('usage-history-open-chatgpt'));
@@ -210,6 +221,11 @@ dom.activeElement=el('usage-history-chart');
 vm.runInContext('renderUsageHistory();',env);
 el('usage-history-chart').onkeydown({key:'Enter',target:el('usage-history-chart'),preventDefault(){},stopPropagation(){}});
 assert.match(el('usage-history-tip-text').textContent,/Recent average.*pinned/,'A redraw between End and Enter preserves the keyboard forecast selection');
+env.Date=class extends Date{static now(){return (now+1)*1000;}};
+vm.runInContext('renderUsageHistory();',env);
+assert.equal(el('usage-history-cursor-point').cx,786,'A pinned forecast endpoint follows the visible endpoint when time advances during redraw');
+assert.match(el('usage-history-tip-text').textContent,/Recent average.*pinned/);
+env.Date=class extends Date{static now(){return now*1000;}};
 dom.activeElement=null;
 env.closeHistory();
 env.fetch=async()=>({ok:true,json:async()=>idleHourData});
@@ -217,8 +233,8 @@ await env.openHistory('chatgpt',el('usage-history-open-chatgpt'));
 assert.match(el('usage-history-hourly-rate').textContent,/Last hour: no usage recorded/,'Idle hourly details do not imply the whole forecast is flat');
 const dailyPath=el('usage-history-plot').innerHTML.match(/id="usage-history-forecast" d="([^"]+)"/)[1];
 const [,dailyX,dailyY]=dailyPath.match(/L ([\d.]+) ([\d.]+)/);
-el('usage-history-chart').onpointerdown({button:0,pointerId:2,clientX:Number(dailyX),clientY:Number(dailyY)*400/330});
-el('usage-history-chart').onpointerup({pointerId:2,clientX:Number(dailyX),clientY:Number(dailyY)*400/330});
+el('usage-history-chart').onpointerdown({button:0,pointerId:2,clientX:Number(dailyX),clientY:(Number(dailyY)-20)*400/306});
+el('usage-history-chart').onpointerup({pointerId:2,clientX:Number(dailyX),clientY:(Number(dailyY)-20)*400/306});
 assert.match(el('usage-history-tip-text').textContent,/Recent average.*pinned/,'Pointer can pin the average projection during an idle hour');
 env.closeHistory();
 assert.ok(html.includes('#usage-history-dialog::backdrop'),'Native modal needs approved dark backdrop');
@@ -300,23 +316,13 @@ assert.equal(dirtyWrites,0,'Metadata refresh must not rewrite dirty cap fields, 
 console.log('PASS cap drafts are not rewritten by automatic metadata rendering');
 env.fetch=async()=>({ok:true,json:async()=>({...data,sessions:[{start_at:now-3600,end_at:now,last_used_at:now,used_percent:60,current:true,estimated:true}]})});
 await env.openHistory('chatgpt',el('usage-history-open-chatgpt'));
-assert.match(el('usage-history-plot').innerHTML,/class="usage-history-session current"/,'Draw estimated sessions behind the recorded line');
-assert.equal(el('usage-history-session-legend').hidden,false);
-const sessionRect=el('usage-history-plot').innerHTML.match(/class="usage-history-session current"[^>]*x="([\d.]+)"[^>]*width="([\d.]+)"/);
-const sessionX=Number(sessionRect[1])+Number(sessionRect[2])/2;
-el('usage-history-chart').onpointerdown({button:0,pointerId:7,clientX:sessionX,clientY:180});
-el('usage-history-chart').onpointerup({pointerId:7,clientX:sessionX,clientY:180});
-assert.match(el('usage-history-tip-text').textContent,/Current session.*estimated[\s\S]*60% used/,'Cursor popup includes estimated session usage, not a footer caption');
-assert.ok(el('usage-history-tooltip').style.top,'Position the popup near the inspected point');
-const inspectedChart=el('usage-history-chart');inspectedChart.onkeydown({key:'Escape',target:inspectedChart,preventDefault(){},stopPropagation(){}});
-const exactSampleX=Number(sessionRect[1])+Number(sessionRect[2])*40/60, exactSampleY=(293-60*232/100)*400/330;
-inspectedChart.onpointermove({clientX:exactSampleX,clientY:exactSampleY,target:{classList:{contains:()=>true}}});
-assert.match(el('usage-history-tip-text').textContent,/60% remaining.*Recorded/,'A raw reading near the cursor wins over the full-height session band');
-assert.match(el('usage-history-tip-text').textContent,/Current session.*estimated/,'Exact inspection still includes session context');
-inspectedChart.onpointerdown({button:0,pointerId:8,clientX:sessionX,clientY:100});inspectedChart.onpointerup({pointerId:8,clientX:sessionX,clientY:100});
-env.fetch=async()=>({ok:true,json:async()=>({...data,stale:true,sessions:[{start_at:now-3600,end_at:now,last_used_at:now,used_percent:60,current:true,estimated:true}]})});
-await env.readHistory();
-assert.doesNotMatch(el('usage-history-tip-text').textContent,/Current session/,'A pinned session must reconcile freshness on refresh');
+assert.doesNotMatch(el('usage-history-plot').innerHTML,/usage-history-session|<rect/,'Session evidence must not create chart rectangles or session controls');
+assert.doesNotMatch(historyMarkup,/session-legend|session-caption|inspector|session-strip/,'The popup has no session legend, strip or fixed inspector');
+key('Home');key('ArrowRight');key('Enter');
+assert.match(el('usage-history-tip-text').textContent,/99% remaining.*Recorded.*pinned/,'Inspect the exact allowance reading inside a session');
+assert.doesNotMatch(el('usage-history-tip-text').textContent,/session|estimated|used|ongoing/i,'Allowance inspection never includes session context');
+assert.ok(el('usage-history-tooltip').style.top,'Position the usage popup near the inspected point');
+assert.match(el('usage-history-hourly-rate').textContent,/Current session/,'Existing on-demand pace details remain available');
 el('usage-history-details').open=true;
 documentListeners.pointerdown({target:el('usage-history-value')});
 assert.equal(el('usage-history-details').open,false,'Outside pointer interaction dismisses information');
@@ -327,7 +333,7 @@ const forecastChart=el('usage-history-chart');forecastChart.onkeydown({key:'End'
 env.fetch=async()=>({ok:true,json:async()=>({...data,stale:true})});await env.readHistory();
 assert.equal(el('usage-history-tooltip').hidden,true,'A stale forecast must also dismiss its pinned projected point');
 env.closeHistory();
-console.log('PASS estimated sessions in floating inspection and outside disclosure dismissal');
+console.log('PASS line-only usage inspection with backend session evidence and outside disclosure dismissal');
 env.fetch=async()=>({ok:true,json:async()=>({...data,remaining_percent:70,points:resetPoints})});
 await env.openHistory('chatgpt',el('usage-history-open-chatgpt'));
 for (const range of ['24h','week']) {
@@ -348,7 +354,7 @@ if (process.argv.includes('--browser')) {
   const dialog=html.match(/<dialog id="usage-history-dialog"[\s\S]*?<\/dialog>/)[0];
   const buttons=['chatgpt','brave'].map(p=>html.match(new RegExp('<button id="usage-history-open-'+p+'"[^>]*>[\\s\\S]*?<\\/button>'))[0].replace(' disabled','')).join('');
   const page='<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>'+style+'</style>'+buttons+dialog+'<script>let activeProfileID="p1";const settingsPanel={hidden:false},chatApp={hidden:false};'+modelSource+controllerSource+'</script>';
-  const calls=[];let capDisabled=false,sparseHistory=false,dailyHistory=false,readingDelay=0,gapHistory=false,sessionHistory=false,resetHistory=false;
+  const calls=[];let capDisabled=false,sparseHistory=false,dailyHistory=false,readingDelay=0,gapHistory=false,sessionHistory=false,resetHistory=false,steepHistory=false;
   const server=createServer((req,res)=>{
     if(req.url==='/'){res.writeHead(200,{'Content-Type':'text/html'});res.end(page);return;}
     calls.push(req.url);
@@ -361,6 +367,7 @@ if (process.argv.includes('--browser')) {
     if(sparseHistory)result.points=result.points.slice(-4);
     if(gapHistory)Object.assign(result,{remaining_percent:60,points:sparsePoints.map(p=>({...p,at:p.at-now+t,reset_at:t+7200}))});
     if(resetHistory)Object.assign(result,{remaining_percent:70,points:resetPoints.map(p=>({...p,at:p.at-now+t,reset_at:p.reset_at-now+t}))});
+    if(steepHistory){const remaining=steepHistory==='recorded'?0:40;Object.assign(result,{remaining_percent:remaining,points:[{at:t-60,remaining_percent:100,reset_at:t+7200},{at:t,remaining_percent:remaining,reset_at:t+7200}]});}
     if(sessionHistory && result.provider==='chatgpt')result.sessions=[{start_at:t-3600,end_at:t,last_used_at:t,used_percent:60,current:true,estimated:true}];
     if(readingDelay && result.provider==='chatgpt')Object.assign(result,{observed_at:t-readingDelay,stale:readingDelay>180,points:result.points.map(p=>({...p,at:p.at-readingDelay}))});
     res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(result));
@@ -380,12 +387,39 @@ if (process.argv.includes('--browser')) {
     await until("!!document.getElementById('usage-history-open-chatgpt')");
     await js("document.getElementById('usage-history-open-chatgpt').click()");
     await until("!!document.getElementById('usage-history-forecast')");
+    // Real near-vertical paths: sideways proximity must not be mistaken for
+    // the distant endpoint at that X. Keep every probe away from raw/dot hits.
+    for(const kind of ['recorded','forecast']){
+      steepHistory=kind;
+      for(const width of [1280,320]){
+        await cdp('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:width<500});
+        await js('(async()=>{await usageHistoryRead();await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));})()');
+        for(const offset of [6,18]){
+          const probe=await js(`(()=>{const path=document.querySelector(${JSON.stringify(kind==='recorded'?'.usage-history-recorded':'#usage-history-forecast')}),matrix=path.getScreenCTM(),v=path.getPointAtLength(path.getTotalLength()*${kind==='recorded'?.65:.55}),s=new DOMPoint(v.x,v.y).matrixTransform(matrix),point={x:s.x+${offset},y:s.y};const optionDistance=Math.min(...historyView.options.map(p=>{const q=new DOMPoint(historyView.x(p.at),historyView.y(p.remaining_percent)).matrixTransform(matrix);return Math.hypot(q.x-point.x,q.y-point.y);}));let curveDistance=Infinity;for(const p of document.querySelectorAll('.usage-history-recorded, #usage-history-forecast')){const m=p.getScreenCTM(),length=p.getTotalLength();for(let i=0;i<=1024;i++){const q=p.getPointAtLength(length*i/1024),r=new DOMPoint(q.x,q.y).matrixTransform(m);curveDistance=Math.min(curveDistance,Math.hypot(r.x-point.x,r.y-point.y));}}return {point,optionDistance,curveDistance};})()`);
+          assert.ok(probe.optionDistance>12,kind+' probe must not activate a raw reading or threshold dot: '+JSON.stringify(probe));
+          assert.ok(offset===6?probe.curveDistance<7:probe.curveDistance>12,kind+' probe has the intended screen-space distance: '+JSON.stringify(probe));
+          await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',...probe.point});
+          assert.equal(await js("document.getElementById('usage-history-tooltip').hidden"),offset>12,kind+' curve '+offset+' CSS px sideways at width '+width+' must '+(offset<12?'inspect':'reject')+' the actual visible path');
+          if(offset<12){
+            assert.equal(await js('historyView.options.some(p=>p.at===historySelection.at && p.remaining_percent===historySelection.remaining_percent && p.kind===historySelection.kind)'),true,'Near-curve inspection selects an existing reading/threshold/forecast option, never a fitted balance');
+            assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),kind==='recorded'?/Recorded|Approximate threshold crossing/:/Recent average/,'Near-curve inspection retains the existing option provenance');
+          }
+        }
+      }
+    }
+    steepHistory=false;
+    await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:844,deviceScaleFactor:1,mobile:false});
+    await js('usageHistoryRead()');
+    console.log('PASS Chromium steep recorded/forecast sideways hits inside 12 CSS px and misses outside, including cropped narrow scaling');
     gapHistory=true;
     await js('usageHistoryRead()');
     assert.equal(await js("document.querySelectorAll('.usage-history-gap').length"),2,'Chromium draws dotted hour-gap connectors');
     assert.match(await js("document.querySelector('.usage-history-recorded').getAttribute('d')"),/ C /,'Chromium connects five-minute readings solidly');
     assert.equal(await js("document.querySelectorAll('#usage-history-chart circle[r=\"3\"]').length"),0,'Chromium removes isolated sample dots');
     assert.equal(await js("!!document.getElementById('usage-history-forecast')"),false,'Display connectors cannot create forecast evidence');
+    const gapPoint=await js("(()=>{const p=[...document.querySelectorAll('.usage-history-gap')].at(-1),v=p.getPointAtLength(p.getTotalLength()/2),s=new DOMPoint(v.x,v.y).matrixTransform(p.getScreenCTM());return {x:s.x,y:s.y};})()");
+    await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',...gapPoint});
+    assert.equal(await js("document.getElementById('usage-history-tooltip').hidden"),true,'A dotted missing-history connector is not an invented reading');
     gapHistory=false;
     await js('usageHistoryRead()');
     console.log('PASS Chromium solid nearby readings, dotted hour gaps and no isolated sample circles');
@@ -426,9 +460,11 @@ if (process.argv.includes('--browser')) {
     const press=async key=>{const event={key,code:key,windowsVirtualKeyCode:{Enter:13,Escape:27,Home:36,End:35}[key]||0};await cdp('Input.dispatchKeyEvent',{type:'keyDown',...event,...(key==='Enter'?{text:'\r',unmodifiedText:'\r'}:{})});await cdp('Input.dispatchKeyEvent',{type:'keyUp',...event});};
     await press('Home');await press('Enter');assert.equal(await js("document.getElementById('usage-history-unpin').hidden"),false);
     await press('Escape');assert.equal(await js("document.getElementById('usage-history-tooltip').hidden"),true);assert.equal(await js("document.getElementById('usage-history-dialog').open"),true);
-    const coords=await js("(()=>{const r=document.getElementById('usage-history-chart').getBoundingClientRect();return {x:r.left+r.width*.5,y:r.top+r.height*.5};})()");
-    await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',...coords});await cdp('Input.dispatchMouseEvent',{type:'mousePressed',...coords,button:'left',clickCount:1});await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',x:coords.x+20,y:coords.y,button:'left',buttons:1});await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',x:coords.x+20,y:coords.y,button:'left',clickCount:1});
+    const coords=await js("(()=>{const p=document.querySelector('.usage-history-recorded'),v=p.getPointAtLength(p.getTotalLength()),s=new DOMPoint(v.x,v.y).matrixTransform(p.getScreenCTM());return {x:s.x,y:s.y};})()");
+    const dragStart=await js("(()=>{const p=document.querySelector('.usage-history-recorded'),v=p.getPointAtLength(p.getTotalLength()*.8),s=new DOMPoint(v.x,v.y).matrixTransform(p.getScreenCTM());return {x:s.x,y:s.y};})()");
+    await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',...dragStart});await cdp('Input.dispatchMouseEvent',{type:'mousePressed',...dragStart,button:'left',clickCount:1});await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',...coords,button:'left',buttons:1});await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',...coords,button:'left',clickCount:1});
     assert.equal(await js("document.getElementById('usage-history-unpin').hidden"),false);
+    assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),/40% remaining.*Recorded.*pinned/,'Real pointer capture drag ends on the exact final reading');
     await js("document.getElementById('usage-history-unpin').click()");
     assert.equal(await js("document.getElementById('usage-history-details').open"),false,'Details start collapsed');
     assert.equal(await js("document.getElementById('usage-history-dialog').innerText.includes('current remaining')"),false);
@@ -464,7 +500,13 @@ if (process.argv.includes('--browser')) {
       if(width<=600)assert.equal(await js("(()=>{const r=document.getElementById('usage-history-range'),s=getComputedStyle(r),ctx=document.createElement('canvas').getContext('2d');ctx.font=s.font;const textWidth=Math.max(...[...r.options].map(o=>ctx.measureText(o.text).width));return r.clientWidth>=textWidth+parseFloat(s.paddingLeft)+parseFloat(s.paddingRight)+24;})()"),true,'Every range label fits with padding and room for the native arrow at '+width);
       assert.equal(await js("(()=>{const t=document.getElementById('usage-history-title').getBoundingClientRect(),r=document.getElementById('usage-history-range').getBoundingClientRect();return t.right<=r.left&&Math.abs((t.top+t.bottom-r.top-r.bottom)/2)<2;})()"),true,'Title and range share one row without overlap at '+width);
       assert.equal(await js("(()=>{const d=document.getElementById('usage-history-dialog');return d.scrollHeight<=d.clientHeight;})()"),true,'Compact dialog has no internal scrolling at '+width+'×'+height+' '+JSON.stringify(await js("(()=>{const d=document.getElementById('usage-history-dialog');return {scroll:d.scrollHeight,client:d.clientHeight,children:[...d.children].map(e=>({id:e.id,tag:e.tagName,height:e.getBoundingClientRect().height,top:e.getBoundingClientRect().top}))};})()")));
-      assert.equal(await js("document.getElementById('usage-history-chart').viewBox.baseVal.height"),width<500?310:330,'Original chart height is preserved');
+      assert.equal(await js("document.getElementById('usage-history-chart').viewBox.baseVal.y"),20,'Crop only blank space above the plot');
+      assert.equal(await js("document.getElementById('usage-history-chart').viewBox.baseVal.height"),width<500?286:306,'Crop blank SVG margins without shrinking the data axis');
+      assert.ok(await js("(()=>{const s=document.getElementById('usage-history-chart'),n=document.getElementById('usage-history-now');return (+n.getAttribute('y2')-+n.getAttribute('y1')-4)*s.getScreenCTM().d;})()") >= (width<500?212:232)*Math.min(1,(width-56)/290)-1,'Actual data-axis pixels are not reduced from the original responsive geometry at '+width);
+      if(width===1280){
+        assert.ok(await js("document.getElementById('usage-history-dialog').getBoundingClientRect().width")<=900,'Do not enlarge the existing desktop popup');
+        assert.deepEqual(await js("(()=>{const s=getComputedStyle(document.getElementById('usage-history-dialog'));return [s.paddingTop,s.paddingRight];})()"),['18px','20px']);
+      }
       await js("document.getElementById('usage-history-details-toggle').click()");
       assert.equal(await js("(()=>{const d=document.getElementById('usage-history-dialog'),p=document.querySelector('.history-details-body').getBoundingClientRect(),r=d.getBoundingClientRect();return p.left>=r.left&&p.right<=r.right&&p.top>=r.top&&p.bottom<=r.bottom&&d.scrollHeight<=d.clientHeight;})()"),true,'Open details stay inside the dialog without adding scrolling');
       await js("document.getElementById('usage-history-details-toggle').click()");
@@ -509,6 +551,10 @@ if (process.argv.includes('--browser')) {
     assert.doesNotMatch(await js("document.querySelector('.usage-history-recorded').getAttribute('d')"),/ [HV] /,'Native Brave chart no longer renders steps');
     assert.match(await js("document.getElementById('usage-history-note').textContent"),/Agent cap.*time-smoothed.*exact readings/);
     assert.match(await js("document.getElementById('usage-history-hourly-rate').textContent"),/Last hour: 20%/);
+    const curvePoint=await js("(()=>{const p=document.querySelector('.usage-history-recorded'),v=p.getPointAtLength(p.getTotalLength()*.35),s=new DOMPoint(v.x,v.y).matrixTransform(p.getScreenCTM());return {x:s.x,y:s.y};})()");
+    await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',...curvePoint});
+    assert.equal(await js("document.getElementById('usage-history-tooltip').hidden"),false,'Hovering the visible smoothed curve remains inspectable between raw readings');
+    assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),/(?:100|90|80)% remaining.*Recorded/,'Smoothed-curve inspection snaps to a real ledger reading, never a fitted balance');
     await js("document.getElementById('usage-history-chart').focus()");await press('Home');await press('Enter');
     assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),/100% remaining.*Recorded.*pinned/,'Keyboard still inspects the exact ledger baseline');
     await press('Escape');
@@ -529,33 +575,48 @@ if (process.argv.includes('--browser')) {
     assert.equal(await js('document.activeElement.id'),'usage-history-open-brave');
     sessionHistory=true;
     await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:844,deviceScaleFactor:1,mobile:false});
-    await js("document.getElementById('usage-history-open-chatgpt').click()");await until("!!document.querySelector('.usage-history-session.current')");
-    const sessionPoint=await js("(()=>{const r=document.querySelector('.usage-history-session.current').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()");
-    await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',...sessionPoint});
-    assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),/Current session.*estimated[\s\S]*60% used/,'Real hover shows session details in the cursor popup');
-    await cdp('Input.dispatchMouseEvent',{type:'mousePressed',...sessionPoint,button:'left',clickCount:1});await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',...sessionPoint,button:'left',clickCount:1});
-    assert.equal(await js("document.getElementById('usage-history-unpin').hidden"),false,'Click pins session details');
-    assert.equal(await js("(()=>{const t=document.getElementById('usage-history-tooltip').getBoundingClientRect(),c=document.getElementById('usage-history-chart').getBoundingClientRect();return t.left>=c.left&&t.right<=c.right&&t.top>=c.top&&t.bottom<=c.bottom})()"),true,'Session popup is contained within the chart');
-    if(process.env.UI_SCREENSHOTS){const {data}=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(join(process.env.UI_SCREENSHOTS,'history-session-popup-desktop.png'),Buffer.from(data,'base64'));}
+    await js("document.getElementById('usage-history-open-chatgpt').click()");await until("!!document.querySelector('.usage-history-recorded')");
+    assert.equal(await js("document.querySelectorAll('.usage-history-session, #usage-history-session-legend, .session-caption, .session-strip, .inspector').length"),0,'Session evidence creates no session UI');
+    const blankPoint=await js("(()=>{const r=document.getElementById('usage-history-chart').getBoundingClientRect();return {x:r.left+r.width/4,y:r.top+r.height/2};})()");
+    await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',...blankPoint});
+    assert.equal(await js("document.getElementById('usage-history-tooltip').hidden"),true,'Blank chart hover has no full-height hit region');
+    await cdp('Input.dispatchMouseEvent',{type:'mousePressed',...blankPoint,button:'left',clickCount:1});await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',...blankPoint,button:'left',clickCount:1});
+    assert.equal(await js("document.getElementById('usage-history-tooltip').hidden"),true,'Blank click cannot pin an invented selection');
+    const usagePoint=await endpoint('usage-history-forecast');
+    await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',...usagePoint});
+    assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),/0% remaining.*Projected/,'Hover near the visible endpoint inspects usage');
+    assert.doesNotMatch(await js("document.getElementById('usage-history-tip-text').textContent"),/session|ongoing|used|estimated/i);
+    await cdp('Input.dispatchMouseEvent',{type:'mousePressed',...usagePoint,button:'left',clickCount:1});await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',...usagePoint,button:'left',clickCount:1});
+    assert.equal(await js("document.getElementById('usage-history-unpin').hidden"),false,'Click pins usage details');
+    assert.equal(await js("(()=>{const t=document.getElementById('usage-history-tooltip').getBoundingClientRect(),c=document.getElementById('usage-history-chart').getBoundingClientRect();return t.left>=c.left&&t.right<=c.right&&t.top>=c.top&&t.bottom<=c.bottom})()"),true,'Usage popup is contained within the cropped chart');
+    if(process.env.UI_SCREENSHOTS){const {data}=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(join(process.env.UI_SCREENSHOTS,'history-usage-popup-desktop.png'),Buffer.from(data,'base64'));}
     const outsidePoint=await js("(()=>{const r=document.getElementById('usage-history-value').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()");
     await cdp('Input.dispatchMouseEvent',{type:'mousePressed',...outsidePoint,button:'left',clickCount:1});await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',...outsidePoint,button:'left',clickCount:1});
-    assert.equal(await js("document.getElementById('usage-history-tooltip').hidden"),true,'Outside mouse click dismisses pinned session popup');
-    await js("document.querySelector('.usage-history-session.current').focus()");await press('Enter');assert.equal(await js("document.getElementById('usage-history-unpin').hidden"),false,'Keyboard pins a session');await press('Escape');await press('Escape');
-    assert.equal(await js("document.getElementById('usage-history-dialog').open"),false,'Second Escape from session focus closes the dialog');
+    assert.equal(await js("document.getElementById('usage-history-tooltip').hidden"),true,'Outside mouse click dismisses pinned usage popup');
+    await js("document.getElementById('usage-history-chart').focus()");await press('Home');await js('renderUsageHistory()');await press('Enter');assert.equal(await js("document.getElementById('usage-history-unpin').hidden"),false,'Keyboard pins the selected raw reading across redraw');
+    assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),/100% remaining.*Recorded.*pinned/);
+    assert.doesNotMatch(await js("document.getElementById('usage-history-tip-text').textContent"),/session|used|ongoing/i);
+    await press('Escape');await press('Escape');
+    assert.equal(await js("document.getElementById('usage-history-dialog').open"),false,'Second Escape from chart focus closes the dialog');
     assert.equal(await js("document.activeElement.id"),'usage-history-open-chatgpt');
-    await js("document.getElementById('usage-history-open-chatgpt').click()");await until("!!document.querySelector('.usage-history-session.current')");
+    await js("document.getElementById('usage-history-open-chatgpt').click()");await until("!!document.querySelector('.usage-history-recorded')");
     await js("document.getElementById('usage-history-details-toggle').click()");
     await cdp('Input.dispatchMouseEvent',{type:'mousePressed',...outsidePoint,button:'left',clickCount:1});await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',...outsidePoint,button:'left',clickCount:1});
     assert.equal(await js("document.getElementById('usage-history-details').open"),false,'Outside click dismisses information without closing usage history');
-    await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await cdp('Emulation.setTouchEmulationEnabled',{enabled:true});
-    await js('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
-    const sessionTouch=await js("(()=>{const r=document.querySelector('.usage-history-session.current').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()");
-    await cdp('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[sessionTouch]});await cdp('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-    assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),/Current session.*estimated[\s\S]*60% used/,'Real touch pins session details');
-    assert.equal(await js("document.getElementById('usage-history-unpin').hidden"),false);
-    assert.equal(await js("(()=>{const t=document.getElementById('usage-history-tooltip').getBoundingClientRect(),c=document.getElementById('usage-history-chart').getBoundingClientRect();return t.left>=c.left&&t.right<=c.right&&t.top>=c.top&&t.bottom<=c.bottom})()"),true,'Touch session popup fits the narrow chart');
+    await cdp('Emulation.setTouchEmulationEnabled',{enabled:true});
+    for(const width of [390,320]){
+      await cdp('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:true});
+      await js('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+      const usageTouch=await endpoint('usage-history-forecast');
+      await cdp('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[usageTouch]});await cdp('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+      assert.match(await js("document.getElementById('usage-history-tip-text').textContent"),/0% remaining.*Projected.*pinned/,'Real touch pins usage details');
+      assert.doesNotMatch(await js("document.getElementById('usage-history-tip-text').textContent"),/session|used|ongoing/i);
+      assert.equal(await js("document.getElementById('usage-history-unpin').hidden"),false);
+      assert.equal(await js("(()=>{const t=document.getElementById('usage-history-tooltip').getBoundingClientRect(),c=document.getElementById('usage-history-chart').getBoundingClientRect();return t.left>=c.left&&t.right<=c.right&&t.top>=c.top&&t.bottom<=c.bottom})()"),true,'Touch usage popup fits the cropped chart at '+width);
+      await js("document.getElementById('usage-history-unpin').click()");
+    }
     await cdp('Emulation.setTouchEmulationEnabled',{enabled:false});await js("document.getElementById('usage-history-close').click()");sessionHistory=false;
-    console.log('PASS Chromium session hover, mouse/touch pinning, keyboard, popup bounds and outside disclosure dismissal');
+    console.log('PASS Chromium usage-only hover, blank-space rejection, mouse/touch pinning, keyboard redraw, popup bounds and outside dismissal');
     capDisabled=true;await js("document.getElementById('usage-history-open-brave').click()");await until("document.getElementById('usage-history-message').textContent.includes('disabled')");
     assert.equal(await js("document.getElementById('usage-history-plot').childElementCount"),0);assert.equal(await js("document.getElementById('usage-history-window-label').hidden"),true);
     assert.equal(await js("document.getElementById('usage-history-details').open"),false,'Reopening a provider resets the details disclosure');

@@ -404,14 +404,14 @@ const homePage = `<!doctype html>
     #usage-error, #usage-confirm-error { color:#efada5; }
     .usage-history-trigger { font-size:11px; color:var(--muted); white-space:nowrap; }
     #usage-history-open-chatgpt { margin-top:8px; }
-    #usage-history-dialog { width:min(900px,calc(100% - 48px)); max-width:none; max-height:calc(100dvh - 48px); overflow:auto; padding:24px; border:1px solid #394139; border-radius:10px; background:var(--field); color:#e1e6e2; box-shadow:0 24px 100px #0008; }
+    #usage-history-dialog { width:min(900px,calc(100% - 48px)); max-width:none; max-height:calc(100dvh - 48px); overflow:auto; padding:18px 20px; border:1px solid #394139; border-radius:10px; background:var(--field); color:#e1e6e2; box-shadow:0 24px 100px #0008; }
     #usage-history-dialog::backdrop { background:#0009; }
     #usage-history-dialog h2 { margin:0; font-size:18px; font-weight:500; }
     #usage-history-dialog p { margin:0; }
     #usage-history-scope { font-size:11px; color:var(--muted); }
-    .history-top { gap:14px; align-items:center; flex-wrap:nowrap; }
+    .history-top { gap:10px; align-items:center; flex-wrap:nowrap; }
     .history-top > div:first-child { min-width:0; }
-    .history-popup-actions { display:flex; align-items:center; gap:12px; margin-left:auto; flex-shrink:0; }
+    .history-popup-actions { display:flex; align-items:center; gap:10px; margin-left:auto; flex-shrink:0; }
     .history-popup-actions label { display:flex; align-items:center; gap:8px; color:var(--muted); white-space:nowrap; font-size:11px; }
     #usage-history-dialog button, #usage-history-dialog select { min-height:36px; padding:6px 11px; border:1px solid #394139; border-radius:5px; background:transparent; color:inherit; }
     #usage-history-dialog select option { background:var(--field); }
@@ -420,7 +420,7 @@ const homePage = `<!doctype html>
     #usage-history-window-label { display:block; margin-top:10px; font-size:11px; color:var(--muted); }
     #usage-history-window-label[hidden] { display:none; }
     #usage-history-window { margin-left:8px; }
-    .history-headline { display:flex; align-items:baseline; gap:10px; margin-top:23px; }
+    .history-headline { display:flex; align-items:baseline; gap:10px; margin-top:10px; }
     .history-headline strong { font-size:26px; font-weight:500; font-variant-numeric:tabular-nums; }
     .history-headline > span { margin-left:auto; font-size:11px; color:#c6ad7d; text-align:right; }
     .history-outlook { margin-top:5px; }
@@ -429,12 +429,12 @@ const homePage = `<!doctype html>
     #usage-history-comparison.over-budget, #usage-history-estimate.over-budget { color:#c6ad7d; }
     #usage-history-message { font-size:11px; color:var(--muted); margin-top:8px!important; }
     #usage-history-message:empty { display:none; }
-    #usage-history-chart-wrap { position:relative; margin-top:10px; touch-action:pan-y; }
+    #usage-history-chart-wrap { position:relative; margin-top:6px; touch-action:pan-y; }
     #usage-history-chart { display:block; width:100%; overflow:visible; cursor:crosshair; }
     #usage-history-tooltip { position:absolute; top:7px; z-index:2; width:260px; max-width:calc(100% - 8px); padding:10px 30px 10px 12px; border:1px solid #394139; border-radius:6px; background:var(--field); box-shadow:0 6px 22px #0003; pointer-events:none; font-size:11px; line-height:1.6; white-space:pre-line; }
     #usage-history-tooltip.pinned { border-color:var(--accent); }
     #usage-history-unpin { position:absolute; top:3px; right:3px; min-height:28px!important; padding:0 6px!important; border:0!important; pointer-events:auto; }
-    .history-bottom { display:flex; justify-content:space-between; align-items:center; gap:16px; border-top:1px solid var(--line); padding-top:8px; margin-top:8px; }
+    .history-bottom { display:flex; justify-content:space-between; align-items:center; gap:10px; border-top:1px solid var(--line); padding-top:8px; margin-top:5px; }
     .history-forecast { position:relative; display:flex; align-items:center; gap:6px; min-width:0; }
     #usage-history-details summary { display:flex; align-items:center; justify-content:center; width:28px; height:28px; cursor:pointer; list-style:none; color:var(--muted); border:1px solid #566151; border-radius:50%; font-size:12px; }
     #usage-history-details summary::-webkit-details-marker { display:none; }
@@ -451,16 +451,11 @@ const homePage = `<!doctype html>
     .history-legend span { display:inline-flex; align-items:center; gap:6px; }
     .history-legend i { width:20px; border-top:2px solid var(--accent); }
     .history-legend .projected { border-top-style:dashed; }
-    .usage-history-session { fill:#b4d6a312; stroke:#b4d6a340; cursor:pointer; }
-    .usage-history-session.current { fill:#b4d6a326; stroke:#b4d6a366; }
-    .usage-history-session:hover, .usage-history-session:focus-visible { fill:#b4d6a340; stroke:var(--accent); outline:none; }
-    .history-legend i.session { min-height:11px; width:18px; padding:0; border:1px solid #b4d6a366; background:#b4d6a326; }
     @media(min-width:601px) and (max-height:700px) {
       #usage-history-dialog { padding:16px; max-height:calc(100dvh - 32px); }
-      .history-headline { margin-top:12px; }
     }
     @media(max-width:600px) {
-      #usage-history-dialog { width:calc(100% - 20px); max-height:calc(100dvh - 20px); padding:17px; }
+      #usage-history-dialog { width:calc(100% - 20px); max-height:calc(100dvh - 20px); padding:14px 16px; }
       #usage-history-dialog h2 { font-size:16px; }
       .history-top { gap:6px; }
       .history-popup-actions { gap:6px; }
@@ -470,7 +465,7 @@ const homePage = `<!doctype html>
       #usage-history-range { width:auto; min-width:120px; max-width:none; font-size:11px; }
       #usage-history-close { width:44px; flex-shrink:0; }
       #usage-history-details summary { width:44px; height:44px; }
-      .history-headline { flex-wrap:wrap; gap:7px; margin-top:18px; }
+      .history-headline { flex-wrap:wrap; gap:7px; margin-top:8px; }
       .history-headline strong { font-size:24px; }
       .history-bottom { flex-direction:column; align-items:flex-start; gap:4px; }
       .history-forecast { width:100%; }
@@ -730,7 +725,7 @@ const homePage = `<!doctype html>
     <p id="usage-history-message" role="status"></p>
     <div id="usage-history-chart-wrap"><div id="usage-history-plot"></div><div id="usage-history-tooltip" role="status" hidden><span id="usage-history-tip-text"></span><button id="usage-history-unpin" type="button" aria-label="Unpin selected point" hidden>×</button></div></div>
     <p id="usage-history-instructions" class="visually-hidden">Hover to inspect. Click or tap to pin. Drag to explore. Use arrow keys, Home and End to select points; Enter or Space to pin; Escape to clear selection.</p>
-    <div class="history-bottom"><div class="history-forecast"><p id="usage-history-basis"></p><details id="usage-history-details"><summary id="usage-history-details-toggle" aria-label="Forecast details">i</summary><div class="history-details-body"><p id="usage-history-scope" hidden></p><label id="usage-history-window-label" hidden>Allowance window <select id="usage-history-window"></select></label><p id="usage-history-rate"></p><p id="usage-history-hourly-rate"></p><p id="usage-history-note">Estimates only.</p><p class="history-assumptions">The forecast combines consumption measured separately within covered portions of the past 24 hours, including observed idle time. Resets do not erase earlier comparable history; replenishment is not consumption. Missing intervals are excluded, never counted as idle time. Short or partial history may be unrepresentative. Daily budget divides remaining allowance by days until reset; % / day refers to the total allowance, not the remaining balance. Session bands estimate activity from allowance decreases separated by 30 minutes without an observed decrease; gaps and resets split them. They are not individual chats, and usage outside Agent can contribute. Smoothing changes only the drawing, not the readings or forecast.</p></div></details></div><div class="history-legend"><span><i></i>Recorded</span><span><i class="projected"></i>Recent average</span><span id="usage-history-session-legend" hidden><i class="session"></i>Sessions</span></div></div>
+    <div class="history-bottom"><div class="history-forecast"><p id="usage-history-basis"></p><details id="usage-history-details"><summary id="usage-history-details-toggle" aria-label="Forecast details">i</summary><div class="history-details-body"><p id="usage-history-scope" hidden></p><label id="usage-history-window-label" hidden>Allowance window <select id="usage-history-window"></select></label><p id="usage-history-rate"></p><p id="usage-history-hourly-rate"></p><p id="usage-history-note">Estimates only.</p><p class="history-assumptions">The forecast combines consumption measured separately within covered portions of the past 24 hours, including observed idle time. Resets do not erase earlier comparable history; replenishment is not consumption. Missing intervals are excluded, never counted as idle time. Short or partial history may be unrepresentative. Daily budget divides remaining allowance by days until reset; % / day refers to the total allowance, not the remaining balance. Current session estimates activity from allowance decreases separated by 30 minutes without an observed decrease; gaps and resets split sessions. They are not individual chats, and usage outside Agent can contribute. Smoothing changes only the drawing, not the readings or forecast.</p></div></details></div><div class="history-legend"><span><i></i>Recorded</span><span><i class="projected"></i>Recent average</span></div></div>
     <div id="usage-history-selection" class="visually-hidden" aria-live="polite"></div>
   </dialog>
   <script>
@@ -1214,18 +1209,15 @@ const homePage = `<!doctype html>
         if (!point || !historyView) return;
         historySelection = point;
         const projected = point.kind?.startsWith('forecast'), milestone = point.kind?.includes('milestone');
-        const session=point.session ? historyView.sessions.find(s=>s.start_at===point.session.start_at) : (!projected && historyView.sessions.find(s=>point.at>=s.start_at && point.at<=s.end_at));
-        if(point.kind==='session' && !session){historyClearSelection();return;}
-        if(point.kind==='session'){point={...point,at:session.end_at,session};historySelection=point;}
-        const sessionText=session ? (session.current?'Current session':'Session')+' · estimated\n'+historyPercent(session.used_percent)+'% used · '+historyDuration(session.end_at-session.start_at)+(session.current?' · ongoing':'')+'\n'+new Date(session.start_at*1000).toLocaleString()+' – '+new Date(session.end_at*1000).toLocaleString() : '';
-        const text = (point.kind==='session'?sessionText:historyPercent(point.remaining_percent) + '% remaining · ' + new Date(point.at*1000).toLocaleString() + ' · ' + (projected ? 'Projected · Recent average' : milestone ? (historyData.provider === 'brave' ? 'Recorded threshold crossing' : 'Approximate threshold crossing') : 'Recorded')+(sessionText?'\n\n'+sessionText:'')) + (historyPinned ? ' · pinned' : '');
+        const text = historyPercent(point.remaining_percent) + '% remaining · ' + new Date(point.at*1000).toLocaleString() + ' · ' + (projected ? 'Projected · Recent average' : milestone ? (historyData.provider === 'brave' ? 'Recorded threshold crossing' : 'Approximate threshold crossing') : 'Recorded') + (historyPinned ? ' · pinned' : '');
         historyEl('tip-text').textContent = text;
         const tip = historyEl('tooltip'); tip.hidden = false; tip.classList.toggle('pinned',historyPinned);
         historyEl('unpin').hidden = !historyPinned;
         const tipWidth=tip.offsetWidth||260, tipHeight=tip.offsetHeight||100;
-        tip.style.left = Math.max(4,Math.min(historyView.width-tipWidth-4,historyView.x(point.at)-tipWidth/2)) + 'px';
-        tip.style.top = Math.max(4,Math.min(historyView.height-tipHeight-4,historyView.y(point.remaining_percent)-tipHeight-12)) + 'px';
-        historyEl('cursor')?.setAttribute('visibility',point.kind==='session'?'hidden':'visible');
+        const bounds=historyEl('chart').getBoundingClientRect();
+        tip.style.left = Math.max(4,Math.min(bounds.width-tipWidth-4,historyView.x(point.at)*bounds.width/historyView.width-tipWidth/2)) + 'px';
+        tip.style.top = Math.max(4,Math.min(bounds.height-tipHeight-4,(historyView.y(point.remaining_percent)-historyView.viewTop)*bounds.height/historyView.height-tipHeight-12)) + 'px';
+        historyEl('cursor')?.setAttribute('visibility','visible');
         for (const key of ['x1','x2']) historyEl('cursor-line')?.setAttribute(key,historyView.x(point.at));
         historyEl('cursor-point')?.setAttribute('cx',historyView.x(point.at));
         historyEl('cursor-point')?.setAttribute('cy',historyView.y(point.remaining_percent));
@@ -1248,7 +1240,6 @@ const homePage = `<!doctype html>
         for (const w of availableWindows) { const option = document.createElement('option'); option.value = w.id; option.textContent = w.label; select.append(option); }
         select.value = historyWindow;
         const forecast = model.forecast, overBudget = !!forecast && forecast.end.at < data.reset_at;
-        historyEl('session-legend').hidden=!model.sessions.length;
         historyEl('estimate').textContent = forecast ? data.remaining_percent === 0 ? 'Allowance depleted' : forecast.rate === 0 ? 'No usage recorded in the observed history' : overBudget ? 'May run out in about ' + historyDuration(forecast.end.at-now) : 'About ' + historyPercent(forecast.end.remaining_percent) + '% projected at reset' : 'Forecast unavailable';
         historyEl('estimate').classList.toggle('over-budget',overBudget);
         const shortHistory=forecast && forecast.lookback<86400, partialHistory=forecast && forecast.lookback-forecast.seconds>1;
@@ -1270,7 +1261,8 @@ const homePage = `<!doctype html>
           if (!historyEl('message').textContent) historyEl('message').textContent = data.provider === 'brave' && !current ? 'Agent cap is disabled. Search tracking continues, but remaining allowance has no percentage until a cap is enabled.' : 'No recorded history for this window yet. Missing data does not mean no allowance remains.';
           return;
         }
-        const width = Math.max(290,plot.clientWidth || 800), height = width < 500 ? 310 : 330;
+        // Crop unused margins while retaining the original data-axis geometry.
+        const width = Math.max(290,plot.clientWidth || 800), height = width < 500 ? 310 : 330, viewTop=20, viewHeight=height-24;
         const left=40,right=width-14,top=61,bottom=height-37,lookback=Math.max(60,now-model.start);
         const future = historyEl('range').value === 'period' && data.reset_at > now ? data.reset_at-now : lookback*2/3;
         const end = now+Math.max(60,future), x = at => left+(at-model.start)/(end-model.start)*(right-left), y = value => bottom-value/100*(bottom-top);
@@ -1279,11 +1271,10 @@ const homePage = `<!doctype html>
         options.sort((a,b)=>a.at-b.at);
         const focused = document.activeElement?.id === 'usage-history-chart';
         const selectedIndex=focused && historySelection ? options.findIndex(p=>p.kind===historySelection.kind && (p.kind==='forecast' || (p.remaining_percent===historySelection.remaining_percent && (p.kind.startsWith('forecast') || p.at===historySelection.at)))) : -1;
-        historyView = {x,y,width,height,options,sessions:model.sessions,top,bottom}; historyIndex = selectedIndex>=0?selectedIndex:Math.max(0,options.findLastIndex(p=>p.at<=now));
+        historyView = {x,y,width,height:viewHeight,viewTop,options,segments:model.displaySegments,top,bottom}; historyIndex = selectedIndex>=0?selectedIndex:Math.max(0,options.findLastIndex(p=>p.at<=now));
         const text = (px,py,label,anchor='start',color='var(--muted)') => '<text x="'+px+'" y="'+py+'" text-anchor="'+anchor+'" fill="'+color+'" font-size="10">'+label+'</text>';
         const line = (at,kind,dash,color) => '<line id="usage-history-'+kind+'" x1="'+x(at)+'" x2="'+x(at)+'" y1="'+(top-4)+'" y2="'+bottom+'" stroke="'+color+'"'+(dash?' stroke-dasharray="'+dash+'"':'')+'/>';
         let svg = '';
-        for(const [index,s] of model.sessions.entries())svg+='<rect class="usage-history-session'+(s.current?' current':'')+'" data-session-index="'+index+'" x="'+x(Math.max(model.start,s.start_at))+'" y="'+top+'" width="'+Math.max(.75,x(s.end_at)-x(Math.max(model.start,s.start_at)))+'" height="'+(bottom-top)+'" rx="2" tabindex="0" role="button" aria-label="'+(s.current?'Current session':'Session')+', estimated, '+historyPercent(s.used_percent)+'% used. Press Enter for details."/>';
         for (const value of [100,50,0]) svg += '<line x1="'+left+'" x2="'+right+'" y1="'+y(value)+'" y2="'+y(value)+'" stroke="var(--line)"/>'+text(left-7,y(value)+4,value+'%','end');
         const markers = [[model.start,historyEl('range').value==='period'?'Period start':historyEl('range').value==='week'?'1 week ago':'24 hours ago'],[now-86400,'24 hours ago'],[now-3600,'1 hour ago']];
         let previous = -Infinity;
@@ -1300,12 +1291,12 @@ const homePage = `<!doctype html>
         else if (data.reset_at > end) historyEl('reset').textContent += ' · beyond chart';
         for (const at of model.resets) svg += line(at,'past-reset-'+at,'6 4','#c6ad7d')+text(x(at),top-32,'Reset',x(at)-left<40?'start':'end','#c6ad7d');
         svg += '<g id="usage-history-cursor" visibility="hidden" pointer-events="none"><line id="usage-history-cursor-line" y1="'+top+'" y2="'+bottom+'" stroke="#dce4dc" stroke-dasharray="2 3"/><circle id="usage-history-cursor-point" r="5" fill="var(--accent)" stroke="var(--field)" stroke-width="2"/></g>';
-        plot.innerHTML = '<svg id="usage-history-chart" viewBox="0 0 '+width+' '+height+'" tabindex="0" role="group" aria-label="Remaining allowance. Recorded history is solid; gaps of an hour or more are dotted; the recent-average projection is dashed green." aria-describedby="usage-history-instructions">'+svg+'</svg>';
+        plot.innerHTML = '<svg id="usage-history-chart" viewBox="0 '+viewTop+' '+width+' '+viewHeight+'" tabindex="0" role="group" aria-label="Remaining allowance. Recorded history is solid; gaps of an hour or more are dotted; the recent-average projection is dashed green." aria-describedby="usage-history-instructions">'+svg+'</svg>';
         bindUsageHistoryChart();
         if (historyPinned && historySelection) {
           if(historySelection.kind?.startsWith('forecast')){
-            if(!forecast || historySelection.at<now)historyClearSelection();
-            else {const at=Math.min(historySelection.at,forecast.end.at);historyInspect({...historySelection,at,remaining_percent:Math.max(0,data.remaining_percent-forecast.rate*(at-now))});}
+            const selected=options.find(p=>p.kind===historySelection.kind && (p.kind==='forecast' || p.remaining_percent===historySelection.remaining_percent));
+            if(!selected)historyClearSelection();else historyInspect(selected);
           }else historyInspect(historySelection);
         }
         else if(focused && selectedIndex>=0)historyInspect(options[historyIndex]);
@@ -1315,20 +1306,35 @@ const homePage = `<!doctype html>
       function bindUsageHistoryChart() {
         const svg = historyEl('chart'); if (!svg || !historyView) return;
         const nearest = event => {
-          const r=svg.getBoundingClientRect(), px=(event.clientX-r.left)/r.width*historyView.width, py=(event.clientY-r.top)/r.height*historyView.height;
-          const closeSamples=historyView.options.filter(p=>p.kind==='sample' && Math.abs(historyView.x(p.at)-px)<=8 && Math.abs(historyView.y(p.remaining_percent)-py)<=12);
-          if(closeSamples.length)return closeSamples.reduce((a,b)=>Math.hypot(historyView.x(b.at)-px,historyView.y(b.remaining_percent)-py)<Math.hypot(historyView.x(a.at)-px,historyView.y(a.remaining_percent)-py)?b:a);
-          const session=historyView.sessions.find(s=>px>=historyView.x(s.start_at) && px<=historyView.x(s.end_at) && py>=historyView.top && py<=historyView.bottom);
-          if(session && (!event.target || event.target.classList?.contains('usage-history-session'))){const point=historyView.options.findLast(p=>p.at<=session.end_at && !p.kind.startsWith('forecast'));return {at:session.end_at,remaining_percent:point?.remaining_percent??50,kind:'session',session};}
-          return historyView.options.reduce((a,b)=>{
-            const ax=Math.abs(historyView.x(a.at)-px), bx=Math.abs(historyView.x(b.at)-px);
-            return bx < ax || (bx === ax && Math.abs(historyView.y(b.remaining_percent)-py) < Math.abs(historyView.y(a.remaining_percent)-py)) ? b : a;
-          });
+          const r=svg.getBoundingClientRect(), px=(event.clientX-r.left)/r.width*historyView.width, py=historyView.viewTop+(event.clientY-r.top)/r.height*historyView.height;
+          const distance=p=>Math.hypot((historyView.x(p.at)-px)*r.width/historyView.width,(historyView.y(p.remaining_percent)-py)*r.height/historyView.height);
+          const closest=points=>points.reduce((a,b)=>!a||distance(b)<distance(a)?b:a,null);
+          // Exact observations and threshold dots win near their true positions.
+          const close=historyView.options.filter(p=>distance(p)<=12);
+          if(close.length)return closest(close);
+          // The smoothed drawing may differ from raw readings. Hit the actual
+          // visible curve, then inspect a real reading from that same segment;
+          // never fabricate a balance or activate a blank full-height region.
+          for(const [index,path] of [...svg.querySelectorAll('.usage-history-recorded, #usage-history-forecast')].entries()){
+            // Search by Euclidean distance, not X: a sideways offset beside a
+            // steep curve can otherwise clamp to a far-away endpoint. Bound
+            // work per pointer event, then refine the best length interval.
+            const length=path.getTotalLength(),step=length/64;
+            const pathDistance=at=>{const p=path.getPointAtLength(at);return Math.hypot((p.x-px)*r.width/historyView.width,(p.y-py)*r.height/historyView.height);};
+            let best=0,bestDistance=pathDistance(0);
+            for(let i=1;i<=64;i++){const at=i*step,d=pathDistance(at);if(d<bestDistance){best=at;bestDistance=d;}}
+            let lo=Math.max(0,best-step),hi=Math.min(length,best+step);
+            for(let i=0;i<16;i++){const a=lo+(hi-lo)/3,b=hi-(hi-lo)/3,da=pathDistance(a),db=pathDistance(b);bestDistance=Math.min(bestDistance,da,db);if(da<db)hi=b;else lo=a;}
+            if(bestDistance>12)continue;
+            const segment=historyView.segments[index];
+            return closest(historyView.options.filter(p=>path.id==='usage-history-forecast'?p.kind.startsWith('forecast'):!p.kind.startsWith('forecast') && p.at>=segment[0].at && p.at<=segment.at(-1).at));
+          }
+          return null;
         };
-        svg.onpointermove = event => { if (!historyPinned || historyDragging) historyInspect(nearest(event)); };
+        svg.onpointermove = event => { if (!historyPinned || historyDragging) {const point=nearest(event);if(point)historyInspect(point);else if(!historyDragging)historyClearSelection();} };
         svg.onpointerleave = () => { if (!historyPinned && !historyDragging) historyClearSelection(); };
-        svg.onpointerdown = event => { if (event.button !== 0) return; historyDragging=true; historyPinned=false; svg.setPointerCapture?.(event.pointerId); historyInspect(nearest(event)); };
-        svg.onpointerup = event => { if (!historyDragging) return; historyDragging=false; historyPinned=true; historyInspect(nearest(event),true); if (svg.hasPointerCapture?.(event.pointerId)) svg.releasePointerCapture(event.pointerId); };
+        svg.onpointerdown = event => { if (event.button !== 0) return; const point=nearest(event);if(!point){historyClearSelection();return;} historyDragging=true; historyPinned=false; svg.setPointerCapture?.(event.pointerId); historyInspect(point); };
+        svg.onpointerup = event => { if (!historyDragging) return; historyDragging=false;const point=nearest(event);if(point){historyPinned=true;historyInspect(point,true);}else historyClearSelection(); if (svg.hasPointerCapture?.(event.pointerId)) svg.releasePointerCapture(event.pointerId); };
         svg.onpointercancel = historyClearSelection;
         svg.onkeydown = event => {
           if (event.target !== svg) return;
@@ -1344,12 +1350,6 @@ const homePage = `<!doctype html>
           dot.onfocus=()=>{if(!historyPinned)historyInspect(point,true);};
           dot.onclick=event=>{event.stopPropagation();historyPinned=true;historyInspect(point,true);};
           dot.onkeydown=event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();event.stopPropagation();historyPinned=true;historyInspect(point,true);}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();if(historySelection)historyClearSelection();else usageHistoryClose();}};
-        }
-        for(const band of svg.querySelectorAll('.usage-history-session')){
-          const session=historyView.sessions[Number(band.dataset.sessionIndex)];
-          const point={at:session.end_at,remaining_percent:50,kind:'session',session};
-          band.onfocus=()=>{if(!historyPinned)historyInspect(point,true);};
-          band.onkeydown=event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();event.stopPropagation();historyPinned=true;historyInspect(point,true);}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();if(historySelection)historyClearSelection();else usageHistoryClose();}};
         }
       }
       function abortUsageHistory() { ++historyEpoch; historyController?.abort(); historyController=null; }
