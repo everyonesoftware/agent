@@ -44,11 +44,14 @@ const signInSource=source.match(/async function requireSignIn\(\) \{[\s\S]*?\n  
 let stopped=0;
 const signInContext=vm.createContext({
   modelStorageKey:'everyoneagent.model.old-user',authorizationController:null,resetMemory(){},fetch:async()=>({ok:true,json:async()=>({id:'new-user',username:'New user'})}),
-  document:{getElementById:()=>({})},authGate:{hidden:false},chatApp:{hidden:true},restorePage(){},connectionStatus:{},
+  document:{getElementById:()=>({})},authLoading:{hidden:false},authGate:{hidden:true},chatApp:{hidden:true},restorePage(){},connectionStatus:{},
   refreshConnectionState:async()=>{},refreshConversations:async()=>{},stopUsage(){},stopDeviceLogin(){stopped++;},connectionBusy:false,
 });
 vm.runInContext(signInSource,signInContext);
 await vm.runInContext('requireSignIn()',signInContext);
+assert.equal(signInContext.authLoading.hidden,true,'A resolved session must hide neutral loading');
+assert.equal(signInContext.authGate.hidden,true,'A valid session must keep the login form hidden');
+assert.equal(signInContext.chatApp.hidden,false,'A valid session opens the conversation workspace');
 assert.equal(stopped,1,'Changing the authenticated Agent user must discard the previous user’s device code and pending responses');
 console.log('PASS pending device login is isolated across Agent accounts');
 const controlsSource=source.match(/function updateConnectionControls\(\) \{[\s\S]*?\n      \}/)[0];

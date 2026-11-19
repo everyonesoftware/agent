@@ -337,6 +337,16 @@ const homePage = `<!doctype html>
     }
     .auth-gate { width: 100%; height: 100vh; height: 100dvh; margin: 0; padding: 0; border: 0; border-radius: 0; background: #202322; display: flex; flex-direction: column; overflow-y: auto; }
     .auth-header { min-height: 90px; padding: 20px 44px; border: 0; }
+    .auth-loading-center { flex: 1; display: grid; place-items: center; padding: 24px 24px 100px; }
+    .auth-loading-status { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    .auth-loading-status p { margin: 0; color: var(--muted); font-size: 13px; }
+    .auth-loading-spinner { width: 22px; height: 22px; border: 2px solid #39413c; border-top-color: var(--accent); border-radius: 50%; animation: auth-loading-spin 1s linear infinite; }
+    @keyframes auth-loading-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .auth-loading-spinner { animation: none; border-right-color: var(--accent); } }
+    @media (max-width: 600px) {
+      #auth-loading .auth-header { padding: 20px 24px; min-height: 80px; }
+      .auth-loading-center { padding-bottom: 80px; }
+    }
 
     .auth-center { flex: 1; display: grid; place-items: center; padding: 30px 24px; }
     .auth-content { width: min(360px, 100%); }
@@ -473,7 +483,11 @@ const homePage = `<!doctype html>
   </style>
 </head>
 <body>
-  <main class="auth-gate" id="auth-gate">
+  <main class="auth-gate" id="auth-loading" aria-label="Loading Agent" aria-busy="true">
+    <header class="auth-header"><div class="brand"><span class="mark" aria-hidden="true">e1</span>Agent</div></header>
+    <div class="auth-loading-center"><div class="auth-loading-status" role="status"><span class="auth-loading-spinner" aria-hidden="true"></span><p>Loading Agent…</p></div></div>
+  </main>
+  <main class="auth-gate" id="auth-gate" hidden>
     <header class="auth-header"><div class="brand"><span class="mark" aria-hidden="true">e1</span>Agent</div></header>
     <div class="auth-center"><div class="auth-content">
     <h1 id="auth-title">Welcome back.</h1>
@@ -775,6 +789,7 @@ const homePage = `<!doctype html>
       let modelStorageKey = 'everyoneagent.model';
 
       const authGate = document.getElementById('auth-gate');
+      const authLoading = document.getElementById('auth-loading');
       const chatApp = document.getElementById('chat-app');
       const accountForm = document.getElementById('account-form');
       const authError = document.getElementById('auth-error');
@@ -2673,6 +2688,9 @@ const homePage = `<!doctype html>
       }
 
       async function requireSignIn() {
+        authLoading.hidden = false;
+        authGate.hidden = true;
+        chatApp.hidden = true;
         resetMemory();
         try {
           const response = await fetch('/api/auth/me', { cache: 'no-store' });
@@ -2683,12 +2701,13 @@ const homePage = `<!doctype html>
           document.getElementById('current-username').textContent = user.username;
           document.getElementById('user-avatar').textContent = Array.from(user.username || '?')[0].toLocaleUpperCase();
           authGate.hidden = true;
+          authLoading.hidden = true;
           chatApp.hidden = false;
           restorePage();
           connectionStatus.textContent = 'Signed in as ' + user.username + '.';
           await refreshConnectionState();
           await refreshConversations();
-        } catch (_) { authorizationController?.abort(); authorizationController = null; stopUsage(); stopDeviceLogin(); connectionBusy = false; authGate.hidden = false; chatApp.hidden = true; }
+        } catch (_) { authorizationController?.abort(); authorizationController = null; stopUsage(); stopDeviceLogin(); connectionBusy = false; authLoading.hidden = true; authGate.hidden = false; chatApp.hidden = true; }
       }
 
       document.getElementById('logout-button').addEventListener('click', async function () {

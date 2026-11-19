@@ -25,6 +25,9 @@ const pwaSource = await readFile(join(root, 'pwa_updates.go'), 'utf8');
 const pwaScript = pwaSource.slice(pwaSource.indexOf('`') + 1, pwaSource.lastIndexOf('`'));
 const profile = await mkdtemp(join(process.env.TMPDIR || tmpdir(), 'agent-ui-'));
 let authenticated = false;
+let authCheckGate = null;
+let authCheckStarted = 0;
+let authCheckNetworkFailure = false;
 let authFailure = true;
 let listFailure = false;
 let loadFailure = false;
@@ -110,7 +113,12 @@ const server = createServer(async (req, res) => {
     if (authFailure) { json(401, { error: 'Test sign-in rejected. Please try again.' }); return; }
     authenticated = true; json(200, { id: 'demo-user', username: 'Browser Test' }); return;
   }
-  if (url.pathname === '/api/auth/me') { json(authenticated ? 200 : 401, authenticated ? { id: 'demo-user', username: 'Browser Test' } : { error: 'Sign in to continue.' }); return; }
+  if (url.pathname === '/api/auth/me') {
+    authCheckStarted++;
+    if (authCheckGate) await authCheckGate;
+    if (authCheckNetworkFailure) { res.destroy(); return; }
+    json(authenticated ? 200 : 401, authenticated ? { id: 'demo-user', username: 'Browser Test' } : { error: 'Sign in to continue.' }); return;
+  }
   if (!authenticated) { json(401, { error: 'Sign in to continue.' }); return; }
   if (url.pathname === '/api/research/settings') {
     json(200, {settings:{configured:false,provider:'Brave Search',key_suffix:'',revision:'',verified_at:'',last_checked_at:'',status:'not_configured'}}); return;
@@ -294,6 +302,36 @@ try {
     if (data.error) job.reject(new Error(data.error.message)); else job.resolve(data.result);
   };
   await cdp('Page.enable'); await cdp('Runtime.enable');
+  await viewport(1280, 850);
+  await cdp('Emulation.setScriptExecutionDisabled', { value: true });
+  await cdp('Page.navigate', { url: origin });
+  await until(() => visible('#auth-loading'), 'Initial HTML loading state missing');
+  ok(!(await visible('#auth-gate')) && !(await visible('#chat-app')), 'Initial HTML hides login and conversation before JavaScript runs');
+  await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+  ok(await js("getComputedStyle(document.querySelector('.auth-loading-spinner')).animationName==='none'"), 'Loading respects reduced-motion preferences');
+  await cdp('Emulation.setEmulatedMedia', { features: [] });
+  await cdp('Emulation.setScriptExecutionDisabled', { value: false });
+  for (const state of ['signed-in', 'signed-out', 'network-failure']) {
+    authenticated = state === 'signed-in';
+    authCheckNetworkFailure = state === 'network-failure';
+    let release;
+    authCheckGate = new Promise(resolve => { release = resolve; });
+    const started = authCheckStarted;
+    await viewport(state === 'signed-out' ? 390 : 1280, 850);
+    await cdp('Page.navigate', { url: origin });
+    await until(() => authCheckStarted > started, 'Session check did not start');
+    try {
+      ok(await visible('#auth-loading'), state + ': neutral loading is visible while session check is pending');
+      ok(!(await visible('#auth-gate')) && !(await visible('#chat-app')), state + ': neither login nor conversation flashes before session check completes');
+      ok(await js("document.querySelector('#auth-loading [role=status]').textContent.trim()==='Loading Agent…' && document.querySelector('#auth-loading').getAttribute('aria-busy')==='true' && document.documentElement.scrollWidth===innerWidth"), state + ': accessible loading copy fits the viewport');
+      await screenshot('agent-loading-' + state);
+    } finally { authCheckGate = null; release(); }
+    await until(() => visible(state === 'signed-in' ? '#chat-app' : '#auth-gate'), state + ': session result did not appear');
+    ok(!(await visible('#auth-loading')), state + ': loading disappears after session resolution');
+    ok(!(await visible(state === 'signed-in' ? '#auth-gate' : '#chat-app')), state + ': only the correct destination appears');
+  }
+  authenticated = false;
+  authCheckNetworkFailure = false;
   await viewport(1280, 850);
   await cdp('Page.navigate', { url: origin });
   await until(() => visible('#auth-gate'), 'Login missing');

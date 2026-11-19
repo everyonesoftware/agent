@@ -18,8 +18,8 @@ func TestAgentBranding(t *testing.T) {
 	if strings.Contains(homePage, "EveryoneAgent") {
 		t.Error("page still contains the old display name")
 	}
-	if count := strings.Count(homePage, `<span class="mark" aria-hidden="true">e1</span>Agent`); count != 2 {
-		t.Errorf("login and sidebar must both use the e1 Agent lockup; got %d", count)
+	if count := strings.Count(homePage, `<span class="mark" aria-hidden="true">e1</span>Agent`); count != 3 {
+		t.Errorf("loading, login and sidebar must all use the e1 Agent lockup; got %d", count)
 	}
 	if siwcAgentName != "Agent" {
 		t.Errorf("new ChatGPT registrations should display Agent, got %q", siwcAgentName)
