@@ -1,5 +1,21 @@
 # Agent
 
+<!-- current-downloads:start -->
+## Current downloads
+
+Each platform keeps its independently verified version and original download URL.
+
+| Platform | Version | Download | Status |
+| --- | --- | --- | --- |
+| Windows x64 | — | Not yet published | Unsigned alpha; Windows may display a security warning. Requires your Agent server. |
+| Android | — | Not yet published | Signed alpha; user-consented installation. Requires your Agent server. |
+| Container / Web server | — | [Deployment instructions](#run-locally) | No verified publication manifest yet; existing registry images are not relabeled. Requires server and local Agent account. |
+
+Unchanged platforms are not rebuilt, copied, or relabeled for newer project releases. Native clients connect to your self-hosted server; they do not include a model runtime.
+<!-- current-downloads:end -->
+
+[Native release and download verification](docs/NATIVE-RELEASES.md) explains selective builds, platform signing, and read-only table previews.
+
 A private, self-hosted chatbot for a small household. Each person creates a local Agent account, connects their own ChatGPT account, and gets separate saved conversations. User accounts, sessions, and conversation histories are stored in a local SQLite database; no hosted identity or database service is used.
 
 ## Run locally
@@ -24,7 +40,7 @@ Create an Agent account using a username and password of at least 12 characters.
 
 An OpenAI-compatible API key or local model remains available as a fallback. `LLM_BASE_URL` defaults to the OpenAI API base URL, `LLM_MODEL` selects the fallback model, and `LLM_API_KEY` is sent as a bearer key when set. For a local model, set `LLM_BASE_URL` to that provider's OpenAI-compatible API base and leave `LLM_API_KEY` blank if it does not require one. API-key requests use separate API billing. The application sends chat requests through the server; the key is not sent to the browser. `.env` is excluded from Git and the Docker build context.
 
-To pin a specific commit-count release, set `APP_VERSION` before starting Compose; for example, `$env:APP_VERSION = "3"`. The GitHub Actions workflow tests the code and publishes `ghcr.io/everyonesoftware/agent:<commit-count>` on pushes to `main` and version tags. The numeric count is also embedded in the app's `/version` endpoint and OCI version label. It additionally publishes `latest`, branch/tag, and short-SHA tags.
+To pin a specific commit-count container release, set `APP_VERSION` before starting Compose; for example, `$env:APP_VERSION = "3"`. The unified GitHub Actions workflow retains all Go and hosted-browser gates on every push to `main` and version tag. Each platform is built only if its inputs changed since its last verified publication (or a manual force selects it). Containers keep the numeric full-history commit count in `ghcr.io/everyonesoftware/agent:<commit-count>`, `/version`, and OCI labels, plus `latest`, branch/tag, and short-SHA tags when built. Native packages use `0.1.<commit-count>` and share one stable `v0.1.N` release titled `Agent 0.1.N`; unchanged platforms keep their original versions and URLs.
 
 Open http://127.0.0.1:8080. The container is published only on the host loopback interface. To reach it from other devices, configure Tailscale Serve on the host to proxy to `http://127.0.0.1:8080`; do not change the Compose binding to `0.0.0.0` or forward the port from your router. Device-code authentication needs no callback port or `SIWC_REDIRECT_URI` setting.
 

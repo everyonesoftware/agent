@@ -1,4 +1,4 @@
-name: Publish container image
+name: Agent CI and release
 
 on:
   push:
@@ -7,6 +7,13 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      component:
+        description: Force one platform, all, or automatic verified-baseline selection
+        type: choice
+        options: [auto, all, android, windows, container]
+        default: auto
+        required: true
 
 permissions:
   contents: read
@@ -21,6 +28,9 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.version.outputs.value }}
+      android: ${{ steps.selection.outputs.android }}
+      windows: ${{ steps.selection.outputs.windows }}
+      container: ${{ steps.selection.outputs.container }}
     steps:
       - name: Check out full history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -109,6 +119,17 @@ jobs:
       - name: Verify installability, offline privacy, and explicit updates
         run: node tests/pwa-browser.mjs "$RUNNER_TEMP/agent-pwa-a" "$RUNNER_TEMP/agent-pwa-b"
 
+      - name: Test native publication, real Git selection, changelog and download table contracts
+        run: node --test tests/native-*.test.mjs tests/current-downloads.test.mjs
+
+      - name: Select platform inputs against verified publications
+        id: selection
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          FORCE_COMPONENT: ${{ github.event_name == 'workflow_dispatch' && inputs.component != 'auto' && inputs.component || 'none' }}
+        run: node scripts/native-selection.mjs --repository "$REPOSITORY" --force "$FORCE_COMPONENT" --github-output "$GITHUB_OUTPUT"
+
       - name: Retain bounded browser startup diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v7
@@ -122,6 +143,7 @@ jobs:
     outputs:
       services_artifact: ${{ steps.services_capture.outputs.artifact }}
     needs: verify
+    if: needs.verify.outputs.container == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -194,7 +216,163 @@ jobs:
           overwrite: false
           include-hidden-files: false
           archive: true
+      - name: Verify registry digest and retain container publication identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_COMMIT: ${{ github.sha }}
+          COMMIT_COUNT: ${{ needs.verify.outputs.version }}
+          IMAGE_DIGEST: ${{ steps.services_push.outputs.digest }}
+        run: node scripts/native-release.mjs container --repository "$REPOSITORY" --directory dist/container --commit "$SOURCE_COMMIT" --count "$COMMIT_COUNT" --digest "$IMAGE_DIGEST"
 
+      - name: Retain verified container publication
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-container-${{ github.sha }}
+          path: dist/container/
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: false
+
+  android:
+    needs: verify
+    if: needs.verify.outputs.android == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - name: Install pinned Android SDK packages
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"'
+      - name: Test and lint native Android
+        env:
+          COMMIT_COUNT: ${{ needs.verify.outputs.version }}
+        run: |
+          node --test apps/android/*.test.mjs
+          bash apps/android/gradlew -p apps/android "-PagentCommitCount=$COMMIT_COUNT" :app:testDebugUnitTest :app:lintDebug --no-daemon
+      - name: Build dedicated-key signed APK and verify package, version and signer
+        env:
+          COMMIT_COUNT: ${{ needs.verify.outputs.version }}
+          AGENT_KEYSTORE_BASE64: ${{ secrets.AGENT_KEYSTORE_BASE64 }}
+          AGENT_KEYSTORE_PASSWORD: ${{ secrets.AGENT_KEYSTORE_PASSWORD }}
+          AGENT_KEY_ALIAS: ${{ secrets.AGENT_KEY_ALIAS }}
+          AGENT_KEY_PASSWORD: ${{ secrets.AGENT_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in AGENT_KEYSTORE_BASE64 AGENT_KEYSTORE_PASSWORD AGENT_KEY_ALIAS AGENT_KEY_PASSWORD; do
+            if [[ -z "${!name}" ]]; then echo "::error::Missing signing secret: $name"; exit 1; fi
+          done
+          umask 077
+          export AGENT_KEYSTORE_PATH="$RUNNER_TEMP/agent-release.jks"
+          trap 'rm -f "$AGENT_KEYSTORE_PATH"' EXIT
+          printf '%s' "$AGENT_KEYSTORE_BASE64" | base64 --decode > "$AGENT_KEYSTORE_PATH"
+          bash apps/android/gradlew -p apps/android "-PagentCommitCount=$COMMIT_COUNT" :app:assembleRelease --no-daemon
+          node scripts/native-release.mjs package-android --apk apps/android/app/build/outputs/apk/release/app-release.apk --apksigner "$ANDROID_HOME/build-tools/36.0.0/apksigner" --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt" --directory dist/android
+      - name: Retain signed Android publication
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-android-${{ github.sha }}
+          path: dist/android/
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: false
+
+  windows:
+    needs: verify
+    if: needs.verify.outputs.windows == 'true'
+    runs-on: windows-2025
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          global-json-file: apps/windows/global.json
+      - name: Build and test real self-contained Windows package and feed
+        env:
+          NATIVE_VERSION: 0.1.${{ needs.verify.outputs.version }}
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: ./scripts/windows-build.ps1 -OutputDirectory dist/windows -Version $env:NATIVE_VERSION -Commit $env:SOURCE_COMMIT
+      - name: Verify exact installer, package and feed inventory
+        run: node scripts/native-release.mjs verify --directory dist
+      - name: Install and launch the packaged native app
+        timeout-minutes: 6
+        run: ./scripts/test-windows-installer.ps1 -InstallerPath dist/windows/AgentWindows-win-x64-Setup.exe -EvidenceDirectory dist/windows-smoke
+      - name: Retain Windows smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-windows-smoke-${{ github.sha }}
+          path: dist/windows-smoke/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Retain verified Windows publication
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-windows-${{ github.sha }}
+          path: dist/windows/
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: false
+
+  release:
+    needs: [verify, android, windows, publish]
+    if: always() && !cancelled() && needs.verify.result == 'success' && (needs.android.result == 'success' || needs.android.result == 'skipped') && (needs.windows.result == 'success' || needs.windows.result == 'skipped') && (needs.publish.result == 'success' || needs.publish.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Check out exact source with complete history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v8
+        if: needs.android.result == 'success'
+        with:
+          name: agent-android-${{ github.sha }}
+          path: dist/android
+          digest-mismatch: error
+      - uses: actions/download-artifact@v8
+        if: needs.windows.result == 'success'
+        with:
+          name: agent-windows-${{ github.sha }}
+          path: dist/windows
+          digest-mismatch: error
+      - uses: actions/download-artifact@v8
+        if: needs.publish.result == 'success'
+        with:
+          name: agent-container-${{ github.sha }}
+          path: dist/container
+          digest-mismatch: error
+      - name: Publish new platform bytes without clobber and read exact assets back
+        if: needs.android.result == 'success' || needs.windows.result == 'success' || needs.publish.result == 'success'
+        run: node scripts/native-release.mjs publish --repository "$GH_REPO" --directory dist
+      - name: Refresh both Current downloads tables from the same verified inventory
+        run: node scripts/current-downloads.mjs --repository "$GH_REPO" --output-directory dist/current-downloads --publish
 
   services_notify:
     name: Notify Services (publication remains separate)

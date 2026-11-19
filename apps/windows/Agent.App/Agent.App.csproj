@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType><TargetFramework>net10.0-windows10.0.19041.0</TargetFramework><TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion><RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI><EnableWindowsTargeting>true</EnableWindowsTargeting><WindowsPackageType>None</WindowsPackageType><WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained><SelfContained>true</SelfContained>
+    <EnableDefaultPageItems>false</EnableDefaultPageItems><EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition><AppxGeneratePriEnabled Condition="'$(OS)' == 'Windows_NT'">true</AppxGeneratePriEnabled><AppxGeneratePriEnabled Condition="'$(OS)' != 'Windows_NT'">false</AppxGeneratePriEnabled><AppxGeneratePrisForPortableLibrariesEnabled>false</AppxGeneratePrisForPortableLibrariesEnabled>
+    <ApplicationManifest>app.manifest</ApplicationManifest><ApplicationIcon>Assets/Agent.ico</ApplicationIcon><DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><RootNamespace>Agent.App</RootNamespace><AssemblyName>Agent</AssemblyName><Version Condition="'$(Version)' == ''">0.1.0</Version><PublishTrimmed>false</PublishTrimmed><IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Agent.Core/Agent.Core.csproj"/><PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="1.8.260803003"/>
+    <EmbeddedResource Include="Shell.xaml" LogicalName="Agent.App.Shell.xaml"/>
+    <Content Remove="Assets/Agent.ico;Assets/Agent.png"/><None Remove="Assets/Agent.ico;Assets/Agent.png"/>
+    <Content Include="Assets/Agent.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"/><Content Include="Assets/Agent.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"/>
+  </ItemGroup>
+  <Target Name="PublishMergedWinUIResources" AfterTargets="Publish" Condition="'$(OS)' == 'Windows_NT'"><Error Condition="!Exists('$(ProjectPriFullPath)')" Text="Native publish requires merged WinUI PRI."/><Copy SourceFiles="$(ProjectPriFullPath)" DestinationFiles="$(PublishDir)resources.pri"/></Target>
+</Project>

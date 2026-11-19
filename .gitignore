@@ -6,3 +6,14 @@ data/
 *.sqlite
 *.sqlite3
 node_modules/
+dist/
+apps/android/.gradle/
+apps/android/.kotlin/
+apps/android/local.properties
+apps/android/**/build/
+apps/windows/**/bin/
+apps/windows/**/obj/
+apps/windows/artifacts/
+*.jks
+*.keystore
+*.pfx

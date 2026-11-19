@@ -6,3 +6,10 @@ data
 *.sqlite
 *.sqlite3
 **/node_modules
+apps
+dist
+**/.gradle
+**/bin
+**/obj
+*.jks
+*.keystore
