@@ -7,9 +7,9 @@ Each platform keeps its independently verified version and original download URL
 
 | Platform | Version | Download | Status |
 | --- | --- | --- | --- |
-| Windows x64 | 0.1.60 | [Download installer (.exe)](https://github.com/everyonesoftware/agent/releases/download/v0.1.60/AgentWindows-win-x64-Setup.exe) · [SHA-256](https://github.com/everyonesoftware/agent/releases/download/v0.1.60/AgentWindows-win-x64-Setup.exe.sha256) | Unsigned alpha; Windows may display a security warning. Requires your Agent server. |
-| Android | 0.1.60 | [Download APK](https://github.com/everyonesoftware/agent/releases/download/v0.1.60/Agent-android.apk) · [SHA-256](https://github.com/everyonesoftware/agent/releases/download/v0.1.60/Agent-android.apk.sha256) | Signed alpha; user-consented installation. Requires your Agent server. |
-| Container / Web server | 60 | `ghcr.io/everyonesoftware/agent:60` · [Publication manifest](https://github.com/everyonesoftware/agent/releases/download/v0.1.60/agent-container-release.json) | [Deployment instructions](https://github.com/everyonesoftware/agent/blob/main/README.md#run-locally); requires server and local Agent account. |
+| Windows x64 | 0.1.63 | [Download installer (.exe)](https://github.com/everyonesoftware/agent/releases/download/v0.1.63/AgentWindows-win-x64-Setup.exe) · [SHA-256](https://github.com/everyonesoftware/agent/releases/download/v0.1.63/AgentWindows-win-x64-Setup.exe.sha256) | Unsigned alpha; Windows may display a security warning. Requires your Agent server. |
+| Android | 0.1.63 | [Download APK](https://github.com/everyonesoftware/agent/releases/download/v0.1.63/Agent-android.apk) · [SHA-256](https://github.com/everyonesoftware/agent/releases/download/v0.1.63/Agent-android.apk.sha256) | Signed alpha; user-consented installation. Requires your Agent server. |
+| Container / Web server | 63 | `ghcr.io/everyonesoftware/agent:63` · [Publication manifest](https://github.com/everyonesoftware/agent/releases/download/v0.1.63/agent-container-release.json) | [Deployment instructions](https://github.com/everyonesoftware/agent/blob/main/README.md#run-locally); requires server and local Agent account. |
 
 Unchanged platforms are not rebuilt, copied, or relabeled for newer project releases. Native clients connect to your self-hosted server; they do not include a model runtime.
 <!-- current-downloads:end -->
