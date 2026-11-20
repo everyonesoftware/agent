@@ -8,6 +8,8 @@ Approved visual reference: [`design/agent-native-approved.html`](design/agent-na
 
 The approved production icon supersedes the study's original mark: **Classic ring**, a charcoal circle inside a sage rounded square. `scripts/generate-branding.mjs` owns the exact SVG/raster geometry and regenerates web/PWA, Android launcher/in-app, and Windows PNG/ICO artwork together. Run it with `--check` to verify all generated outputs; do not introduce per-platform text marks or alternate logo proportions.
 
+Windows taskbar branding is separate from the custom title-bar image. Bind the running HWND's taskbar icon to an immutable content-addressed ICO while retaining Velopack's existing application identity and stable launcher. Clear window-owned Shell properties before close. Native acceptance must inspect those Shell properties, actual native icon pixels, and the visible Explorer taskbar; a correct title-bar screenshot alone is not taskbar evidence. Do not clear global icon caches, restart Explorer, or alter user pins as a branding repair.
+
 Settings order: Updates, Connection, ChatGPT Connection, Web Research, Memory, Reset Password, Sign Out. ChatGPT Connection follows CURRENT `page.go` markup and `refreshConnectionData`/`renderUsage`: status-refresh pill, accessible active-account selector, Add account / Disconnect, Allowance freshness and refresh, compact remaining/window/reset rows, View usage history, collapsed About allowance. Omit the mockup's original avatar and Default model control. Native accessibility/font scaling must retain readable text and touch targets.
 
 ## Server protocol — authoritative existing Go implementation

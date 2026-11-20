@@ -38,7 +38,7 @@ $summary = [ordered]@{
     schemaVersion = 1; status = 'failed'; startedUtc = $started.ToString('o')
     installer = $InstallerPath; installerSha256 = $null; installRoot = $null
     evidenceDirectory = $evidence; installVerified = $false; windowVerified = $false
-    screenshotSha256 = $null; uninstallVerified = $false; cleanupRemovedInstallRoot = $false
+    screenshotSha256 = $null; taskbarVerified = $false; uninstallVerified = $false; cleanupRemovedInstallRoot = $false
     cleanupErrors = @(); failure = $null
 }
 $installRoot = $null
@@ -120,6 +120,66 @@ function Get-StartMenuLinks {
             }
         }
     } finally { $null = [Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell) }
+}
+function Save-TaskbarEvidence($Candidate) {
+    # A custom title-bar Image does not establish the icon Explorer uses.
+    $assets = Join-Path $installRoot 'current\Assets'
+    $icon = Join-Path $assets 'Agent.ico'
+    $hash = (Get-FileHash -LiteralPath $icon -Algorithm SHA256).Hash.ToLowerInvariant()
+    $taskbarIcon = Join-Path $assets "Agent-$hash.ico"
+    if ((Get-FileHash -LiteralPath $taskbarIcon -Algorithm SHA256).Hash.ToLowerInvariant() -cne $hash) {
+        throw 'Installed content-addressed taskbar icon differs from Agent artwork'
+    }
+    $properties = [ordered]@{
+        appId = [AgentSmoke.Native]::ReadTaskbarProperty($Candidate.Handle, 5)
+        relaunchCommand = [AgentSmoke.Native]::ReadTaskbarProperty($Candidate.Handle, 2)
+        iconResource = [AgentSmoke.Native]::ReadTaskbarProperty($Candidate.Handle, 3)
+        displayName = [AgentSmoke.Native]::ReadTaskbarProperty($Candidate.Handle, 4)
+    }
+    Write-Json $properties 'taskbar-properties.json'
+    if ($properties.appId -cne 'velopack.AgentWindows' -or $properties.displayName -cne 'Agent' -or
+        $properties.iconResource -cne "$taskbarIcon,0" -or
+        $properties.relaunchCommand -cne ('"' + (Join-Path $installRoot 'Agent.exe') + '"')) {
+        throw 'Running window taskbar identity/icon does not match the installed Agent application'
+    }
+    [UIntPtr]$result = [UIntPtr]::Zero
+    # WM_GETICON ICON_BIG is used for the running application, with documented class fallback.
+    $sent = [AgentSmoke.Native]::SendMessageTimeout($Candidate.Handle, 0x007F, [UIntPtr]::new(1), [IntPtr]::Zero,
+        [AgentSmoke.Native]::SMTO_ABORTIFHUNG, 1000, [ref]$result)
+    if ($sent -eq [IntPtr]::Zero) { throw 'Running window did not answer WM_GETICON' }
+    $handle = [IntPtr]::new([long]$result.ToUInt64())
+    if ($handle -eq [IntPtr]::Zero) { $handle = [AgentSmoke.Native]::GetClassLongPtr($Candidate.Handle, -14) }
+    if ($handle -eq [IntPtr]::Zero) { throw 'Running window has no native application icon' }
+    $nativeIcon = [Drawing.Icon]::FromHandle($handle) # borrowed HICON; do not call DestroyIcon
+    $actual = $nativeIcon.ToBitmap()
+    $expectedIcon = [Drawing.Icon]::new($taskbarIcon, $actual.Size)
+    $expected = $expectedIcon.ToBitmap()
+    try {
+        $actual.Save((Join-Path $evidence 'taskbar-native-icon.png'), [Drawing.Imaging.ImageFormat]::Png)
+        if ($actual.Size -ne $expected.Size) { throw 'Running native icon dimensions differ from Agent artwork' }
+        for ($y = 0; $y -lt $actual.Height; $y++) {
+            for ($x = 0; $x -lt $actual.Width; $x++) {
+                if ($actual.GetPixel($x, $y).ToArgb() -ne $expected.GetPixel($x, $y).ToArgb()) {
+                    throw "Running native icon pixels differ from Agent artwork at $x,$y"
+                }
+            }
+        }
+    } finally { $expected.Dispose(); $expectedIcon.Dispose(); $actual.Dispose(); $nativeIcon.Dispose() }
+    $taskbar = [AgentSmoke.Native]::FindWindow('Shell_TrayWnd', $null)
+    $rect = [AgentSmoke.Native+RECT]::new()
+    if ($taskbar -eq [IntPtr]::Zero -or -not [AgentSmoke.Native]::IsWindowVisible($taskbar) -or
+        -not [AgentSmoke.Native]::GetWindowRect($taskbar, [ref]$rect)) { throw 'No visible Explorer taskbar for actual taskbar acceptance' }
+    $width = $rect.Right - $rect.Left; $height = $rect.Bottom - $rect.Top
+    $bounds = [Windows.Forms.SystemInformation]::VirtualScreen
+    if ($width -le 0 -or $height -le 0 -or $rect.Left -lt $bounds.Left -or $rect.Top -lt $bounds.Top -or
+        $rect.Right -gt $bounds.Right -or $rect.Bottom -gt $bounds.Bottom) { throw 'Taskbar capture bounds are invalid or offscreen' }
+    $bitmap = [Drawing.Bitmap]::new($width, $height)
+    $graphics = [Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size, [Drawing.CopyPixelOperation]::SourceCopy)
+        $bitmap.Save((Join-Path $evidence 'taskbar.png'), [Drawing.Imaging.ImageFormat]::Png)
+    } finally { $graphics.Dispose(); $bitmap.Dispose() }
+    $summary.taskbarVerified = $true
 }
 function Get-RemainingInstallation {
     $files = @()
@@ -227,6 +287,37 @@ namespace AgentSmoke {
         [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int command);
         [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
         [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
+        [DllImport("user32.dll", EntryPoint="FindWindowW", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string className, string title);
+        [DllImport("user32.dll", EntryPoint="GetClassLongPtrW")] public static extern IntPtr GetClassLongPtr(IntPtr window, int index);
+        [StructLayout(LayoutKind.Sequential)] public struct PROPERTYKEY { public Guid Format; public uint Id; }
+        [StructLayout(LayoutKind.Explicit, Size=24)] public struct PROPVARIANT {
+            [FieldOffset(0)] public ushort Type; [FieldOffset(8)] public IntPtr Pointer;
+        }
+        [ComImport, Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IPropertyStore {
+            [PreserveSig] int GetCount(out uint count);
+            [PreserveSig] int GetAt(uint index, out PROPERTYKEY key);
+            [PreserveSig] int GetValue(ref PROPERTYKEY key, out PROPVARIANT value);
+            [PreserveSig] int SetValue(ref PROPERTYKEY key, ref PROPVARIANT value);
+            [PreserveSig] int Commit();
+        }
+        [DllImport("shell32.dll", ExactSpelling=true)]
+        private static extern int SHGetPropertyStoreForWindow(IntPtr window, ref Guid iid, [MarshalAs(UnmanagedType.Interface)] out IPropertyStore store);
+        [DllImport("ole32.dll", ExactSpelling=true)] private static extern int PropVariantClear(ref PROPVARIANT value);
+        public static string ReadTaskbarProperty(IntPtr window, uint id) {
+            var iid = typeof(IPropertyStore).GUID;
+            IPropertyStore store;
+            Marshal.ThrowExceptionForHR(SHGetPropertyStoreForWindow(window, ref iid, out store));
+            try {
+                var key = new PROPERTYKEY { Format = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), Id = id };
+                PROPVARIANT value;
+                Marshal.ThrowExceptionForHR(store.GetValue(ref key, out value));
+                try {
+                    if (value.Type != 31) throw new InvalidOperationException("Missing LPWSTR taskbar property " + id);
+                    return Marshal.PtrToStringUni(value.Pointer) ?? "";
+                } finally { PropVariantClear(ref value); }
+            } finally { Marshal.FinalReleaseComObject(store); }
+        }
         public static Window[] Find(int pid) {
             var found = new List<Window>();
             EnumWindows((h, ignored) => {
@@ -315,6 +406,7 @@ namespace AgentSmoke {
     Write-Json @{ pid = $appPid; executable = $appExe; title = $window.Title; handle = $window.Handle.ToInt64()
         responsiveSamples = $stableSamples; width = $window.Width; height = $window.Height } 'window.json'
     Save-WindowScreenshot $window
+    Save-TaskbarEvidence $window
     $summary.screenshotSha256 = (Get-FileHash -LiteralPath (Join-Path $evidence 'window.png') -Algorithm SHA256).Hash
     # Re-probe after capture, not just a window that once existed.
     if (-not @([AgentSmoke.Native]::Find($appPid) | Where-Object { $_.Handle -eq $window.Handle -and $_.Responsive }).Count) {

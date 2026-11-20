@@ -24,6 +24,16 @@ function Assert-SourceIdentity {
     if ($count -lt 1 -or $count -gt 65534 -or $Version -cne "0.1.$count") { throw 'Source commit-count version mismatch or assembly version overflow' }
     if (Git-Value @('status','--porcelain','--untracked-files=all')) { throw 'Release sources must be committed and clean' }
 }
+function Assert-TaskbarIcon([string]$Directory) {
+    $icon = Get-Item -LiteralPath (Join-Path $Directory 'Assets/Agent.ico')
+    if ($icon.PSIsContainer -or $icon.Length -le 0) { throw 'Missing/empty Agent taskbar artwork' }
+    $hash = (Get-FileHash -LiteralPath $icon.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    $unique = Get-Item -LiteralPath (Join-Path $Directory "Assets/Agent-$hash.ico")
+    if ($unique.PSIsContainer -or $unique.Length -ne $icon.Length -or
+        (Get-FileHash -LiteralPath $unique.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -cne $hash) {
+        throw 'Missing/mismatched content-addressed taskbar icon'
+    }
+}
 function Assert-Payload([string]$Directory) {
     $files = @(Get-ChildItem -LiteralPath $Directory -Recurse -Force)
     foreach ($file in $files) { if ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Payload must not contain links' } }
@@ -44,6 +54,7 @@ function Assert-Payload([string]$Directory) {
     foreach ($name in @('Agent.ico','Agent.png')) {
         if ((Get-FileHash -LiteralPath (Join-Path $Directory "Assets/$name")).Hash -ne (Get-FileHash -LiteralPath (Join-Path $root "apps/windows/Agent.App/Assets/$name")).Hash) { throw 'Published brand bytes mismatch' }
     }
+    Assert-TaskbarIcon $Directory
 }
 function Assert-Package([string]$PackagePath, [string]$PublishDirectory) {
     $zip = [IO.Compression.ZipFile]::OpenRead($PackagePath)

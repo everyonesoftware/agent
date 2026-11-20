@@ -8,8 +8,9 @@
   <ItemGroup>
     <ProjectReference Include="../Agent.Core/Agent.Core.csproj"/><PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="1.8.260803003"/>
     <EmbeddedResource Include="Shell.xaml" LogicalName="Agent.App.Shell.xaml"/>
-    <Content Remove="Assets/Agent.ico;Assets/Agent.png"/><None Remove="Assets/Agent.ico;Assets/Agent.png"/>
+    <Content Remove="Assets/Agent.ico;Assets/Agent.png;Assets/Agent-*.ico"/><None Remove="Assets/Agent.ico;Assets/Agent.png;Assets/Agent-*.ico"/>
     <Content Include="Assets/Agent.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"/><Content Include="Assets/Agent.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"/>
+    <Content Include="Assets/Agent-*.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"/>
   </ItemGroup>
   <Target Name="PublishMergedWinUIResources" AfterTargets="Publish" Condition="'$(OS)' == 'Windows_NT'"><Error Condition="!Exists('$(ProjectPriFullPath)')" Text="Native publish requires merged WinUI PRI."/><Copy SourceFiles="$(ProjectPriFullPath)" DestinationFiles="$(PublishDir)resources.pri"/></Target>
 </Project>

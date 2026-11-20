@@ -23,7 +23,7 @@ Write-Output 'PASS runtime XAML XML and all typed native control lookups'
 $tokens = $null; $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'scripts/windows-build.ps1'),[ref]$tokens,[ref]$errors)
 if ($errors.Count) { throw ($errors -join "`n") }
-foreach ($name in @('Assert-Package','Assert-Feed','Artifact')) {
+foreach ($name in @('Assert-Package','Assert-Feed','Artifact','Assert-TaskbarIcon')) {
     $definition = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name },$true)
     if (-not $definition) { throw "Missing production validator: $name" }
     . ([scriptblock]::Create($definition.Extent.Text))
@@ -37,6 +37,22 @@ function Must-Reject([scriptblock]$Action,[string]$Label) {
 $base = Join-Path ([IO.Path]::GetTempPath()) ('Agent-pack-contract-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $base
 try {
+    $taskbarPublish = Join-Path $base 'taskbar-publish'
+    $taskbarAssets = Join-Path $taskbarPublish 'Assets'; $null = New-Item -ItemType Directory -Path $taskbarAssets
+    $originalIcon = Join-Path $taskbarAssets 'Agent.ico'
+    Copy-Item -LiteralPath (Join-Path $root 'apps/windows/Agent.App/Assets/Agent.ico') -Destination $originalIcon
+    $iconHash = (Get-FileHash -LiteralPath $originalIcon -Algorithm SHA256).Hash.ToLowerInvariant()
+    $uniqueIcon = Join-Path $taskbarAssets "Agent-$iconHash.ico"
+    Copy-Item -LiteralPath $originalIcon -Destination $uniqueIcon
+    Assert-TaskbarIcon $taskbarPublish
+    Write-Output 'PASS exact content-addressed taskbar icon bytes'
+    Remove-Item -LiteralPath $uniqueIcon
+    Must-Reject { Assert-TaskbarIcon $taskbarPublish } 'missing content-addressed taskbar icon'
+    $corruptIcon = [IO.File]::ReadAllBytes($originalIcon); $corruptIcon[0] = $corruptIcon[0] -bxor 1
+    [IO.File]::WriteAllBytes($uniqueIcon,$corruptIcon)
+    Must-Reject { Assert-TaskbarIcon $taskbarPublish } 'mismatched content-addressed taskbar icon bytes with unchanged length'
+    Copy-Item -LiteralPath $originalIcon -Destination $uniqueIcon -Force
+    Assert-TaskbarIcon $taskbarPublish
     $publish = Join-Path $base 'publish'; $null = New-Item -ItemType Directory -Path $publish
     [IO.File]::WriteAllText((Join-Path $publish 'Agent.dll'),'explicit test payload bytes')
     $package = Join-Path $base "AgentWindows-$Version-win-x64-full.nupkg"

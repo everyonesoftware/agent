@@ -23,7 +23,7 @@ public sealed partial class AgentApplication:Application,Microsoft.UI.Xaml.Marku
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         Resources.MergedDictionaries.Add(new XamlControlsResources());Resources["SystemAccentColor"]=Windows.UI.Color.FromArgb(255,180,214,163);
-        window=new MainWindow();window.Activate();
+        window=new MainWindow();RunningTaskbarIdentity.Attach(window);window.Activate();
     }
 }
 internal static class StartupDiagnostics

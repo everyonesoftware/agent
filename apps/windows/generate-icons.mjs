@@ -1,4 +1,4 @@
-import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {inflateSync,deflateSync} from 'node:zlib';
+import fs from 'node:fs';import path from 'node:path';import {createHash} from 'node:crypto';import {fileURLToPath} from 'node:url';import {inflateSync,deflateSync} from 'node:zlib';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const source=fs.readFileSync(path.join(root,'pwa/icons/icon-512.png'));
 const width=source.readUInt32BE(16),height=source.readUInt32BE(20);if(source[24]!==8||source[25]!==2||source[28]!==0)throw Error('Expected noninterlaced RGB8 brand artwork');
@@ -10,4 +10,9 @@ function crc(bytes){let n=0xffffffff;for(const b of bytes){n^=b;for(let i=0;i<8;
 function chunk(type,bytes){let b=Buffer.alloc(bytes.length+12);b.writeUInt32BE(bytes.length);b.write(type,4);bytes.copy(b,8);b.writeUInt32BE(crc(b.subarray(4,-4)),b.length-4);return b;}
 function png(size){let b=Buffer.alloc(size*(1+size*3));for(let y=0;y<size;y++)for(let x=0;x<size;x++)for(let c=0;c<3;c++){let sum=0,count=0;for(let sy=Math.floor(y*height/size);sy<Math.floor((y+1)*height/size);sy++)for(let sx=Math.floor(x*width/size);sx<Math.floor((x+1)*width/size);sx++){sum+=pixels[(sy*width+sx)*3+c];count++;}b[y*(1+size*3)+1+x*3+c]=Math.round(sum/count);}let header=Buffer.alloc(13);header.writeUInt32BE(size);header.writeUInt32BE(size,4);header[8]=8;header[9]=2;return Buffer.concat([source.subarray(0,8),chunk('IHDR',header),chunk('IDAT',deflateSync(b,{level:9})),chunk('IEND',Buffer.alloc(0))]);}
 const sizes=[16,24,32,48,64,128,256],frames=sizes.map(png);let ico=Buffer.alloc(6+16*sizes.length);ico.writeUInt16LE(1,2);ico.writeUInt16LE(sizes.length,4);let offset=ico.length;for(let i=0;i<sizes.length;i++){let at=6+16*i;ico[at]=ico[at+1]=sizes[i]===256?0:sizes[i];ico.writeUInt16LE(1,at+4);ico.writeUInt16LE(24,at+6);ico.writeUInt32LE(frames[i].length,at+8);ico.writeUInt32LE(offset,at+12);offset+=frames[i].length;}
-const out=process.argv[2]??path.join(root,'apps/windows/Agent.App/Assets');fs.mkdirSync(out,{recursive:true});fs.writeFileSync(path.join(out,'Agent.ico'),Buffer.concat([ico,...frames]));fs.writeFileSync(path.join(out,'Agent.png'),source);console.log(`Agent artwork: ${sizes.join(', ')}px ICO frames and original PNG`);
+const out=process.argv[2]??path.join(root,'apps/windows/Agent.App/Assets');fs.mkdirSync(out,{recursive:true});
+const icoBytes=Buffer.concat([ico,...frames]);
+const taskbarIcon=`Agent-${createHash('sha256').update(icoBytes).digest('hex')}.ico`;
+fs.writeFileSync(path.join(out,'Agent.ico'),icoBytes);
+fs.writeFileSync(path.join(out,taskbarIcon),icoBytes);
+fs.writeFileSync(path.join(out,'Agent.png'),source);console.log(`Agent artwork: ${sizes.join(', ')}px ICO frames and original PNG; taskbar ${taskbarIcon}`);
