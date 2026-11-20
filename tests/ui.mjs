@@ -80,7 +80,7 @@ const providerProfiles = [
   { id: 'p2', label: 'Other', email: 'other@example.com', connected: true, plan_usage_enabled: true, oauth_selected: true },
 ];
 const calls = [];
-let usageAvailable = true, usageDelay = 0, usageMutationDelay = 0, usageRefreshFailure = false, usageStatusFailure = false;
+let usageAvailable = true, usageDelay = 0, usageMutationDelay = 0, usageRefreshFailure = false, usageStatusFailure = false, devicePollGate = null;
 const usageRecords = new Map();
 const usageStatus = id => structuredClone(usageRecords.get(id) || {profile_id:id,available:usageAvailable,state:usageAvailable?(providerProfiles.find(p=>p.id===id)?.connected?'connected':'disconnected'):'unavailable',connection_id:'',identity_match:'unverified'});
 
@@ -181,7 +181,7 @@ const server = createServer(async (req, res) => {
     call.payload = {...payload}; delete call.payload.password; call.payloadKeys=Object.keys(payload);
     if (action !== 'status') await new Promise(r=>setTimeout(r,usageMutationDelay));
     if (action === 'status' && usageStatusFailure) { json(503,{error:'Fixture usage status unavailable.'}); return; }
-    if (action === 'status') { const result=usageStatus(id); await new Promise(r=>setTimeout(r,usageDelay)); json(200,result); return; }
+    if (action === 'status') { const result=usageStatus(id); if (url.searchParams.has('connection_id') && devicePollGate) await devicePollGate; await new Promise(r=>setTimeout(r,usageDelay)); json(200,result); return; }
     if (id !== activeProfile && action!=='cancel') { json(409,{error:'Active account changed.'}); return; }
     const record=usageStatus(id);
     if ((payload.expected_connection_id ?? payload.connection_id) !== record.connection_id) { json(409,{error:'Usage connection changed.'}); return; }
@@ -907,7 +907,13 @@ try {
   ok(activeProfile==='' && await js("document.querySelector('#usage-panel').hidden && document.querySelector('#usage-device').getClientRects().length>0 && !document.querySelector('#usage-device').closest('#usage-panel')"), 'First device code remains visible independently of the hidden Allowance section');
   const firstQuery='?profile_id=first&connection_id=u-first';
   const firstReads=calls.filter(c=>c.path==='/api/usage/status' && c.query===firstQuery).length;
-  await until(()=>calls.filter(c=>c.path==='/api/usage/status' && c.query===firstQuery).length>firstReads,'First-time device polling must target the captured pending profile and connection');
+  let releaseDevicePoll;
+  devicePollGate=new Promise(resolve=>{releaseDevicePoll=resolve;});
+  try {
+    await until(()=>calls.filter(c=>c.path==='/api/usage/status' && c.query===firstQuery).length>firstReads,'First-time device polling must target the captured pending profile and connection');
+    ok(await js("document.querySelector('#usage-cancel').disabled"), 'Device cancellation stays locked while its status read is in flight');
+  } finally { releaseDevicePoll(); devicePollGate=null; }
+  await expectEventually("!document.querySelector('#usage-cancel').disabled", 'First-time device poll did not finish');
   await click('#usage-cancel');
   await expectEventually("document.querySelector('#usage-device').hidden && !document.querySelector('#check-chatgpt').disabled", 'First-time device cancel failed');
   ok(calls.findLast(c=>c.path==='/api/usage/cancel').payload.profile_id==='first' && activeProfile==='', 'First-time cancellation uses the pending profile without selecting another account');
