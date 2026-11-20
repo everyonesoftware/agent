@@ -37,7 +37,8 @@ public sealed partial class MainWindow:Window
         using var stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("Agent.App.Shell.xaml")!;using var reader=new StreamReader(stream);
         root=(Grid)XamlReader.Load(reader.ReadToEnd());Content=root;Title="Agent";
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory,"Assets","Agent.ico"));
-        C<Image>("AppIcon").Source=new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory,"Assets","Agent.png")));
+        var brandImage=new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory,"Assets","Agent.png")));
+        foreach(string name in new[]{"AppIcon","SignInIcon"})C<Image>(name).Source=brandImage;
         ExtendsContentIntoTitleBar=true;SetTitleBar(C<Border>("TitleBar"));AppWindow.Resize(new Windows.Graphics.SizeInt32(1240,850));
         AppWindow.TitleBar.ButtonBackgroundColor=Color.FromArgb(255,24,27,26);AppWindow.TitleBar.ButtonForegroundColor=Color.FromArgb(255,225,230,226);
         AppWindow.TitleBar.ButtonInactiveBackgroundColor=Color.FromArgb(255,24,27,26);AppWindow.TitleBar.ButtonInactiveForegroundColor=Color.FromArgb(255,163,174,166);

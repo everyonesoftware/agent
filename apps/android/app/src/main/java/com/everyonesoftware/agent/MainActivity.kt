@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,6 +24,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -50,6 +53,12 @@ class MainActivity: ComponentActivity() {
 @Composable fun AgentTheme(content: @Composable ()->Unit) {
  MaterialTheme(colorScheme=darkColorScheme(primary=Color(0xffb4d6a3),onPrimary=Color(0xff1c281a),background=Color(0xff202322),surface=Color(0xff202322),surfaceContainer=Color(0xff252a27),onSurface=Color(0xffe1e6e2),outline=Color(0xff333936)),content=content)
 }
+@Composable private fun AgentBrand(style: TextStyle) {
+ Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+  Image(painterResource(R.drawable.agent_icon),contentDescription=null,modifier=Modifier.size(26.dp))
+  Text("Agent",style=style)
+ }
+}
 @Composable private fun Field(label: String,value: String,change: (String)->Unit,secret: Boolean=false,tag: String="",enabled: Boolean=true) {
  OutlinedTextField(value,change,label={ Text(label) },modifier=Modifier.fillMaxWidth().testTag(tag),enabled=enabled,visualTransformation=if(secret) PasswordVisualTransformation() else VisualTransformation.None,singleLine=true)
 }
@@ -67,10 +76,10 @@ class MainActivity: ComponentActivity() {
  val drawer=rememberDrawerState(DrawerValue.Closed); val scope=rememberCoroutineScope()
  BackHandler(state.screen!="chat" && state.user!=null) { controller.navigate("chat") }
  MaterialTheme { Surface(Modifier.fillMaxSize()) {
- if(state.restoring) Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) { Column(horizontalAlignment=Alignment.CenterHorizontally) { Text("Agent",style=MaterialTheme.typography.headlineMedium); CircularProgressIndicator(); Text("Loading Agent…") } }
+ if(state.restoring) Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) { Column(horizontalAlignment=Alignment.CenterHorizontally) { AgentBrand(style=MaterialTheme.typography.headlineMedium); CircularProgressIndicator(); Text("Loading Agent…") } }
  else if(state.user==null) Login(controller,state)
  else ModalNavigationDrawer(drawerState=drawer,drawerContent={ ModalDrawerSheet(drawerContainerColor=Color(0xff181b1a)) {
-  Text("Agent",Modifier.padding(24.dp),style=MaterialTheme.typography.headlineMedium)
+  Box(Modifier.padding(24.dp)) { AgentBrand(style=MaterialTheme.typography.headlineMedium) }
   NavigationDrawerItem(label={ Text("New conversation") },selected=false,onClick={ controller.newChat(); scope.launch { drawer.close() } })
   LazyColumn(Modifier.weight(1f)) { items(state.conversations,key={ it.text("id") }) { item -> NavigationDrawerItem(label={ Text(item.text("title").ifBlank { "Untitled conversation" }) },selected=state.conversation==item.text("id"),onClick={ controller.openConversation(item); scope.launch { drawer.close() } }) } }
   NavigationDrawerItem(label={ Text("Settings") },selected=state.screen=="settings",onClick={ controller.navigate("settings"); scope.launch { drawer.close() } })
@@ -97,7 +106,7 @@ class MainActivity: ComponentActivity() {
 @Composable private fun Login(controller: AgentController,state: AgentState) {
  var endpoint by remember { mutableStateOf(state.endpoint) }; var username by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }; var register by remember { mutableStateOf(false) }
  Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-  Spacer(Modifier.height(40.dp)); Text("Agent",style=MaterialTheme.typography.headlineLarge); Text("Your private conversation workspace")
+  Spacer(Modifier.height(40.dp)); AgentBrand(style=MaterialTheme.typography.headlineLarge); Text("Your private conversation workspace")
   Field("Server address",endpoint,{ endpoint=it },tag="server"); Field("Username",username,{ username=it },tag="username"); Field("Password",password,{ password=it },true,"password")
   if(state.error.isNotEmpty()) Text(state.error,color=MaterialTheme.colorScheme.error)
   Button(onClick={ controller.login(endpoint,username,password,register); password="" },enabled=!state.busy && endpoint.isNotBlank() && username.isNotBlank() && password.isNotEmpty(),modifier=Modifier.testTag("login")) { Text(if(register) "Create account" else "Sign in") }

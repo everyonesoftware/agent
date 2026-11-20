@@ -18,8 +18,18 @@ func TestAgentBranding(t *testing.T) {
 	if strings.Contains(homePage, "EveryoneAgent") {
 		t.Error("page still contains the old display name")
 	}
-	if count := strings.Count(homePage, `<span class="mark" aria-hidden="true">e1</span>Agent`); count != 3 {
-		t.Errorf("loading, login and sidebar must all use the e1 Agent lockup; got %d", count)
+	if count := strings.Count(homePage, `<span class="mark" aria-hidden="true"></span>Agent`); count != 3 {
+		t.Errorf("loading, login and sidebar must all use the Classic ring Agent lockup; got %d", count)
+	}
+	for _, required := range []string{`url('/icons/agent.svg')`, `<link rel="icon" type="image/svg+xml" href="/icons/agent.svg">`} {
+		if !strings.Contains(homePage, required) {
+			t.Errorf("Classic ring artwork is missing %s", required)
+		}
+	}
+	for _, removed := range []string{`>e1</span>`, `content: 'e1'`} {
+		if strings.Contains(homePage, removed) {
+			t.Errorf("page still contains retired e1 artwork: %s", removed)
+		}
 	}
 	if siwcAgentName != "Agent" {
 		t.Errorf("new ChatGPT registrations should display Agent, got %q", siwcAgentName)

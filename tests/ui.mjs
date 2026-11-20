@@ -101,6 +101,7 @@ const server = createServer(async (req, res) => {
   const json = (status, body) => { call.status = status; res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
   if (url.pathname === '/') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(html); return; }
   if (url.pathname === '/pwa-updates.js') { res.writeHead(200, { 'Content-Type': 'text/javascript' }); res.end(pwaScript); return; }
+  if (url.pathname === '/icons/agent.svg') { res.writeHead(200, { 'Content-Type': 'image/svg+xml' }); res.end(await readFile(new URL('../pwa/icons/agent.svg', import.meta.url))); return; }
   // This interaction fixture deliberately has no installed worker; real deployment
   // and offline behavior are exercised by pwa-browser.mjs, not emulated here.
   if (url.pathname === '/sw.js') { res.writeHead(404); res.end(); return; }
@@ -335,7 +336,7 @@ try {
   await viewport(1280, 850);
   await cdp('Page.navigate', { url: origin });
   await until(() => visible('#auth-gate'), 'Login missing');
-  ok(await js("document.title==='Agent' && document.querySelector('.auth-header .brand').textContent==='e1Agent' && document.querySelector('.auth-header .mark').textContent==='e1'"), 'Login uses the Agent name and e1 mark');
+  ok(await js("document.title==='Agent' && document.querySelector('.auth-header .brand').textContent==='Agent' && document.querySelector('.auth-header .mark').textContent==='' && getComputedStyle(document.querySelector('.auth-header .mark')).backgroundImage.includes('/icons/agent.svg')"), 'Login uses the Agent name and Classic ring mark');
   ok(await js("!document.body.textContent.includes('EveryoneAgent') && document.querySelector('#account-mode-label').textContent==='New to Agent?'"), 'Login copy uses the new display name');
   ok(await js(`['Your personal conversation space', 'Connect your ChatGPT account after signing in.', 'Agent · Your own space'].every(text => !document.querySelector('#auth-gate').textContent.includes(text))`), 'Login omits supplementary header and footer copy');
   ok(await visible('#toggle-password'), 'Quiet entry has password visibility control');
@@ -356,9 +357,10 @@ try {
   await js("document.querySelector('#username-input').value='ui-test';document.querySelector('#password-input').value='synthetic-test-only';document.querySelector('#account-form').requestSubmit()");
   await expectEventually("!document.querySelector('#chat-app').hidden && document.querySelectorAll('#conversation-list button').length>=3", 'Signed-in history missing');
   ok(calls.some(call => call.path === '/api/auth/register'), 'Create-account form uses the existing registration API');
-  ok(await js("document.querySelector('.sidebar .brand').textContent==='e1Agent' && document.querySelector('#message-input').placeholder==='Message Agent'"), 'Chat sidebar and composer use the approved rebrand');
+  ok(await js("document.querySelector('.sidebar .brand').textContent==='Agent' && getComputedStyle(document.querySelector('.sidebar .mark')).backgroundImage.includes('/icons/agent.svg') && document.querySelector('#message-input').placeholder==='Message Agent'"), 'Chat sidebar and composer use the Classic ring branding');
   await session('A quieter week');
   await expectEventually("document.querySelector('.message.assistant .message-text')?.textContent==='Leave two evenings open.'", 'Conversation layout fixture missing');
+  ok(await js("getComputedStyle(document.querySelector('.message.assistant .sender'),'::before').backgroundImage.includes('/icons/agent.svg') && getComputedStyle(document.querySelector('.message.assistant .sender'),'::before').content==='\"\"'"), 'Assistant messages use the Classic ring without retired e1 text');
   ok(await visible('.inspect-run'), 'Saved assistant messages expose their real run inspection action');
   ok(!(await visible('#run-inspector')), 'Inspector starts closed without taking chat space');
   await click('.inspect-run');

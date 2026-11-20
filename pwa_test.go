@@ -165,6 +165,7 @@ func TestPWAPublicAssets(t *testing.T) {
 	}{
 		{"/offline.html", "text/html; charset=utf-8", 0},
 		{"/sw.js", "text/javascript; charset=utf-8", 0},
+		{"/icons/agent.svg", "image/svg+xml", 0},
 		{"/icons/icon-192.png", "image/png", 192},
 		{"/icons/icon-512.png", "image/png", 512},
 		{"/icons/apple-touch-icon.png", "image/png", 180},

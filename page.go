@@ -13,6 +13,7 @@ const homePage = `<!doctype html>
   <meta name="apple-mobile-web-app-title" content="Agent">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="/icons/agent.svg">
   <script src="/pwa-updates.js" defer></script>
   <title>Agent</title>
   <style>
@@ -29,7 +30,7 @@ const homePage = `<!doctype html>
     button:disabled { opacity: .5; cursor: wait; }
     a { color: var(--accent); }
     .brand { display: flex; align-items: center; gap: 9px; color: #e1e6e2; font-size: 15px; font-weight: 600; letter-spacing: -.4px; }
-    .mark { display: grid; place-items: center; width: 26px; height: 26px; flex-shrink: 0; border-radius: 6px; color: #1c281a; background: var(--accent); font: 17px Georgia, serif; letter-spacing: -1.2px; padding-right: 1px; }
+    .mark { display: block; width: 26px; height: 26px; flex-shrink: 0; background: url('/icons/agent.svg') center / contain no-repeat; }
     .app { position: relative; display: grid; grid-template-columns: clamp(180px, var(--sidebar-width, 232px), min(480px, 45vw)) minmax(0, 1fr); width: 100%; height: 100vh; height: 100dvh; margin: 0; border: 0; background: #202322; }
     .sidebar { position: relative; min-width: 0; display: flex; flex-direction: column; gap: 18px; min-height: 0; padding: 25px 14px 12px; border-right: 1px solid var(--line); background: #181b1a; }
     .sidebar-resize { position: absolute; top: 0; right: -4px; bottom: 0; width: 8px; z-index: 5; cursor: col-resize; touch-action: none; }
@@ -237,7 +238,7 @@ const homePage = `<!doctype html>
     .message.user .sender { justify-content: flex-end; margin-bottom: 7px; }
     .message.user .message-text { padding: 12px 17px; color: #e1e8df; background: #2c3930; border: 1px solid #394b3d; border-radius: 12px 12px 3px 12px; }
     .message.assistant .sender { color: #e1e6e2; font-weight: 600; }
-    .message.assistant .sender::before { content: 'e1'; display: grid; place-items: center; width: 21px; height: 21px; flex: none; border-radius: 5px; background: #2e3a30; color: var(--accent); font: 13px Georgia, serif; letter-spacing: -1px; }
+    .message.assistant .sender::before { content: ''; display: block; width: 21px; height: 21px; flex: none; background: url('/icons/agent.svg') center / contain no-repeat; }
     .message-text { font-size: 14px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
     .message.assistant .message-text { white-space: normal; }
     .message-text p { margin: 0 0 15px; white-space: pre-wrap; }
@@ -484,11 +485,11 @@ const homePage = `<!doctype html>
 </head>
 <body>
   <main class="auth-gate" id="auth-loading" aria-label="Loading Agent" aria-busy="true">
-    <header class="auth-header"><div class="brand"><span class="mark" aria-hidden="true">e1</span>Agent</div></header>
+    <header class="auth-header"><div class="brand"><span class="mark" aria-hidden="true"></span>Agent</div></header>
     <div class="auth-loading-center"><div class="auth-loading-status" role="status"><span class="auth-loading-spinner" aria-hidden="true"></span><p>Loading Agent…</p></div></div>
   </main>
   <main class="auth-gate" id="auth-gate" hidden>
-    <header class="auth-header"><div class="brand"><span class="mark" aria-hidden="true">e1</span>Agent</div></header>
+    <header class="auth-header"><div class="brand"><span class="mark" aria-hidden="true"></span>Agent</div></header>
     <div class="auth-center"><div class="auth-content">
     <h1 id="auth-title">Welcome back.</h1>
     <p id="auth-intro">Sign in to pick up the conversation.</p>
@@ -509,7 +510,7 @@ const homePage = `<!doctype html>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Close session navigation" tabindex="-1" hidden></button>
     <aside class="sidebar" id="session-sidebar" aria-label="Session navigation">
       <div class="sidebar-resize" id="sidebar-resize" role="separator" tabindex="0" aria-label="Resize sidebar" aria-orientation="vertical" aria-controls="session-sidebar" aria-valuemin="180" aria-valuemax="480" aria-valuenow="232"></div>
-      <div class="brand"><span class="mark" aria-hidden="true">e1</span>Agent</div>
+      <div class="brand"><span class="mark" aria-hidden="true"></span>Agent</div>
       <button class="reset new-chat" id="new-chat" type="button">＋ New conversation</button>
       <label class="search-label"><span class="visually-hidden">Search conversations</span><input type="search" id="conversation-search" placeholder="Search conversations" autocomplete="off"></label>
       <nav class="history" id="conversation-list" aria-label="Previous sessions"><p class="history-state">Loading conversations…</p></nav>

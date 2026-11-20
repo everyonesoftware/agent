@@ -6,6 +6,8 @@ Native Android (Kotlin/Compose) and native Windows (WinUI 3/C#) clients connect 
 
 Approved visual reference: [`design/agent-native-approved.html`](design/agent-native-approved.html), preserved from `/opt/data/cache/scratch/agent-native-study/index.html`. It is a self-contained design study, not shipped client code. Charcoal `#202322`, sidebar `#181b1a`, field `#252a27`, borders `#333936`, text `#e1e6e2`, sage `#b4d6a3`. Native title bar follows Music. Android uses a conversation drawer and reachable composer, not desktop navigation squeezed onto a phone.
 
+The approved production icon supersedes the study's original mark: **Classic ring**, a charcoal circle inside a sage rounded square. `scripts/generate-branding.mjs` owns the exact SVG/raster geometry and regenerates web/PWA, Android launcher/in-app, and Windows PNG/ICO artwork together. Run it with `--check` to verify all generated outputs; do not introduce per-platform text marks or alternate logo proportions.
+
 Settings order: Updates, Connection, ChatGPT Connection, Web Research, Memory, Reset Password, Sign Out. ChatGPT Connection follows CURRENT `page.go` markup and `refreshConnectionData`/`renderUsage`: status-refresh pill, accessible active-account selector, Add account / Disconnect, Allowance freshness and refresh, compact remaining/window/reset rows, View usage history, collapsed About allowance. Omit the mockup's original avatar and Default model control. Native accessibility/font scaling must retain readable text and touch targets.
 
 ## Server protocol — authoritative existing Go implementation

@@ -561,8 +561,11 @@ data deletion is required to use a bind mount with the same existing data.
 
 ## Interface and development checks
 
-The interface is branded **Agent**, with a compact **e1** mark on login and in the
-sidebar. Existing database, session cookie, model preference, and Compose
+The interface is branded **Agent**, with the **Classic ring** icon: a charcoal
+circle inside a sage rounded square. Web, PWA, Android, and Windows share this
+artwork. Run `node scripts/generate-branding.mjs` to regenerate the SVG, PNGs,
+and Windows ICO, or add `--check` to verify the generated artwork is current.
+Existing database, session cookie, model preference, and Compose
 identifiers retain their original `everyoneagent` names for compatibility; no data
 migration is needed for those identifiers. ChatGPT sign-in is managed by Codex;
 saved profiles from the removed Responses integration can be reconnected without

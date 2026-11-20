@@ -72,6 +72,7 @@ func registerPWARoutes(mux *http.ServeMux) {
 		"/sw.js":                      "text/javascript; charset=utf-8",
 		"/icons/icon-192.png":         "image/png",
 		"/icons/icon-512.png":         "image/png",
+		"/icons/agent.svg":            "image/svg+xml",
 		"/icons/apple-touch-icon.png": "image/png",
 	} {
 		body, err := pwaAssets.ReadFile("pwa" + path)
