@@ -38,19 +38,20 @@ public sealed partial class MainWindow:Window
         root=(Grid)XamlReader.Load(reader.ReadToEnd());Content=root;Title="Agent";
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory,"Assets","Agent.ico"));
         var brandImage=new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory,"Assets","Agent.png")));
-        foreach(string name in new[]{"AppIcon","SignInIcon"})C<Image>(name).Source=brandImage;
+        foreach(string name in new[]{"AppIcon","SignInIcon","SidebarIcon"})C<Image>(name).Source=brandImage;
         ExtendsContentIntoTitleBar=true;SetTitleBar(C<Border>("TitleBar"));AppWindow.Resize(new Windows.Graphics.SizeInt32(1240,850));
         AppWindow.TitleBar.ButtonBackgroundColor=Color.FromArgb(255,24,27,26);AppWindow.TitleBar.ButtonForegroundColor=Color.FromArgb(255,225,230,226);
         AppWindow.TitleBar.ButtonInactiveBackgroundColor=Color.FromArgb(255,24,27,26);AppWindow.TitleBar.ButtonInactiveForegroundColor=Color.FromArgb(255,163,174,166);
         updates=new(new WindowsUpdateBackend(),PreserveSessionAsync);updates.Changed+=status=>DispatcherQueue.TryEnqueue(()=>RenderUpdates(status));
         string installed=Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0]??"Unknown";
         C<TextBlock>("InstalledVersion").Text="Current Version: "+installed;
+        C<TextBlock>("SidebarVersion").Text="Version "+installed;
         Hook("Login",()=>LoginAsync(false));Hook("Register",()=>LoginAsync(true));
-        Hook("NewChat",()=>{if(!busy){chat.Reset();C<TextBox>("Composer").Text="";RenderMessages();ShowSettings(false);}return Task.CompletedTask;});
-        Hook("SettingsNav",async()=>{ShowSettings(true);await RefreshSettingsAsync();});Hook("ChatNav",()=>{ShowSettings(false);return Task.CompletedTask;});
+        Hook("NewChat",()=>{chat.Reset();C<TextBox>("Composer").Text="";C<CheckBox>("ResearchToggle").IsChecked=false;RenderMessages();UpdateActiveConversation();ShowSettings(false);return Task.CompletedTask;});
+        Hook("SettingsNav",async()=>{ShowSettings(!settingsOpen);if(settingsOpen)await RefreshSettingsAsync();});
         Hook("Send",SendAsync);Hook("CancelRequest",()=>{request?.Cancel();return Task.CompletedTask;},false);
         Hook("StopResearch",()=>EndResearchAsync("stop"),false);Hook("RevokeResearch",()=>EndResearchAsync("revoke"),false);
-        C<ListView>("History").SelectionChanged+=async(_,_)=>{if(rendering||busy)return;if(C<ListView>("History").SelectedItem is ListViewItem item&&item.Tag is string id)await GuardAsync(()=>LoadConversationAsync(id));};
+        WireChatLayout();
         Hook("RefreshConnection",RefreshProviderAsync);Hook("RefreshAllowance",()=>RefreshUsageAsync(true));
         Hook("ConnectChatGPT",()=>StartDeviceAsync("/auth/start"));Hook("AddAccount",()=>StartDeviceAsync("/auth/start?mode=add"));
         Hook("DisconnectAccount",()=>ChangeProfileAsync(activeProfile,true));
@@ -86,8 +87,8 @@ public sealed partial class MainWindow:Window
         foreach(string name in new[]{"SaveBraveKey","CheckBraveKey","RemoveBraveKey","SaveBudget"})C<Button>(name).IsEnabled=!busy&&accountView.IsLoaded(SettingsSection.Research);
         foreach(string name in new[]{"AddMemory","ExportMemory"})C<Button>(name).IsEnabled=!busy&&accountView.IsLoaded(SettingsSection.Memory);
         C<Button>("ResetPassword").IsEnabled=!busy&&accountView.IsLoaded(SettingsSection.Account);
-        C<ListView>("History").IsEnabled=!busy;C<ComboBox>("Accounts").IsEnabled=!busy&&accountView.IsLoaded(SettingsSection.Provider);C<TextBox>("Composer").IsEnabled=!busy;C<ComboBox>("Models").IsEnabled=!busy;C<ToggleSwitch>("ResearchToggle").IsEnabled=!busy;C<ToggleSwitch>("MemoryEnabled").IsEnabled=!busy&&accountView.IsLoaded(SettingsSection.Memory);
-        C<Button>("CancelRequest").Visibility=request is null?Visibility.Collapsed:Visibility.Visible;
+        C<ListView>("History").IsEnabled=!busy;C<ComboBox>("Accounts").IsEnabled=!busy&&accountView.IsLoaded(SettingsSection.Provider);C<TextBox>("Composer").IsEnabled=!busy;C<ComboBox>("Models").IsEnabled=!busy;C<CheckBox>("ResearchToggle").IsEnabled=!busy;C<ToggleSwitch>("MemoryEnabled").IsEnabled=!busy&&accountView.IsLoaded(SettingsSection.Memory);
+        C<Grid>("RequestActions").Visibility=C<Button>("CancelRequest").Visibility=request is null?Visibility.Collapsed:Visibility.Visible;
     }
     private void Notify(string message,bool error=true){C<InfoBar>("Notice").Message=message;C<InfoBar>("Notice").Severity=error?InfoBarSeverity.Error:InfoBarSeverity.Informational;C<InfoBar>("Notice").IsOpen=true;}
     private void RenderAuth(bool signedIn)
@@ -104,11 +105,12 @@ public sealed partial class MainWindow:Window
         {
             accountView.Reset(name=>C<PasswordBox>(name).Password="",()=>
             {
-                foreach(string name in new[]{"Composer","BudgetTimezone","Username"})C<TextBox>(name).Text="";
-                foreach(string name in new[]{"SignedInAs","ServerDescription","ProviderMessage","ResearchStatus","DeviceCode","AllowanceFreshness","AllowanceMessage","LoginFeedback"})C<TextBlock>(name).Text="";
-                C<ListView>("History").Items.Clear();C<ComboBox>("Models").Items.Clear();C<ComboBox>("Accounts").Items.Clear();
+                foreach(string name in new[]{"Composer","HistorySearch","BudgetTimezone","Username"})C<TextBox>(name).Text="";
+                foreach(string name in new[]{"SignedInAs","AccountInitial","ServerDescription","ProviderMessage","ResearchStatus","DeviceCode","AllowanceFreshness","AllowanceMessage","LoginFeedback"})C<TextBlock>(name).Text="";
+                savedConversations=[];historyLoaded=false;RenderConversationHistory();C<ComboBox>("Models").Items.Clear();C<ComboBox>("Accounts").Items.Clear();
                 foreach(string name in new[]{"Messages","MemoryEntries","AllowanceWindows"})C<StackPanel>(name).Children.Clear();
-                foreach(string name in new[]{"ResearchToggle","BudgetEnabled","MemoryEnabled"})C<ToggleSwitch>(name).IsOn=false;
+                C<CheckBox>("ResearchToggle").IsChecked=false;
+                foreach(string name in new[]{"BudgetEnabled","MemoryEnabled"})C<ToggleSwitch>(name).IsOn=false;
                 C<NumberBox>("BudgetMaximum").Value=double.NaN;C<ComboBox>("BudgetPeriod").SelectedIndex=-1;
                 C<StackPanel>("DeviceLogin").Visibility=Visibility.Collapsed;
                 foreach(string name in new[]{"StopResearch","RevokeResearch","CancelRequest","AddAccount","DisconnectAccount"})C<Button>(name).Visibility=Visibility.Collapsed;
@@ -136,7 +138,7 @@ public sealed partial class MainWindow:Window
             string? endpoint=LocalSettings.ReadEndpoint();C<TextBox>("Endpoint").Text=endpoint??"";
             if(endpoint is null){restoring=false;RenderAuth(false);return;}
             ActivateClient(ServerEndpoint.Parse(endpoint));var c=Need();long epoch=accountEpoch;var user=await c.RestoreAsync(accountLifetime.Token);if(!IsCurrentSession(c,epoch))return;
-            restoring=false;if(user is null){RenderAuth(false);return;}RenderAuth(true);C<TextBlock>("SignedInAs").Text=user.Text("username");await RefreshWorkspaceAsync();
+            restoring=false;if(user is null){RenderAuth(false);return;}RenderAuth(true);RenderAccountName(user.Text("username"));await RefreshWorkspaceAsync();
         }
         catch(SessionExpiredException){ClearAccount();}
         catch{restoring=false;RenderAuth(false);Notify("Your saved server could not be reached. Retry sign-in or change the server; your saved session has not been removed.");}
@@ -145,9 +147,8 @@ public sealed partial class MainWindow:Window
     {
         var endpoint=ServerEndpoint.Parse(C<TextBox>("Endpoint").Text);string username=C<TextBox>("Username").Text,password=C<PasswordBox>("Password").Password;C<PasswordBox>("Password").Password="";
         ActivateClient(endpoint);var c=Need();long epoch=accountEpoch;await c.SignInAsync(username,password,register,accountLifetime.Token);if(!IsCurrentSession(c,epoch))return;
-        LocalSettings.SaveEndpoint(endpoint);var user=await c.GetAsync("/api/auth/me",accountLifetime.Token);if(!IsCurrentSession(c,epoch))return;restoring=false;RenderAuth(true);C<TextBlock>("SignedInAs").Text=user.Text("username");await RefreshWorkspaceAsync();
+        LocalSettings.SaveEndpoint(endpoint);var user=await c.GetAsync("/api/auth/me",accountLifetime.Token);if(!IsCurrentSession(c,epoch))return;restoring=false;RenderAuth(true);RenderAccountName(user.Text("username"));await RefreshWorkspaceAsync();
     }
-    private void ShowSettings(bool show){C<Grid>("ChatView").Visibility=show?Visibility.Collapsed:Visibility.Visible;C<ScrollViewer>("SettingsView").Visibility=show?Visibility.Visible:Visibility.Collapsed;}
     private async Task RefreshWorkspaceAsync(){await RefreshModelsAsync();await RefreshHistoryAsync();}
     private async Task RefreshModelsAsync()
     {
@@ -157,21 +158,36 @@ public sealed partial class MainWindow:Window
     private async Task RefreshHistoryAsync()
     {
         var c=Need();long epoch=accountEpoch;var result=await c.GetAsync("/api/conversations",accountLifetime.Token);if(!IsCurrentSession(c,epoch))return;
-        rendering=true;try{C<ListView>("History").Items.Clear();foreach(var item in result.Items("conversations"))C<ListView>("History").Items.Add(new ListViewItem{Content=item.Text("title","Conversation"),Tag=item.Text("id")});}finally{rendering=false;}
+        savedConversations=ConversationHistory.Read(result);historyLoaded=true;
+        if(savedConversations.FirstOrDefault(item=>item.Id==chat.ConversationId) is {} current)chatTitle=current.Title;
+        RenderConversationTitle();RenderConversationHistory();
     }
     private async Task LoadConversationAsync(string id)
     {
         var c=Need();long epoch=accountEpoch;var result=await c.GetAsync("/api/conversations/"+Wire.Segment(id),accountLifetime.Token);if(!IsCurrentSession(c,epoch))return;
-        chat.Load(id,result);C<TextBlock>("ConversationTitle").Text=result["conversation"].Text("title","Conversation");C<ToggleSwitch>("ResearchToggle").IsOn=false;RenderMessages(result.Items("messages").ToArray());ShowSettings(false);
+        chat.Load(id,result);chatTitle=result["conversation"].Text("title","Conversation");C<CheckBox>("ResearchToggle").IsChecked=false;RenderMessages(result.Items("messages").ToArray());UpdateActiveConversation();ShowSettings(false);
     }
     private void RenderMessages(JsonNode[]? stored=null)
     {
-        var panel=C<StackPanel>("Messages");panel.Children.Clear();if(chat.Messages.Count==0){panel.Children.Add(Text("What would you like to work on?",26));C<TextBlock>("ConversationTitle").Text="New conversation";return;}
+        var panel=C<StackPanel>("Messages");panel.Children.Clear();
+        bool empty=chat.Messages.Count==0;
+        C<StackPanel>("Welcome").Visibility=empty?Visibility.Visible:Visibility.Collapsed;
+        panel.Visibility=empty?Visibility.Collapsed:Visibility.Visible;
+        if(chat.ConversationId is null)chatTitle=NewConversationTitle;
+        RenderConversationTitle();
+        if(empty){C<ScrollViewer>("MessageScroll").ChangeView(null,0,null);return;}
         for(int i=0;i<chat.Messages.Count;i++)
         {
-            var message=chat.Messages[i];var stack=new StackPanel{Spacing=8};stack.Children.Add(Text(message.Role=="user"?"You":"Agent",12));stack.Children.Add(Text(message.Content,16));
+            var message=chat.Messages[i];bool isUser=message.Role=="user";
+            var stack=new StackPanel{Spacing=8,HorizontalAlignment=isUser?HorizontalAlignment.Right:HorizontalAlignment.Stretch};
+            var sender=new TextBlock{Text=isUser?"You":"Agent",FontSize=11,Foreground=isUser?Muted:null,HorizontalAlignment=stack.HorizontalAlignment};
+            if(!isUser)sender.ClearValue(TextBlock.ForegroundProperty);
+            stack.Children.Add(sender);
+            var body=Text(message.Content);body.LineHeight=24;
+            if(isUser)stack.Children.Add(new Border{Background=SelectedConversation,CornerRadius=new CornerRadius(12,12,3,12),Padding=new Thickness(16,10,16,10),Child=body});
+            else stack.Children.Add(body);
             string run=stored is not null&&i<stored.Length?stored[i].Text("run_id"):"";if(run!="")AddInspector(stack,run);
-            panel.Children.Add(new Border{Background=new SolidColorBrush(Color.FromArgb(255,37,42,39)),CornerRadius=new CornerRadius(10),Padding=new Thickness(18),Child=stack});
+            panel.Children.Add(new Border{Margin=isUser?new Thickness(36,0,0,0):new Thickness(0),Child=stack});
         }
         C<ScrollViewer>("MessageScroll").ChangeView(null,double.MaxValue,null);
     }
@@ -188,7 +204,7 @@ public sealed partial class MainWindow:Window
         request=CancellationTokenSource.CreateLinkedTokenSource(accountLifetime.Token);SetBusy();
         try
         {
-            if(C<ToggleSwitch>("ResearchToggle").IsOn)
+            if(C<CheckBox>("ResearchToggle").IsChecked==true)
             {
                 var capabilities=await c.GetAsync("/api/research",request.Token);if(!IsCurrentSession(c,epoch))return;
                 var created=await c.PostAsync("/api/research/tasks",payload,request.Token);if(!IsCurrentSession(c,epoch))return;

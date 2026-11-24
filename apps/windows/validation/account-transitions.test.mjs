@@ -14,10 +14,12 @@ test('all account transitions use the sensitive view reset boundary',()=>{
  assert.match(body(main,'ResetAccountView'),/accountView\.Reset\(/);
  assert.match(body(main,'ResetAccountView'),/C<PasswordBox>\(name\)\.Password=""/);
  assert.match(body(main,'ResetAccountView'),/ShowSettings\(false\)/);
- for(const name of ['SignedInAs','ServerDescription','ProviderMessage','ResearchStatus','DeviceCode','AllowanceFreshness','AllowanceMessage','BudgetTimezone','Username','LoginFeedback'])assert.ok(body(main,'ResetAccountView').includes(`"${name}"`),name);
+ for(const name of ['SignedInAs','AccountInitial','HistorySearch','ServerDescription','ProviderMessage','ResearchStatus','DeviceCode','AllowanceFreshness','AllowanceMessage','BudgetTimezone','Username','LoginFeedback'])assert.ok(body(main,'ResetAccountView').includes(`"${name}"`),name);
  for(const name of ['DeviceLogin','StopResearch','RevokeResearch'])assert.ok(body(main,'ResetAccountView').includes(`"${name}"`),name);
  assert.match(body(main,'ResetAccountView'),/rendering=true/);
- assert.match(body(main,'ResetAccountView'),/"ResearchToggle","BudgetEnabled","MemoryEnabled"/);
+ assert.match(body(main,'ResetAccountView'),/C<CheckBox>\("ResearchToggle"\)\.IsChecked=false/);
+ assert.match(body(main,'ResetAccountView'),/"BudgetEnabled","MemoryEnabled".*IsOn=false/);
+ assert.match(body(main,'ResetAccountView'),/savedConversations=\[\];historyLoaded=false;RenderConversationHistory\(\)/);
  assert.match(body(main,'ResetAccountView'),/Notice.*IsOpen=false/);
  const login=body(main,'LoginAsync');assert.ok(login.indexOf('username=C<TextBox>("Username").Text')<login.indexOf('ActivateClient(endpoint)'));
  assert.match(login,/SignInAsync\(username,password,/);

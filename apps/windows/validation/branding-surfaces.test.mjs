@@ -5,14 +5,14 @@ import fs from 'node:fs';
 const app = new URL('../Agent.App/', import.meta.url);
 const read = name => fs.readFileSync(new URL(name, app), 'utf8');
 
-test('title bar and sign-in header share the deployed Agent artwork, not a text mark', () => {
+test('title bar, sign-in and sidebar share the deployed Agent artwork, not a text mark', () => {
   const shell = read('Shell.xaml');
   const window = read('MainWindow.cs');
-  for (const [name, size] of [['AppIcon', 20], ['SignInIcon', 40]]) {
+  for (const [name, size] of [['AppIcon', 20], ['SignInIcon', 40], ['SidebarIcon', 26]]) {
     assert.match(shell, new RegExp(`<Image[^>]*x:Name="${name}"[^>]*Width="${size}"[^>]*Height="${size}"[^>]*AutomationProperties.AccessibilityView="Raw"[^>]*/>`));
   }
   assert.match(window, /var brandImage=new BitmapImage\(new Uri\(Path.Combine\(AppContext.BaseDirectory,"Assets","Agent.png"\)\)\);/);
-  assert.match(window, /foreach\(string name in new\[\]\{"AppIcon","SignInIcon"\}\)C<Image>\(name\).Source=brandImage;/);
+  assert.match(window, /foreach\(string name in new\[\]\{"AppIcon","SignInIcon","SidebarIcon"\}\)C<Image>\(name\).Source=brandImage;/);
   assert.doesNotMatch(shell, /(?:Text|Content)="e1"/i);
 });
 

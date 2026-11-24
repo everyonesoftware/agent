@@ -11,19 +11,53 @@
  <Border x:Name="TitleBar" Background="#181b1a" Padding="16,0,150,0"><StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center"><Image x:Name="AppIcon" Width="20" Height="20" AutomationProperties.AccessibilityView="Raw"/><TextBlock Text="Agent" FontSize="13"/></StackPanel></Border>
  <StackPanel x:Name="Loading" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16"><ProgressRing IsActive="True"/><TextBlock Text="Checking your session…"/></StackPanel>
  <ScrollViewer x:Name="SignIn" Grid.Row="1" Visibility="Collapsed"><StackPanel Width="390" Spacing="14" VerticalAlignment="Center" Margin="28,70"><StackPanel Orientation="Horizontal" Spacing="12"><Image x:Name="SignInIcon" Width="40" Height="40" AutomationProperties.AccessibilityView="Raw"/><TextBlock Text="Agent" FontSize="32" VerticalAlignment="Center"/></StackPanel><TextBlock Text="Connect to your Agent server" FontSize="20"/><TextBox x:Name="Endpoint" Header="Server address" PlaceholderText="HTTPS server address" InputScope="Url"/><TextBox x:Name="Username" Header="Username"/><PasswordBox x:Name="Password" Header="Password"/><Button x:Name="Login" Content="Sign in" HorizontalAlignment="Stretch"/><Button x:Name="Register" Content="Create account" HorizontalAlignment="Stretch"/><TextBlock x:Name="LoginFeedback"/></StackPanel></ScrollViewer>
- <Grid x:Name="Workspace" Grid.Row="1" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition Width="260"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-  <Grid Background="#181b1a" Padding="16"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-   <Button x:Name="NewChat" Content="＋  New conversation" HorizontalAlignment="Stretch"/><TextBlock Grid.Row="1" Text="Conversations" Margin="4,24,0,12" Foreground="#a3aea6"/>
-   <ListView x:Name="History" Grid.Row="2" SelectionMode="Single" Background="Transparent"/>
-   <StackPanel Grid.Row="3" Spacing="10"><TextBlock x:Name="SignedInAs" FontSize="12"/><Button x:Name="SettingsNav" Content="⚙  Settings" HorizontalAlignment="Stretch"/><Button x:Name="ChatNav" Content="Chat" HorizontalAlignment="Stretch"/></StackPanel>
+ <Grid x:Name="Workspace" Grid.Row="1" Visibility="Collapsed">
+  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+  <Grid.ColumnDefinitions><ColumnDefinition Width="232"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+  <Border Grid.Column="1" BorderBrush="#333936" BorderThickness="0,0,0,1" Padding="24,8" MinHeight="65">
+   <Grid ColumnSpacing="12">
+    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+    <Button x:Name="SidebarToggle" Visibility="Collapsed" AutomationProperties.Name="Open conversations" ToolTipService.ToolTip="Open conversations" MinHeight="36" Width="36" Padding="0"><SymbolIcon Symbol="GlobalNavigationButton"/></Button>
+    <TextBlock x:Name="ConversationTitle" Grid.Column="1" Text="New conversation" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" AutomationProperties.HeadingLevel="Level1"/>
+   </Grid>
+  </Border>
+  <ContentControl x:Name="WorkspaceContent" Grid.Row="1" Grid.Column="1" IsTabStop="False" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+   <Grid>
+  <Grid x:Name="ChatView">
+   <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+   <ScrollViewer x:Name="MessageScroll" HorizontalContentAlignment="Stretch">
+    <Grid MaxWidth="788" Padding="24,28,24,0">
+     <StackPanel x:Name="Welcome" MaxWidth="540" Spacing="14" Margin="0,76,0,0">
+      <TextBlock Text="What can I help with?" FontSize="32" AutomationProperties.HeadingLevel="Level2"/>
+      <TextBlock Text="Ask a question to start a conversation." Foreground="#a3aea6" FontSize="13"/>
+     </StackPanel>
+     <StackPanel x:Name="Messages" Spacing="26" Visibility="Collapsed"/>
+    </Grid>
+   </ScrollViewer>
+   <StackPanel Grid.Row="1" MaxWidth="796" Padding="24,8,24,16" Spacing="8">
+    <Grid x:Name="RequestActions" Visibility="Collapsed" ColumnSpacing="6">
+     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+     <Button x:Name="StopResearch" Visibility="Collapsed" HorizontalAlignment="Stretch" MinHeight="36"><TextBlock Text="Stop research"/></Button>
+     <Button x:Name="RevokeResearch" Grid.Column="1" Visibility="Collapsed" HorizontalAlignment="Stretch" MinHeight="36"><TextBlock Text="Revoke permission"/></Button>
+     <Button x:Name="CancelRequest" Grid.Column="2" Visibility="Collapsed" HorizontalAlignment="Stretch" MinHeight="36"><TextBlock Text="Cancel request"/></Button>
+    </Grid>
+    <TextBlock Text="Messages and replies are saved to your account after each successful request." Foreground="#a3aea6" FontSize="11"/>
+    <Border x:Name="ComposerCard" CornerRadius="8" Background="#252a27" BorderBrush="#333936" BorderThickness="1" Padding="12">
+     <StackPanel Spacing="8">
+      <TextBox x:Name="Composer" AutomationProperties.Name="Message Agent" PlaceholderText="Message Agent" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="44" MaxHeight="140" Background="Transparent" BorderBrush="Transparent" ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+      <Grid x:Name="ComposerToolbar" ColumnSpacing="8">
+       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+       <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+       <ComboBox x:Name="Models" MinWidth="104" MaxWidth="160" MinHeight="32" FontSize="12" VerticalAlignment="Center" AutomationProperties.Name="Chat model"/>
+       <CheckBox x:Name="ResearchToggle" Grid.Column="1" MinWidth="0" MinHeight="32" FontSize="12" Foreground="#a3aea6" Content="Research public web" ToolTipService.ToolTip="Ask for permission to research the public web for this message"/>
+       <Button x:Name="Send" Grid.Column="2" Content="Send" MinHeight="36" MinWidth="54" FontSize="12" FontWeight="SemiBold" Background="#b4d6a3" Foreground="#182217"/>
+      </Grid>
+     </StackPanel>
+    </Border>
+    <TextBlock Text="Enter to send · Shift+Enter for a new line" Foreground="#a3aea6" FontSize="10" TextAlignment="Center"/>
+   </StackPanel>
   </Grid>
-  <Grid x:Name="ChatView" Grid.Column="1" Padding="28,20"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-   <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="240"/></Grid.ColumnDefinitions><TextBlock x:Name="ConversationTitle" Text="New conversation" FontSize="23" VerticalAlignment="Center"/><ComboBox x:Name="Models" Grid.Column="1" AutomationProperties.Name="Chat model"/></Grid>
-   <ScrollViewer x:Name="MessageScroll" Grid.Row="1" Margin="0,20"><StackPanel x:Name="Messages" Spacing="20"/></ScrollViewer>
-   <StackPanel Grid.Row="2" Spacing="10"><StackPanel Orientation="Horizontal" Spacing="12"><ToggleSwitch x:Name="ResearchToggle" Header="Web Research" OffContent="Off" OnContent="Ask permission"/><Button x:Name="StopResearch" Content="Stop research" Visibility="Collapsed"/><Button x:Name="RevokeResearch" Content="Revoke permission" Visibility="Collapsed"/></StackPanel><TextBox x:Name="Composer" PlaceholderText="Message Agent…" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxHeight="200"/><StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right"><Button x:Name="Send" Content="Send" Background="#b4d6a3" Foreground="#182217"/><Button x:Name="CancelRequest" Content="Cancel request" Visibility="Collapsed"/></StackPanel></StackPanel>
-  </Grid>
-  <ScrollViewer x:Name="SettingsView" Grid.Column="1" Visibility="Collapsed"><StackPanel MaxWidth="820" Spacing="26" Margin="32,26,32,48" HorizontalAlignment="Stretch">
-   <TextBlock Text="Settings" FontSize="30"/>
+  <ScrollViewer x:Name="SettingsView" Visibility="Collapsed"><StackPanel MaxWidth="820" Spacing="26" Margin="32,26,32,48" HorizontalAlignment="Stretch">
    <StackPanel x:Name="UpdatesSection" Spacing="12"><TextBlock Text="Updates" FontSize="21"/><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="InstalledVersion" VerticalAlignment="Center"/><Button x:Name="CheckUpdates" Grid.Column="1" Content="Check for updates"/></Grid>
     <Border Background="#252a27" CornerRadius="9" BorderBrush="#333936" BorderThickness="1" Padding="20"><StackPanel Spacing="14"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="UpdateTitle" Text="Not checked yet" FontSize="19"/><TextBlock x:Name="OfferedVersion" Grid.Column="1" Foreground="#b4d6a3"/></Grid><TextBlock x:Name="UpdateStatus"/><Expander x:Name="WhatsNew" Header="What’s new" Visibility="Collapsed"><StackPanel x:Name="Changelog" Spacing="10"/></Expander><ProgressBar x:Name="UpdateProgress" Minimum="0" Maximum="100" Visibility="Collapsed"/><StackPanel x:Name="UpdateActions" Visibility="Collapsed"><Button x:Name="UpdatePrimary" Content="Download update"/></StackPanel></StackPanel></Border>
    </StackPanel>
@@ -37,6 +71,38 @@
    <StackPanel x:Name="PasswordSection" Spacing="12"><TextBlock Text="Reset Password" FontSize="21"/><TextBlock Text="Change your Agent password, not your ChatGPT password. Other Agent sessions will be signed out."/><PasswordBox x:Name="CurrentPassword" Header="Current password"/><PasswordBox x:Name="NewPassword" Header="New password"/><PasswordBox x:Name="ConfirmPassword" Header="Confirm new password"/><Button x:Name="ResetPassword" Content="Update password"/></StackPanel>
    <StackPanel x:Name="SignOutSection" Spacing="12"><TextBlock Text="Sign Out" FontSize="21"/><TextBlock Text="Sign out of Agent on this device. Your saved conversations stay on your server."/><Button x:Name="SignOut" Content="Sign out"/></StackPanel>
   </StackPanel></ScrollViewer>
+   </Grid>
+  </ContentControl>
+  <Button x:Name="SidebarBackdrop" Grid.Row="1" Grid.Column="1" Visibility="Collapsed" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="#A0000000" BorderThickness="0" CornerRadius="0" IsTabStop="False" AllowFocusOnInteraction="False" AutomationProperties.AccessibilityView="Raw"/>
+  <Border x:Name="Sidebar" Grid.RowSpan="2" Width="232" HorizontalAlignment="Left" Background="#181b1a" BorderBrush="#333936" BorderThickness="0,0,1,0" Padding="14,24,14,12">
+   <Grid>
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <StackPanel Orientation="Horizontal" Spacing="9" Margin="6,0,0,24">
+     <Image x:Name="SidebarIcon" Width="26" Height="26" AutomationProperties.AccessibilityView="Raw"/>
+     <TextBlock Text="Agent" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/>
+    </StackPanel>
+    <Button x:Name="NewChat" Grid.Row="1" Content="＋  New conversation" MinHeight="39" FontSize="12" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Margin="0,0,0,18"/>
+    <TextBox x:Name="HistorySearch" Grid.Row="2" PlaceholderText="Search conversations" AutomationProperties.Name="Search conversations" MinHeight="39" FontSize="12" Background="#181b1a" Margin="0,0,0,14"/>
+    <ListView x:Name="History" Grid.Row="3" SelectionMode="None" IsItemClickEnabled="True" Padding="0,0,8,0" Background="Transparent" AutomationProperties.Name="Saved conversations"/>
+    <TextBlock x:Name="HistoryEmpty" Grid.Row="3" Margin="8,8" Foreground="#a3aea6" FontSize="12" IsHitTestVisible="False"/>
+    <Border x:Name="AccountFooter" Grid.Row="4" BorderBrush="#333936" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="6,12,0,0">
+     <Grid ColumnSpacing="10" RowSpacing="10">
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <Grid Width="30" Height="30" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw">
+       <Ellipse Fill="#2c332e"/>
+       <TextBlock x:Name="AccountInitial" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#a3aea6" FontSize="12"/>
+      </Grid>
+      <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+       <TextBlock x:Name="SignedInAs" FontSize="12" FontWeight="SemiBold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+       <TextBlock Text="Your account" FontSize="10" Foreground="#a3aea6"/>
+      </StackPanel>
+      <Button x:Name="SettingsNav" Grid.Column="2" AutomationProperties.Name="Settings" ToolTipService.ToolTip="Settings" Width="36" MinHeight="36" Padding="0" Background="Transparent" BorderThickness="0"><SymbolIcon Symbol="Setting"/></Button>
+      <TextBlock x:Name="SidebarVersion" Grid.Row="1" Grid.ColumnSpan="3" FontSize="10" Foreground="#a3aea6"/>
+     </Grid>
+    </Border>
+   </Grid>
+  </Border>
  </Grid>
  <InfoBar x:Name="Notice" Grid.Row="2" IsOpen="False" IsClosable="True"/>
 </Grid>

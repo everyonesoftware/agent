@@ -11,7 +11,7 @@ public sealed partial class MainWindow
     private async Task RefreshSettingsAsync()
     {
         var c=Need();long epoch=accountEpoch;var user=await c.GetAsync("/api/auth/me",accountLifetime.Token);if(!IsCurrentSession(c,epoch))return;
-        C<TextBlock>("SignedInAs").Text=user.Text("username");C<TextBlock>("ServerDescription").Text=c.Endpoint.Authority;accountView.MarkLoaded(SettingsSection.Account);
+        RenderAccountName(user.Text("username"));C<TextBlock>("ServerDescription").Text=c.Endpoint.Authority;accountView.MarkLoaded(SettingsSection.Account);
         // Each read reports its own failure; unavailable ChatGPT must not hide memory or research.
         foreach(var load in new Func<Task>[]{RefreshProviderAsync,RefreshResearchAsync,RefreshMemoryAsync})
         {
