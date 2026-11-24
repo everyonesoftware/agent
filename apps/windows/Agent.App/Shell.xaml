@@ -6,6 +6,15 @@
   <Style TargetType="PasswordBox"><Setter Property="MinHeight" Value="44"/><Setter Property="Background" Value="#252a27"/></Style>
   <Style TargetType="ComboBox"><Setter Property="MinHeight" Value="44"/><Setter Property="HorizontalAlignment" Value="Stretch"/><Setter Property="Background" Value="#252a27"/></Style>
   <Style TargetType="Expander"><Setter Property="HorizontalAlignment" Value="Stretch"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/></Style>
+  <Style x:Key="SettingsCard" TargetType="Border">
+   <Setter Property="Background" Value="#252a27"/><Setter Property="BorderBrush" Value="#333936"/>
+   <Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="8"/><Setter Property="Padding" Value="18"/>
+  </Style>
+  <Style x:Key="SettingsHeading" TargetType="TextBlock">
+   <Setter Property="Foreground" Value="#e1e6e2"/><Setter Property="TextWrapping" Value="Wrap"/>
+   <Setter Property="FontSize" Value="16"/><Setter Property="FontWeight" Value="SemiBold"/>
+   <Setter Property="AutomationProperties.HeadingLevel" Value="Level2"/>
+  </Style>
  </Grid.Resources>
  <Grid.RowDefinitions><RowDefinition Height="36"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
  <Border x:Name="TitleBar" Background="#181b1a" Padding="16,0,150,0"><StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center"><Image x:Name="AppIcon" Width="20" Height="20" AutomationProperties.AccessibilityView="Raw"/><TextBlock Text="Agent" FontSize="13"/></StackPanel></Border>
@@ -57,20 +66,141 @@
     <TextBlock Text="Enter to send · Shift+Enter for a new line" Foreground="#a3aea6" FontSize="10" TextAlignment="Center"/>
    </StackPanel>
   </Grid>
-  <ScrollViewer x:Name="SettingsView" Visibility="Collapsed"><StackPanel MaxWidth="820" Spacing="26" Margin="32,26,32,48" HorizontalAlignment="Stretch">
-   <StackPanel x:Name="UpdatesSection" Spacing="12"><TextBlock Text="Updates" FontSize="21"/><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="InstalledVersion" VerticalAlignment="Center"/><Button x:Name="CheckUpdates" Grid.Column="1" Content="Check for updates"/></Grid>
-    <Border Background="#252a27" CornerRadius="9" BorderBrush="#333936" BorderThickness="1" Padding="20"><StackPanel Spacing="14"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="UpdateTitle" Text="Not checked yet" FontSize="19"/><TextBlock x:Name="OfferedVersion" Grid.Column="1" Foreground="#b4d6a3"/></Grid><TextBlock x:Name="UpdateStatus"/><Expander x:Name="WhatsNew" Header="What’s new" Visibility="Collapsed"><StackPanel x:Name="Changelog" Spacing="10"/></Expander><ProgressBar x:Name="UpdateProgress" Minimum="0" Maximum="100" Visibility="Collapsed"/><StackPanel x:Name="UpdateActions" Visibility="Collapsed"><Button x:Name="UpdatePrimary" Content="Download update"/></StackPanel></StackPanel></Border>
-   </StackPanel>
-   <StackPanel x:Name="ConnectionSection" Spacing="12"><TextBlock Text="Connection" FontSize="21"/><TextBlock x:Name="ServerDescription"/><Button x:Name="TestConnection" Content="Test connection"/><Button x:Name="ChangeServer" Content="Change server / sign in to another server"/></StackPanel>
-   <StackPanel x:Name="ChatGPTSection" Spacing="12"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="ChatGPT Connection" FontSize="21"/><Button x:Name="RefreshConnection" Grid.Column="1" Content="Unavailable  ↻" AutomationProperties.Name="Refresh ChatGPT connection status" CornerRadius="20"/></Grid><TextBlock x:Name="ProviderMessage"/><ComboBox x:Name="Accounts" AutomationProperties.Name="Active ChatGPT account"/><StackPanel Orientation="Horizontal" Spacing="12"><Button x:Name="ConnectChatGPT" Content="Continue with ChatGPT ↗"/><Button x:Name="AddAccount" Content="Add account ↗"/><Button x:Name="DisconnectAccount" Content="Disconnect"/></StackPanel>
-    <StackPanel x:Name="DeviceLogin" Visibility="Collapsed" Spacing="10"><TextBlock Text="Connect ChatGPT with Codex" FontSize="18"/><TextBlock Text="Open the verification page, sign in to the intended ChatGPT account and workspace, enter this code, then return here."/><TextBlock x:Name="DeviceCode" FontSize="24" IsTextSelectionEnabled="True"/><StackPanel Orientation="Horizontal" Spacing="12"><Button x:Name="VerifyDevice" Content="Open verification page ↗"/><Button x:Name="PollDevice" Content="Check approval"/><Button x:Name="CancelDevice" Content="Cancel"/></StackPanel></StackPanel>
-    <Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="Allowance" FontSize="17" VerticalAlignment="Center"/><TextBlock x:Name="AllowanceFreshness" Grid.Column="1" FontSize="12" VerticalAlignment="Center" Margin="0,0,12,0"/><Button x:Name="RefreshAllowance" Grid.Column="2" Content="↻" AutomationProperties.Name="Refresh allowance"/></Grid><TextBlock x:Name="AllowanceMessage"/><StackPanel x:Name="AllowanceWindows" Spacing="14"/><Button x:Name="UsageHistory" Content="View usage history"/><Expander Header="About allowance"><TextBlock Text="Codex reports allowance for the selected ChatGPT connection. Windows may not cover every ChatGPT feature or Agent-specific limit. Refresh failures retain explicitly marked last-known values; they do not create another connection."/></Expander>
-   </StackPanel>
-   <StackPanel x:Name="ResearchSection" Spacing="12"><TextBlock Text="Web Research" FontSize="21"/><TextBlock Text="Brave Search" FontSize="17"/><TextBlock x:Name="ResearchStatus"/><TextBlock Text="Use your own Brave Search key. Each research task still needs your explicit permission."/><PasswordBox x:Name="BraveKey" Header="Brave Search API key"/><StackPanel Orientation="Horizontal" Spacing="10"><Button x:Name="SaveBraveKey" Content="Verify and save key"/><Button x:Name="CheckBraveKey" Content="Check connection"/><Button x:Name="RemoveBraveKey" Content="Remove key"/></StackPanel><Expander Header="Search budget"><StackPanel Spacing="10"><ToggleSwitch x:Name="BudgetEnabled" Header="Limit searches"/><NumberBox x:Name="BudgetMaximum" Header="Maximum searches" Minimum="1" Maximum="1000000" SpinButtonPlacementMode="Compact"/><ComboBox x:Name="BudgetPeriod" Header="Period"><ComboBoxItem Content="daily"/><ComboBoxItem Content="weekly"/><ComboBoxItem Content="monthly"/></ComboBox><TextBox x:Name="BudgetTimezone" Header="IANA timezone"/><Button x:Name="SaveBudget" Content="Save budget"/></StackPanel></Expander><Button x:Name="ResearchHistory" Content="View search usage history"/></StackPanel>
-   <StackPanel x:Name="MemorySection" Spacing="12"><TextBlock Text="Memory" FontSize="21"/><ToggleSwitch x:Name="MemoryEnabled" Header="Include saved memory in new chats"/><StackPanel x:Name="MemoryEntries" Spacing="10"/><Button x:Name="AddMemory" Content="Add memory"/><Button x:Name="ExportMemory" Content="Export memory"/></StackPanel>
-   <StackPanel x:Name="PasswordSection" Spacing="12"><TextBlock Text="Reset Password" FontSize="21"/><TextBlock Text="Change your Agent password, not your ChatGPT password. Other Agent sessions will be signed out."/><PasswordBox x:Name="CurrentPassword" Header="Current password"/><PasswordBox x:Name="NewPassword" Header="New password"/><PasswordBox x:Name="ConfirmPassword" Header="Confirm new password"/><Button x:Name="ResetPassword" Content="Update password"/></StackPanel>
-   <StackPanel x:Name="SignOutSection" Spacing="12"><TextBlock Text="Sign Out" FontSize="21"/><TextBlock Text="Sign out of Agent on this device. Your saved conversations stay on your server."/><Button x:Name="SignOut" Content="Sign out"/></StackPanel>
-  </StackPanel></ScrollViewer>
+  <ScrollViewer x:Name="SettingsView" Visibility="Collapsed" HorizontalContentAlignment="Stretch"
+                HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled" VerticalScrollBarVisibility="Auto">
+   <Grid x:Name="SettingsColumn" MaxWidth="648" Padding="20,22,20,40">
+    <StackPanel Spacing="16">
+     <StackPanel Spacing="10" Margin="0,0,0,2">
+      <Button x:Name="SettingsBack" Content="←  Back to conversation" AutomationProperties.Name="Back to conversation"/>
+      <TextBlock Text="Manage your connections, account, and security." Foreground="#a3aea6"/>
+     </StackPanel>
+     <Border x:Name="UpdatesSection" Style="{StaticResource SettingsCard}">
+      <StackPanel Spacing="10">
+       <Grid ColumnSpacing="10">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <TextBlock x:Name="InstalledVersion" Style="{StaticResource SettingsHeading}" VerticalAlignment="Center"/>
+        <Button x:Name="CheckUpdates" Grid.Column="1" HorizontalAlignment="Right"><TextBlock Text="Check for updates"/></Button>
+       </Grid>
+       <Grid ColumnSpacing="10">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <TextBlock x:Name="UpdateTitle" Text="Not checked yet" FontSize="15" FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite"/>
+        <TextBlock x:Name="OfferedVersion" Grid.Column="1" Foreground="#b4d6a3" TextAlignment="Right" Visibility="Collapsed"/>
+       </Grid>
+       <TextBlock x:Name="UpdateStatus" Foreground="#a3aea6" Visibility="Collapsed"/>
+       <Expander x:Name="WhatsNew" Header="What’s new" Visibility="Collapsed"><StackPanel x:Name="Changelog" Spacing="10"/></Expander>
+       <ProgressBar x:Name="UpdateProgress" Minimum="0" Maximum="100" Visibility="Collapsed"/>
+       <StackPanel x:Name="UpdateActions" Visibility="Collapsed"><Button x:Name="UpdatePrimary" Content="Download update"/></StackPanel>
+      </StackPanel>
+     </Border>
+     <Border x:Name="ConnectionSection" Style="{StaticResource SettingsCard}">
+      <StackPanel Spacing="10">
+       <TextBlock Text="Server connection" Style="{StaticResource SettingsHeading}"/>
+       <TextBlock x:Name="ServerDescription" Foreground="#a3aea6" IsTextSelectionEnabled="True"/>
+       <StackPanel x:Name="ServerActions" Spacing="8">
+        <Button x:Name="TestConnection"><TextBlock Text="Test connection"/></Button>
+        <Button x:Name="ChangeServer"><TextBlock Text="Change server"/></Button>
+       </StackPanel>
+      </StackPanel>
+     </Border>
+     <Border x:Name="ChatGPTSection" Style="{StaticResource SettingsCard}">
+      <StackPanel Spacing="12">
+       <Grid ColumnSpacing="10">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <TextBlock Text="ChatGPT connection" Style="{StaticResource SettingsHeading}" VerticalAlignment="Center"/>
+        <Button x:Name="RefreshConnection" Grid.Column="1" HorizontalAlignment="Right" CornerRadius="20"
+                AutomationProperties.Name="Refresh ChatGPT connection status: Unavailable" ToolTipService.ToolTip="Refresh connection status">
+         <TextBlock x:Name="ConnectionBadge" Text="Unavailable  ↻" FontSize="12"/>
+        </Button>
+       </Grid>
+       <TextBlock x:Name="ProviderMessage" Foreground="#a3aea6" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite"/>
+       <ComboBox x:Name="Accounts" Background="#202322" AutomationProperties.Name="Active ChatGPT account" Visibility="Collapsed"/>
+       <StackPanel x:Name="AccountActions" Spacing="8">
+        <Button x:Name="ConnectChatGPT"><TextBlock Text="Continue with ChatGPT ↗"/></Button>
+        <Button x:Name="AddAccount" Visibility="Collapsed"><TextBlock Text="Add account ↗"/></Button>
+        <Button x:Name="DisconnectAccount" Visibility="Collapsed"><TextBlock Text="Disconnect" Foreground="#f2aaa2"/></Button>
+       </StackPanel>
+       <StackPanel x:Name="DeviceLogin" Visibility="Collapsed" Spacing="10">
+        <TextBlock Text="Connect ChatGPT with Codex" FontWeight="SemiBold"/>
+        <TextBlock Text="Open the verification page, sign in to the intended ChatGPT account and workspace, enter this code, then return here." Foreground="#a3aea6"/>
+        <TextBlock x:Name="DeviceCode" FontSize="24" IsTextSelectionEnabled="True"/>
+        <StackPanel x:Name="DeviceActions" Spacing="8">
+         <Button x:Name="VerifyDevice"><TextBlock Text="Open verification page ↗"/></Button>
+         <Button x:Name="PollDevice"><TextBlock Text="Check approval"/></Button>
+         <Button x:Name="CancelDevice"><TextBlock Text="Cancel"/></Button>
+        </StackPanel>
+       </StackPanel>
+       <Border BorderBrush="#333936" BorderThickness="0,1,0,0" Padding="0,12,0,0">
+        <StackPanel Spacing="10">
+         <Grid ColumnSpacing="10">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+          <StackPanel VerticalAlignment="Center" Spacing="3">
+           <TextBlock Text="Allowance" FontWeight="SemiBold" AutomationProperties.HeadingLevel="Level3"/>
+           <TextBlock x:Name="AllowanceFreshness" FontSize="12" Foreground="#a3aea6" Visibility="Collapsed"/>
+          </StackPanel>
+          <Button x:Name="RefreshAllowance" Grid.Column="1" Content="↻" MinWidth="44" AutomationProperties.Name="Refresh allowance" ToolTipService.ToolTip="Refresh allowance"/>
+         </Grid>
+         <TextBlock x:Name="AllowanceMessage" Foreground="#a3aea6" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite"/>
+         <StackPanel x:Name="AllowanceWindows" Spacing="10" Visibility="Collapsed"/>
+         <Button x:Name="UsageHistory" Content="View usage history"/>
+         <Expander Header="About allowance"><TextBlock Text="Codex reports allowance for the selected ChatGPT connection. Windows may not cover every ChatGPT feature or Agent-specific limit. Refresh failures retain explicitly marked last-known values; they do not create another connection."/></Expander>
+        </StackPanel>
+       </Border>
+      </StackPanel>
+     </Border>
+     <Border x:Name="ResearchSection" Style="{StaticResource SettingsCard}">
+      <StackPanel Spacing="10">
+       <TextBlock Text="Web research" Style="{StaticResource SettingsHeading}"/>
+       <TextBlock x:Name="ResearchStatus" Foreground="#a3aea6"/>
+       <TextBlock Text="Use your own Brave Search key. Each research task still needs your explicit permission." Foreground="#a3aea6"/>
+       <PasswordBox x:Name="BraveKey" Header="Brave Search API key" Background="#202322"/>
+       <StackPanel x:Name="BraveActions" Spacing="8">
+        <Button x:Name="SaveBraveKey"><TextBlock Text="Verify and save key"/></Button>
+        <Button x:Name="CheckBraveKey"><TextBlock Text="Check connection"/></Button>
+        <Button x:Name="RemoveBraveKey"><TextBlock Text="Remove key"/></Button>
+       </StackPanel>
+       <Expander Header="Search budget">
+        <StackPanel Spacing="10">
+         <ToggleSwitch x:Name="BudgetEnabled" Header="Limit searches"/>
+         <NumberBox x:Name="BudgetMaximum" Header="Maximum searches" Minimum="1" Maximum="1000000" SpinButtonPlacementMode="Compact"/>
+         <ComboBox x:Name="BudgetPeriod" Header="Period"><ComboBoxItem Content="daily"/><ComboBoxItem Content="weekly"/><ComboBoxItem Content="monthly"/></ComboBox>
+         <TextBox x:Name="BudgetTimezone" Header="IANA timezone"/>
+         <Button x:Name="SaveBudget" Content="Save budget"/>
+        </StackPanel>
+       </Expander>
+       <Button x:Name="ResearchHistory"><TextBlock Text="View search usage history"/></Button>
+      </StackPanel>
+     </Border>
+     <Border x:Name="MemorySection" Style="{StaticResource SettingsCard}">
+      <StackPanel Spacing="10">
+       <TextBlock Text="Memory" Style="{StaticResource SettingsHeading}"/>
+       <ToggleSwitch x:Name="MemoryEnabled"><ToggleSwitch.Header><TextBlock Text="Include saved memory in new chats"/></ToggleSwitch.Header></ToggleSwitch>
+       <StackPanel x:Name="MemoryEntries" Spacing="10"/>
+       <StackPanel x:Name="MemoryActions" Spacing="8">
+        <Button x:Name="AddMemory"><TextBlock Text="Add memory"/></Button>
+        <Button x:Name="ExportMemory"><TextBlock Text="Export memory"/></Button>
+       </StackPanel>
+      </StackPanel>
+     </Border>
+     <Border x:Name="PasswordSection" Style="{StaticResource SettingsCard}">
+      <StackPanel Spacing="10">
+       <TextBlock Text="Reset password" Style="{StaticResource SettingsHeading}"/>
+       <TextBlock Text="Change your Agent password, not your ChatGPT password. Other Agent sessions will be signed out." Foreground="#a3aea6"/>
+       <PasswordBox x:Name="CurrentPassword" Header="Current password" Background="#202322"/>
+       <PasswordBox x:Name="NewPassword" Header="New password" Background="#202322"/>
+       <PasswordBox x:Name="ConfirmPassword" Header="Confirm new password" Background="#202322"/>
+       <Button x:Name="ResetPassword" Content="Update password"/>
+      </StackPanel>
+     </Border>
+     <Border x:Name="SignOutSection" Style="{StaticResource SettingsCard}">
+      <StackPanel Spacing="10">
+       <TextBlock Text="Sign out" Style="{StaticResource SettingsHeading}"/>
+       <TextBlock Text="Sign out of Agent on this device. Your saved conversations stay on your server." Foreground="#a3aea6"/>
+       <Button x:Name="SignOut" Content="Sign out" Foreground="#f2aaa2"/>
+      </StackPanel>
+     </Border>
+    </StackPanel>
+   </Grid>
+  </ScrollViewer>
    </Grid>
   </ContentControl>
   <Button x:Name="SidebarBackdrop" Grid.Row="1" Grid.Column="1" Visibility="Collapsed" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="#A0000000" BorderThickness="0" CornerRadius="0" IsTabStop="False" AllowFocusOnInteraction="False" AutomationProperties.AccessibilityView="Raw"/>

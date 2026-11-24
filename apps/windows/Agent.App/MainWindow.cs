@@ -48,11 +48,20 @@ public sealed partial class MainWindow:Window
         C<TextBlock>("SidebarVersion").Text="Version "+installed;
         Hook("Login",()=>LoginAsync(false));Hook("Register",()=>LoginAsync(true));
         Hook("NewChat",()=>{chat.Reset();C<TextBox>("Composer").Text="";C<CheckBox>("ResearchToggle").IsChecked=false;RenderMessages();UpdateActiveConversation();ShowSettings(false);return Task.CompletedTask;});
-        Hook("SettingsNav",async()=>{ShowSettings(!settingsOpen);if(settingsOpen)await RefreshSettingsAsync();});
+        Hook("SettingsNav", async () =>
+        {
+            if (busy) return;
+            if (settingsOpen) { await LeaveSettingsAsync(); return; }
+            NavigateSettings(true);
+            openingSettings = LoadOpeningSettingsAsync();
+            await openingSettings;
+        }, false);
+        Hook("SettingsBack", LeaveSettingsAsync, false);
         Hook("Send",SendAsync);Hook("CancelRequest",()=>{request?.Cancel();return Task.CompletedTask;},false);
         Hook("StopResearch",()=>EndResearchAsync("stop"),false);Hook("RevokeResearch",()=>EndResearchAsync("revoke"),false);
         WireChatLayout();
-        Hook("RefreshConnection",RefreshProviderAsync);Hook("RefreshAllowance",()=>RefreshUsageAsync(true));
+        WireSettingsLayout();
+        Hook("RefreshConnection",()=>RefreshProviderAsync());Hook("RefreshAllowance",()=>RefreshUsageAsync(true));
         Hook("ConnectChatGPT",()=>StartDeviceAsync("/auth/start"));Hook("AddAccount",()=>StartDeviceAsync("/auth/start?mode=add"));
         Hook("DisconnectAccount",()=>ChangeProfileAsync(activeProfile,true));
         C<ComboBox>("Accounts").SelectionChanged+=async(_,_)=>{if(rendering||busy)return;if(C<ComboBox>("Accounts").SelectedItem is ComboBoxItem item&&item.Tag is JsonNode p){string id=p.Text("id");if(id==activeProfile)return;await GuardAsync(()=>p.Flag("registration_pending")?StartDeviceAsync("/auth/start?mode=retry&profile_id="+Wire.Segment(id)):ChangeProfileAsync(id,false));}};
@@ -82,6 +91,7 @@ public sealed partial class MainWindow:Window
     }
     private void SetBusy()
     {
+        C<Button>("SettingsBack").IsEnabled = !busy || openingSettingsCancellation is { IsCancellationRequested: false };
         foreach(string name in new[]{"Login","Register","NewChat","Send","SettingsNav","RefreshConnection","RefreshAllowance","ConnectChatGPT","AddAccount","DisconnectAccount","PollDevice","CancelDevice","SaveBraveKey","CheckBraveKey","RemoveBraveKey","SaveBudget","AddMemory","ExportMemory","ResetPassword","SignOut","ChangeServer","TestConnection"})C<Button>(name).IsEnabled=!busy;
         foreach(string name in new[]{"ConnectChatGPT","AddAccount","DisconnectAccount"})C<Button>(name).IsEnabled=!busy&&accountView.IsLoaded(SettingsSection.Provider);
         foreach(string name in new[]{"SaveBraveKey","CheckBraveKey","RemoveBraveKey","SaveBudget"})C<Button>(name).IsEnabled=!busy&&accountView.IsLoaded(SettingsSection.Research);
@@ -106,15 +116,18 @@ public sealed partial class MainWindow:Window
             accountView.Reset(name=>C<PasswordBox>(name).Password="",()=>
             {
                 foreach(string name in new[]{"Composer","HistorySearch","BudgetTimezone","Username"})C<TextBox>(name).Text="";
-                foreach(string name in new[]{"SignedInAs","AccountInitial","ServerDescription","ProviderMessage","ResearchStatus","DeviceCode","AllowanceFreshness","AllowanceMessage","LoginFeedback"})C<TextBlock>(name).Text="";
+                foreach(string name in new[]{"SignedInAs","AccountInitial","ServerDescription","ResearchStatus","DeviceCode","LoginFeedback"})C<TextBlock>(name).Text="";
+                foreach(string name in new[]{"ProviderMessage","AllowanceFreshness","AllowanceMessage"})SetSettingsText(name, "");
                 savedConversations=[];historyLoaded=false;RenderConversationHistory();C<ComboBox>("Models").Items.Clear();C<ComboBox>("Accounts").Items.Clear();
                 foreach(string name in new[]{"Messages","MemoryEntries","AllowanceWindows"})C<StackPanel>(name).Children.Clear();
+                C<StackPanel>("AllowanceWindows").Visibility=Visibility.Collapsed;
+                C<ComboBox>("Accounts").Visibility=Visibility.Collapsed;
                 C<CheckBox>("ResearchToggle").IsChecked=false;
                 foreach(string name in new[]{"BudgetEnabled","MemoryEnabled"})C<ToggleSwitch>(name).IsOn=false;
                 C<NumberBox>("BudgetMaximum").Value=double.NaN;C<ComboBox>("BudgetPeriod").SelectedIndex=-1;
                 C<StackPanel>("DeviceLogin").Visibility=Visibility.Collapsed;
                 foreach(string name in new[]{"StopResearch","RevokeResearch","CancelRequest","AddAccount","DisconnectAccount"})C<Button>(name).Visibility=Visibility.Collapsed;
-                C<Button>("ConnectChatGPT").Visibility=Visibility.Visible;C<Button>("RefreshConnection").Content="Unavailable  ↻";
+                C<Button>("ConnectChatGPT").Visibility=Visibility.Visible;SetConnectionBadge("Unavailable");
                 C<InfoBar>("Notice").IsOpen=false;C<InfoBar>("Notice").Message="";
                 ShowSettings(false);C<ScrollViewer>("SettingsView").ChangeView(null,0,null);RenderMessages();
             });
@@ -150,9 +163,9 @@ public sealed partial class MainWindow:Window
         LocalSettings.SaveEndpoint(endpoint);var user=await c.GetAsync("/api/auth/me",accountLifetime.Token);if(!IsCurrentSession(c,epoch))return;restoring=false;RenderAuth(true);RenderAccountName(user.Text("username"));await RefreshWorkspaceAsync();
     }
     private async Task RefreshWorkspaceAsync(){await RefreshModelsAsync();await RefreshHistoryAsync();}
-    private async Task RefreshModelsAsync()
+    private async Task RefreshModelsAsync(CancellationToken? cancellation = null)
     {
-        var c=Need();long epoch=accountEpoch;var result=await c.GetAsync("/api/models",accountLifetime.Token);if(!IsCurrentSession(c,epoch))return;
+        var c=Need();long epoch=accountEpoch;var result=await c.GetAsync("/api/models",cancellation ?? accountLifetime.Token);cancellation?.ThrowIfCancellationRequested();if(!IsCurrentSession(c,epoch))return;
         C<ComboBox>("Models").Items.Clear();foreach(var m in result.Items("models"))C<ComboBox>("Models").Items.Add(new ComboBoxItem{Content=m.Text("name",m.Text("id")),Tag=m.Text("id")});if(C<ComboBox>("Models").Items.Count>0)C<ComboBox>("Models").SelectedIndex=0;
     }
     private async Task RefreshHistoryAsync()

@@ -3,36 +3,105 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Agent.Core;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 namespace Agent.App;
 public sealed partial class MainWindow
 {
-    private async Task RefreshSettingsAsync()
+    private CancellationTokenSource? openingSettingsCancellation;
+    private Task? openingSettings;
+
+    private async Task LoadOpeningSettingsAsync()
     {
-        var c=Need();long epoch=accountEpoch;var user=await c.GetAsync("/api/auth/me",accountLifetime.Token);if(!IsCurrentSession(c,epoch))return;
-        RenderAccountName(user.Text("username"));C<TextBlock>("ServerDescription").Text=c.Endpoint.Authority;accountView.MarkLoaded(SettingsSection.Account);
-        // Each read reports its own failure; unavailable ChatGPT must not hide memory or research.
-        foreach(var load in new Func<Task>[]{RefreshProviderAsync,RefreshResearchAsync,RefreshMemoryAsync})
-        {
-            if(!IsCurrentSession(c,epoch))return;
-            try{await load();}catch(SessionExpiredException){throw;}catch(OperationCanceledException){throw;}catch{if(IsCurrentSession(c,epoch))Notify("Some Settings data is unavailable. Refresh the affected section to retry.");}
-        }
-    }
-    private async Task RefreshProviderAsync()
-    {
-        var c=Need();long epoch=accountEpoch;C<Button>("RefreshConnection").Content="Checking…  ↻";
+        using var refresh = CancellationTokenSource.CreateLinkedTokenSource(accountLifetime.Token);
+        openingSettingsCancellation = refresh;
         try
         {
-            var status=await c.GetAsync("/api/auth/status",accountLifetime.Token);var profiles=await c.GetAsync("/api/auth/profiles",accountLifetime.Token);if(!IsCurrentSession(c,epoch))return;
+            await GuardAsync(async () =>
+            {
+                try { await RefreshSettingsAsync(refresh.Token); }
+                catch (OperationCanceledException) when (refresh.IsCancellationRequested) { }
+            });
+        }
+        finally { openingSettingsCancellation = null; }
+    }
+
+    private async Task LeaveSettingsAsync()
+    {
+        if (openingSettings is { IsCompleted: false } opening)
+        {
+            if (openingSettingsCancellation is not { IsCancellationRequested: false }) return;
+            openingSettingsCancellation?.Cancel();
+            await opening;
+        }
+        if (!closed && settingsOpen && !busy) NavigateSettings(false);
+    }
+
+    private void WireSettingsLayout()
+    {
+        var groups = new[] { C<StackPanel>("ServerActions"), C<StackPanel>("AccountActions"),
+            C<StackPanel>("DeviceActions"), C<StackPanel>("BraveActions"), C<StackPanel>("MemoryActions") };
+        var card = C<Border>("ConnectionSection");
+        C<Grid>("SettingsColumn").SizeChanged += (sender, e) =>
+        {
+            var column = (Grid)sender;
+            double available = e.NewSize.Width - column.Padding.Left - column.Padding.Right
+                - card.Padding.Left - card.Padding.Right - card.BorderThickness.Left - card.BorderThickness.Right;
+            var orientation = e.NewSize.Width < 520 ? Orientation.Vertical : Orientation.Horizontal;
+            foreach (var group in groups)
+            {
+                // Bound each label even in a horizontal group, where StackPanel measures children at infinite width.
+                double limit = orientation == Orientation.Vertical ? double.PositiveInfinity
+                    : Math.Max(0, (available - (group.Children.Count - 1) * group.Spacing) / group.Children.Count);
+                foreach (var action in group.Children.OfType<Button>()) action.MaxWidth = limit;
+                group.Orientation = orientation;
+            }
+        };
+    }
+
+    private void SetSettingsText(string name, string text)
+    {
+        var node = C<TextBlock>(name);
+        node.Text = text;
+        node.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void SetConnectionBadge(string status, bool connected = false)
+    {
+        var badge = C<TextBlock>("ConnectionBadge");
+        badge.Text = status + "  ↻";
+        if (connected) badge.Foreground = Sage;
+        else badge.ClearValue(TextBlock.ForegroundProperty);
+        AutomationProperties.SetName(C<Button>("RefreshConnection"), "Refresh ChatGPT connection status: " + status);
+    }
+
+    private async Task RefreshSettingsAsync(CancellationToken? cancellation = null)
+    {
+        var c=Need();long epoch=accountEpoch;var user=await c.GetAsync("/api/auth/me",cancellation ?? accountLifetime.Token);cancellation?.ThrowIfCancellationRequested();if(!IsCurrentSession(c,epoch))return;
+        RenderAccountName(user.Text("username"));C<TextBlock>("ServerDescription").Text=c.Endpoint.Authority;accountView.MarkLoaded(SettingsSection.Account);
+        // Each read reports its own failure; unavailable ChatGPT must not hide memory or research.
+        foreach(var load in new Func<CancellationToken?, Task>[]{RefreshProviderAsync,RefreshResearchAsync,RefreshMemoryAsync})
+        {
+            if(!IsCurrentSession(c,epoch))return;
+            try{await load(cancellation);}catch(SessionExpiredException){throw;}catch(OperationCanceledException){throw;}catch{cancellation?.ThrowIfCancellationRequested();if(IsCurrentSession(c,epoch))Notify("Some Settings data is unavailable. Refresh the affected section to retry.");}
+        }
+    }
+    private async Task RefreshProviderAsync(CancellationToken? cancellation = null)
+    {
+        var c=Need();long epoch=accountEpoch;SetConnectionBadge("Checking…");
+        try
+        {
+            var token = cancellation ?? accountLifetime.Token;
+            var status=await c.GetAsync("/api/auth/status",token);var profiles=await c.GetAsync("/api/auth/profiles",token);cancellation?.ThrowIfCancellationRequested();if(!IsCurrentSession(c,epoch))return;
             if(accountView.IsLoaded(SettingsSection.Provider)&&activeProfile!=profiles.Text("active_profile_id"))
             {
                 ResetAccountView();await RefreshWorkspaceAsync();await RefreshSettingsAsync();return;
             }
             activeProfile=profiles.Text("active_profile_id");usage=null;connectionId="";accountView.MarkLoaded(SettingsSection.Provider);
             bool ready=status.Flag("connected")&&status.Flag("plan_usage_enabled");
-            C<Button>("RefreshConnection").Content=ready?"Connected  ↻":status.Flag("connected")?"Permission required  ↻":status.Flag("oauth_selected")?"Sign-in required  ↻":"Not connected  ↻";
-            C<TextBlock>("ProviderMessage").Text=ready?"":"Connect your ChatGPT account to Agent with Codex.";
+            SetConnectionBadge(ready ? "Connected" : status.Flag("connected") ? "Permission required" : status.Flag("oauth_selected") ? "Sign-in required" : "Not connected", ready);
+            SetSettingsText("ProviderMessage", ready ? "" : "Connect your ChatGPT account to Agent with Codex.");
             rendering=true;try
             {
                 C<ComboBox>("Accounts").Items.Clear();foreach(var profile in profiles.Items("profiles"))
@@ -41,28 +110,33 @@ public sealed partial class MainWindow
                     C<ComboBox>("Accounts").Items.Add(item);if(profile.Text("id")==activeProfile)C<ComboBox>("Accounts").SelectedItem=item;
                 }
             }finally{rendering=false;}
-            C<Button>("AddAccount").Visibility=C<ComboBox>("Accounts").Items.Count==0?Visibility.Collapsed:Visibility.Visible;
+            C<Button>("AddAccount").Visibility = C<ComboBox>("Accounts").Visibility = C<ComboBox>("Accounts").Items.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
             C<Button>("DisconnectAccount").Visibility=activeProfile==""?Visibility.Collapsed:Visibility.Visible;C<Button>("ConnectChatGPT").Visibility=ready?Visibility.Collapsed:Visibility.Visible;
-            if(activeProfile!="")await RefreshUsageAsync(false);else RenderAllowance();await RefreshModelsAsync();
+            if(activeProfile!="")await RefreshUsageAsync(false,cancellation);else RenderAllowance();await RefreshModelsAsync(cancellation);
         }
-        catch{if(IsCurrentSession(c,epoch)){C<Button>("RefreshConnection").Content="Unavailable  ↻";C<TextBlock>("ProviderMessage").Text="Couldn’t check the ChatGPT connection. Your saved accounts have not been removed. Refresh to retry.";}throw;}
+        catch (OperationCanceledException) when (cancellation?.IsCancellationRequested == true) { throw; }
+        catch{if(IsCurrentSession(c,epoch)){SetConnectionBadge("Unavailable");SetSettingsText("ProviderMessage", "Couldn’t check the ChatGPT connection. Your saved accounts have not been removed. Refresh to retry.");}throw;}
     }
-    private async Task RefreshUsageAsync(bool refresh)
+    private async Task RefreshUsageAsync(bool refresh, CancellationToken? cancellation = null)
     {
         if(activeProfile==""){RenderAllowance();return;}var c=Need();long epoch=accountEpoch;string profile=activeProfile;
         try
         {
-            var result=refresh?await c.PostAsync("/api/usage/refresh",new{profile_id=profile,connection_id=connectionId},accountLifetime.Token):await c.GetAsync("/api/usage/status?profile_id="+Wire.Segment(profile),accountLifetime.Token);
-            if(!IsCurrentSession(c,epoch)||profile!=activeProfile)return;if(result.Text("profile_id")!=profile)throw new AgentException("Allowance account changed. Refresh connection status.");usage=result;connectionId=result.Text("connection_id");RenderAllowance();
+            var result=refresh?await c.PostAsync("/api/usage/refresh",new{profile_id=profile,connection_id=connectionId},accountLifetime.Token):await c.GetAsync("/api/usage/status?profile_id="+Wire.Segment(profile),cancellation ?? accountLifetime.Token);
+            cancellation?.ThrowIfCancellationRequested();if(!IsCurrentSession(c,epoch)||profile!=activeProfile)return;if(result.Text("profile_id")!=profile)throw new AgentException("Allowance account changed. Refresh connection status.");usage=result;connectionId=result.Text("connection_id");RenderAllowance();
             if(result["login"] is JsonNode login&&result.Text("state") is "pending" or "checking")RenderDevice(new JsonObject{["profile_id"]=profile,["connection_id"]=connectionId,["login_id"]=login.Text("login_id"),["verification_url"]=login.Text("verification_url"),["user_code"]=login.Text("user_code")});
         }
-        catch{if(IsCurrentSession(c,epoch)&&profile==activeProfile){if(usage?["snapshot"] is JsonObject snapshot)snapshot["stale"]=true;RenderAllowance();C<TextBlock>("AllowanceMessage").Text="Refresh failed. "+(usage?["snapshot"] is null?"No allowance observation is available.":"Showing last-known values; they may no longer be current.");}throw;}
+        catch (OperationCanceledException) when (cancellation?.IsCancellationRequested == true) { throw; }
+        catch{if(IsCurrentSession(c,epoch)&&profile==activeProfile){if(usage?["snapshot"] is JsonObject snapshot)snapshot["stale"]=true;RenderAllowance();SetSettingsText("AllowanceMessage", "Refresh failed. "+(usage?["snapshot"] is null?"No allowance observation is available.":"Showing last-known values; they may no longer be current."));}throw;}
     }
     private void RenderAllowance()
     {
         var panel=C<StackPanel>("AllowanceWindows");panel.Children.Clear();bool stale=usage?["snapshot"].Flag("stale")??false;
-        C<TextBlock>("AllowanceMessage").Text=stale?"Showing last-known allowance; these values may no longer be current.":usage is null?"Connect ChatGPT above to see allowance.":usage.Text("state")=="connected"?"":usage.Text("state","Unavailable");
-        long fetched=usage?["snapshot"]?["fetched_at"]?.GetValue<long>()??0;C<TextBlock>("AllowanceFreshness").Text=fetched>0?"Updated "+DateTimeOffset.FromUnixTimeSeconds(fetched).ToLocalTime().ToString("g")+(stale?" · stale":""):"Update time unavailable";
+        SetSettingsText("AllowanceMessage", stale?"Showing last-known allowance; these values may no longer be current.":usage is null?"Connect ChatGPT above to see allowance.":usage.Text("state")=="connected"?"":usage.Text("state","Unavailable"));
+        long fetched=usage?["snapshot"]?["fetched_at"]?.GetValue<long>()??0;
+        SetSettingsText("AllowanceFreshness", fetched > 0
+            ? "Updated " + DateTimeOffset.FromUnixTimeSeconds(fetched).ToLocalTime().ToString("g") + (stale ? " · stale" : "")
+            : usage?["snapshot"] is null ? "" : "Update time unavailable");
         foreach(var window in usage?["snapshot"].Items("windows")??[])
         {
             double? remaining=ClientPresentation.Remaining(window["used_percent"]?.GetValue<double>());long minutes=window["window_minutes"]?.GetValue<long>()??0,reset=window["reset_at"]?.GetValue<long>()??0;
@@ -72,6 +146,7 @@ public sealed partial class MainWindow
             if(remaining is not null){var meter=new ProgressBar{Minimum=0,Maximum=100,Value=remaining.Value,Foreground=Sage};Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(meter,label+" remaining"+(stale?" (last known)":""));row.Children.Add(meter);}panel.Children.Add(row);
         }
         if(usage?["snapshot"] is not null&&panel.Children.Count==0)panel.Children.Add(Text("Allowance windows are unavailable. Refresh to try again."));
+        panel.Visibility = panel.Children.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
     private async Task StartDeviceAsync(string path)
     {
@@ -112,9 +187,9 @@ public sealed partial class MainWindow
         }
         finally{password.Password="";rendering=true;try{C<ComboBox>("Accounts").SelectedItem=C<ComboBox>("Accounts").Items.OfType<ComboBoxItem>().FirstOrDefault(i=>(i.Tag as JsonNode).Text("id")==activeProfile);}finally{rendering=false;}}
     }
-    private async Task RefreshResearchAsync()
+    private async Task RefreshResearchAsync(CancellationToken? cancellation = null)
     {
-        var c=Need();long epoch=accountEpoch;var result=await c.GetAsync("/api/research/settings",accountLifetime.Token);if(!IsCurrentSession(c,epoch))return;researchSettings=result["settings"]?.DeepClone()??throw new AgentException("Research settings are unavailable.");accountView.MarkLoaded(SettingsSection.Research);
+        var c=Need();long epoch=accountEpoch;var result=await c.GetAsync("/api/research/settings",cancellation ?? accountLifetime.Token);cancellation?.ThrowIfCancellationRequested();if(!IsCurrentSession(c,epoch))return;researchSettings=result["settings"]?.DeepClone()??throw new AgentException("Research settings are unavailable.");accountView.MarkLoaded(SettingsSection.Research);
         C<TextBlock>("ResearchStatus").Text=researchSettings.Flag("configured")?researchSettings.Text("status")+" · Key ending "+researchSettings.Text("key_suffix"):"Not connected";
         var budget=researchSettings["budget"];rendering=true;try{C<ToggleSwitch>("BudgetEnabled").IsOn=budget.Flag("enabled");C<NumberBox>("BudgetMaximum").Value=budget?["maximum"]?.GetValue<int>()??1;C<TextBox>("BudgetTimezone").Text=budget.Text("timezone");C<ComboBox>("BudgetPeriod").SelectedItem=C<ComboBox>("BudgetPeriod").Items.OfType<ComboBoxItem>().FirstOrDefault(i=>(string)i.Content==budget.Text("period"));}finally{rendering=false;}
     }
@@ -131,9 +206,9 @@ public sealed partial class MainWindow
         string period=(C<ComboBox>("BudgetPeriod").SelectedItem as ComboBoxItem)?.Content as string??"";double maximum=C<NumberBox>("BudgetMaximum").Value;if(!double.IsFinite(maximum)||maximum<1||maximum%1!=0)throw new ArgumentException("Enter a whole-number search budget.");
         await c.PostAsync("/api/research/settings/budget",new{expected_revision=researchSettings.Text("revision"),expected_budget_revision=researchSettings?["budget"].Text("revision"),enabled=C<ToggleSwitch>("BudgetEnabled").IsOn,maximum=(int)maximum,period,timezone=C<TextBox>("BudgetTimezone").Text},accountLifetime.Token);if(IsCurrentSession(c,epoch))await RefreshResearchAsync();
     }
-    private async Task RefreshMemoryAsync()
+    private async Task RefreshMemoryAsync(CancellationToken? cancellation = null)
     {
-        var c=Need();long epoch=accountEpoch;var result=await c.GetAsync("/api/memories",accountLifetime.Token);if(!IsCurrentSession(c,epoch))return;accountView.MarkLoaded(SettingsSection.Memory);
+        var c=Need();long epoch=accountEpoch;var result=await c.GetAsync("/api/memories",cancellation ?? accountLifetime.Token);cancellation?.ThrowIfCancellationRequested();if(!IsCurrentSession(c,epoch))return;accountView.MarkLoaded(SettingsSection.Memory);
         rendering=true;try{C<ToggleSwitch>("MemoryEnabled").IsOn=result.Flag("enabled");}finally{rendering=false;}
         var panel=C<StackPanel>("MemoryEntries");panel.Children.Clear();foreach(var entry in result.Items("entries"))
         {
@@ -175,7 +250,7 @@ public sealed partial class MainWindow
     private void RenderUpdates(WindowsUpdateStatus status)
     {
         if(closed)return;C<TextBlock>("UpdateTitle").Text=status.Phase switch{WindowsUpdatePhase.Idle=>"Not checked yet",WindowsUpdatePhase.Checking=>"Checking…",WindowsUpdatePhase.Current=>"Up to date",WindowsUpdatePhase.Available=>"Update available",WindowsUpdatePhase.Downloading=>"Downloading update…",WindowsUpdatePhase.Verifying=>"Verifying update…",WindowsUpdatePhase.Ready=>"Ready to install",WindowsUpdatePhase.Restarting=>"Restarting…",_=>"Updates unavailable"};
-        C<TextBlock>("OfferedVersion").Text=status.Version is null?"":"Agent "+status.Version;C<TextBlock>("UpdateStatus").Text=status.Message;
+        SetSettingsText("OfferedVersion", status.Version is null?"":"Agent "+status.Version);SetSettingsText("UpdateStatus", status.Message);
         bool available=status.Phase is WindowsUpdatePhase.Available or WindowsUpdatePhase.Ready;
         C<StackPanel>("UpdateActions").Visibility=available?Visibility.Visible:Visibility.Collapsed;C<Button>("UpdatePrimary").Content=status.Phase==WindowsUpdatePhase.Ready?"Restart and install":"Download update";
         C<Button>("CheckUpdates").IsEnabled=status.Phase is not (WindowsUpdatePhase.Checking or WindowsUpdatePhase.Downloading or WindowsUpdatePhase.Verifying or WindowsUpdatePhase.Ready or WindowsUpdatePhase.Restarting);

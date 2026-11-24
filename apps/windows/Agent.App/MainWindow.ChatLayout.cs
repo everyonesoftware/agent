@@ -17,6 +17,8 @@ public sealed partial class MainWindow
     private const string NewConversationTitle = "New conversation";
     private static readonly SolidColorBrush Muted = new(Color.FromArgb(255, 163, 174, 166));
     private static readonly SolidColorBrush SelectedConversation = new(Color.FromArgb(255, 44, 57, 48));
+    private static readonly SolidColorBrush ActiveSettings = new(Color.FromArgb(255, 37, 42, 39));
+    private static readonly SolidColorBrush Transparent = new(Microsoft.UI.Colors.Transparent);
     private IReadOnlyList<SavedConversation> savedConversations = [];
     private string chatTitle = NewConversationTitle;
     private bool settingsOpen, compactSidebar, sidebarOpen;
@@ -120,12 +122,23 @@ public sealed partial class MainWindow
         C<Grid>("ChatView").Visibility = show ? Visibility.Collapsed : Visibility.Visible;
         C<ScrollViewer>("SettingsView").Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         var button = C<Button>("SettingsNav");
-        string label = show ? "Back to chat" : "Settings";
-        ((SymbolIcon)button.Content).Symbol = show ? Symbol.Back : Symbol.Setting;
+        string label = show ? "Back to conversation" : "Settings";
+        button.Background = show ? ActiveSettings : Transparent;
+        if (show) button.Foreground = Sage;
+        else button.ClearValue(Control.ForegroundProperty);
         AutomationProperties.SetName(button, label);
         ToolTipService.SetToolTip(button, label);
         RenderConversationTitle();
         SetSidebarOpen(false, sidebarOpen);
+    }
+
+    private void NavigateSettings(bool show)
+    {
+        if (settingsOpen && !show) C<ScrollViewer>("SettingsView").ChangeView(null, 0, null, true);
+        ShowSettings(show);
+        if (show) C<Button>("SettingsBack").Focus(FocusState.Programmatic);
+        else if (compactSidebar) C<Button>("SidebarToggle").Focus(FocusState.Programmatic);
+        else if (!C<Button>("SettingsNav").Focus(FocusState.Programmatic)) C<TextBox>("HistorySearch").Focus(FocusState.Programmatic);
     }
 
     private void RenderConversationTitle() => C<TextBlock>("ConversationTitle").Text = settingsOpen ? "Settings" : chatTitle;
