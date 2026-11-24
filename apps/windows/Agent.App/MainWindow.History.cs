@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace Agent.App;
 
@@ -17,11 +18,15 @@ public sealed partial class MainWindow
         if (!research && profile == "") throw new AgentException("Select an active ChatGPT account first.");
         string title = research ? "Brave Search usage" : "ChatGPT usage";
 
-        var range = new ComboBox { MinHeight = 36, VerticalAlignment = VerticalAlignment.Center };
-        AutomationProperties.SetName(range, "History range");
-        foreach (var (id, label) in new[] { ("24h", "24 hours"), ("week", "1 week"), ("period", "Entire period") })
-            range.Items.Add(new ComboBoxItem { Content = label, Tag = id });
-        range.SelectedIndex = 0;
+        (string Id, string Label)[] rangeOptions = [("24h", "24 hours"), ("week", "1 week"), ("period", "Entire period")];
+        var selectedRange = rangeOptions[0];
+        var rangeMenu = new MenuFlyout { Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft };
+        var range = new DropDownButton
+        {
+            Flyout = rangeMenu, Content = selectedRange.Label, MinHeight = 36,
+            HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center
+        };
+        AutomationProperties.SetName(range, $"History range: {selectedRange.Label}");
         var close = new Button { Content = "×", FontSize = 18, MinHeight = 36, MinWidth = 36, Padding = new Thickness(0) };
         AutomationProperties.SetName(close, "Close usage history");
         var heading = UsageHistoryPlot.Label(title, 18, UsageHistoryPlot.Ink);
@@ -63,7 +68,8 @@ public sealed partial class MainWindow
         {
             if (e.Handled || e.Key != Windows.System.VirtualKey.Escape) return;
             e.Handled = true;
-            if (info.IsExpanded)
+            if (rangeMenu.IsOpen) rangeMenu.Hide();
+            else if (info.IsExpanded)
             {
                 info.IsExpanded = false;
                 info.Focus(FocusState.Keyboard);
@@ -95,7 +101,7 @@ public sealed partial class MainWindow
                 display.Children.Add(UsageHistoryPlot.Label("Loading usage history…", 14));
                 detail.Children.Clear();
             }
-            string rangeId = (range.SelectedItem as ComboBoxItem)?.Tag as string ?? "24h";
+            string rangeId = selectedRange.Id;
             try
             {
                 string query = "range=" + Wire.Segment(rangeId);
@@ -147,7 +153,19 @@ public sealed partial class MainWindow
             finally { if (ReferenceEquals(pending, request)) pending = null; }
         }
 
-        range.SelectionChanged += async (_, _) => await Read();
+        foreach (var option in rangeOptions)
+        {
+            var item = new RadioMenuFlyoutItem { Text = option.Label, IsChecked = option == selectedRange };
+            item.Click += async (_, _) =>
+            {
+                if (!OwnsDialog() || option == selectedRange) return;
+                selectedRange = option;
+                range.Content = option.Label;
+                AutomationProperties.SetName(range, $"History range: {option.Label}");
+                await Read();
+            };
+            rangeMenu.Items.Add(item);
+        }
         windows.SelectionChanged += async (_, _) =>
         {
             if (filling || !OwnsDialog() || windows.SelectedItem is not ComboBoxItem { Tag: string id }) return;
@@ -166,6 +184,7 @@ public sealed partial class MainWindow
         finally
         {
             open = false;
+            if (rangeMenu.IsOpen) rangeMenu.Hide();
             timer.Stop();
             lifetime.Cancel();
             root.SizeChanged -= resize;

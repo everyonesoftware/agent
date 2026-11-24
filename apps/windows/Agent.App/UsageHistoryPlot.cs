@@ -137,6 +137,7 @@ internal sealed class UsageHistoryPlot : UserControl
             Mark(value + "%", Left - 7, y - 8, 1);
         }
 
+        // The guide and recorded history use the same cutoff, including on resize.
         double now = X(model.Now);
         double reset = model.ResetAt > model.Now && model.ResetAt <= end ? X(model.ResetAt) : double.PositiveInfinity;
         double previous = double.NegativeInfinity;

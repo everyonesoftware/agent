@@ -58,6 +58,36 @@ public sealed class UsageHistoryChartTests
         Assert.Equal(start + 1, chart.Segments[0][0].At);
     }
 
+    [Theory]
+    [InlineData("chatgpt")]
+    [InlineData("brave")]
+    public void RecordedHistoryEndsAtOrBeforeNowAndCanLagWhenRefreshFails(string provider)
+    {
+        var snapshot = JsonNode.Parse($$"""
+            {"provider":"{{provider}}","points":[
+              {"at":1999940,"remaining_percent":95},
+              {"at":2000000,"remaining_percent":72}
+            ]}
+            """)!.AsObject();
+        var result = snapshot.DeepClone();
+        result["points"]!.AsArray().Add(new JsonObject { ["at"] = Now + 1, ["remaining_percent"] = 60 });
+        var fresh = UsageHistoryChart.Create(result, "24h", Now);
+        snapshot["stale"] = true;
+        var stale = UsageHistoryChart.Create(snapshot, "24h", Now + 60);
+
+        foreach (var chart in new[] { fresh, stale })
+        {
+            Assert.Equal(Now, chart.Segments.SelectMany(segment => segment).Max(point => point.At));
+            Assert.Equal(Now, chart.DisplaySegments.SelectMany(segment => UsageHistoryChart.Trend(segment, chart.Ledger)).Max(point => point.At));
+            Assert.NotEmpty(chart.Milestones);
+            Assert.All(chart.Milestones, point => Assert.True(point.At <= chart.Now));
+        }
+        Assert.Equal(Now, fresh.Now);
+        Assert.Equal(Now + 60, stale.Now);
+        Assert.True(stale.Outdated);
+        Assert.Null(stale.Forecast);
+    }
+
     [Fact]
     public void LedgerHoldsContinuityAcrossLongIdleIntervalsAndPlacesThresholdsAtEvents()
     {
