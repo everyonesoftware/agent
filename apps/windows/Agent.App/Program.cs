@@ -24,6 +24,7 @@ public sealed partial class AgentApplication:Application,Microsoft.UI.Xaml.Marku
     {
         Resources.MergedDictionaries.Add(new XamlControlsResources());Resources["SystemAccentColor"]=Windows.UI.Color.FromArgb(255,180,214,163);
         window=new MainWindow();RunningTaskbarIdentity.Attach(window);window.Activate();
+        _=window.CheckOnStartupAsync();
     }
 }
 internal static class StartupDiagnostics

@@ -24,3 +24,7 @@ node --test apps/windows/validation/*.test.mjs
 ```
 
 Native launch, runtime XAML, PasswordVault, title bar, accessibility, installation, real authenticated end-to-end behavior and installed upgrade are separate acceptance gates. Linux build outputs are never distributable.
+
+## Update panel acceptance
+
+Use an installed build with the changelog reader and a newer Windows offer. Verify the background check only discovers the offer. In Settings, confirm the compact current and offered version headings, activate both disclosures with the keyboard, and verify that only activating a commit or comparison link opens the browser. Check the links and wrapping at narrow width and increased text scale. Verify Download reaches Ready without restarting, and that only Restart and install applies the update. An offer from an older manifest without embedded history should remain downloadable and show Changelog unavailable.

@@ -83,12 +83,74 @@
        </Grid>
        <Grid ColumnSpacing="10">
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-        <TextBlock x:Name="UpdateTitle" Text="Not checked yet" FontSize="15" FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite"/>
-        <TextBlock x:Name="OfferedVersion" Grid.Column="1" Foreground="#b4d6a3" TextAlignment="Right" Visibility="Collapsed"/>
+        <TextBlock x:Name="UpdateTitle" Text="Not checked yet" FontSize="20" FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite"/>
+        <TextBlock x:Name="OfferedVersion" Grid.Column="1" FontSize="17" VerticalAlignment="Center" TextAlignment="Right" Visibility="Collapsed"/>
        </Grid>
-       <TextBlock x:Name="UpdateStatus" Foreground="#a3aea6" Visibility="Collapsed"/>
-       <Expander x:Name="WhatsNew" Header="What’s new" Visibility="Collapsed"><StackPanel x:Name="Changelog" Spacing="10"/></Expander>
-       <ProgressBar x:Name="UpdateProgress" Minimum="0" Maximum="100" Visibility="Collapsed"/>
+       <TextBlock x:Name="UpdateStatus" Foreground="#a3aea6" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite"/>
+       <Expander x:Name="WhatsNew" Header="What’s new" IsExpanded="False" Visibility="Collapsed">
+        <StackPanel Spacing="10">
+         <TextBlock x:Name="ChangelogUnavailable" Text="Changelog unavailable." Visibility="Collapsed" AutomationProperties.LiveSetting="Polite"/>
+         <Button x:Name="RetryChangelog" Content="Check again" Visibility="Collapsed"/>
+         <StackPanel x:Name="Changelog" Spacing="10">
+          <StackPanel.Resources>
+           <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+             <ResourceDictionary x:Key="Default">
+              <SolidColorBrush x:Key="HyperlinkButtonBackground" Color="#2a312c"/>
+              <SolidColorBrush x:Key="HyperlinkButtonBorderBrush" Color="#545e56"/>
+              <SolidColorBrush x:Key="HyperlinkButtonForeground" Color="#bbd8c1"/>
+              <SolidColorBrush x:Key="HyperlinkButtonBackgroundPointerOver" Color="#34483a"/>
+              <SolidColorBrush x:Key="HyperlinkButtonBorderBrushPointerOver" Color="#8daf96"/>
+              <SolidColorBrush x:Key="HyperlinkButtonForegroundPointerOver" Color="#bbd8c1"/>
+              <SolidColorBrush x:Key="HyperlinkButtonBackgroundPressed" Color="#263e2f"/>
+              <SolidColorBrush x:Key="HyperlinkButtonBorderBrushPressed" Color="#8daf96"/>
+              <SolidColorBrush x:Key="HyperlinkButtonForegroundPressed" Color="#bbd8c1"/>
+             </ResourceDictionary>
+             <ResourceDictionary x:Key="Light">
+              <SolidColorBrush x:Key="HyperlinkButtonBackground" Color="#e5ebe4"/>
+              <SolidColorBrush x:Key="HyperlinkButtonBorderBrush" Color="#819184"/>
+              <SolidColorBrush x:Key="HyperlinkButtonForeground" Color="#315e3d"/>
+              <SolidColorBrush x:Key="HyperlinkButtonBackgroundPointerOver" Color="#d5e4d5"/>
+              <SolidColorBrush x:Key="HyperlinkButtonBorderBrushPointerOver" Color="#496e51"/>
+              <SolidColorBrush x:Key="HyperlinkButtonForegroundPointerOver" Color="#244f30"/>
+              <SolidColorBrush x:Key="HyperlinkButtonBackgroundPressed" Color="#c6d9c7"/>
+              <SolidColorBrush x:Key="HyperlinkButtonBorderBrushPressed" Color="#496e51"/>
+              <SolidColorBrush x:Key="HyperlinkButtonForegroundPressed" Color="#244f30"/>
+             </ResourceDictionary>
+             <ResourceDictionary x:Key="HighContrast">
+              <SolidColorBrush x:Key="HyperlinkButtonBackground" Color="{ThemeResource SystemColorWindowColor}"/>
+              <SolidColorBrush x:Key="HyperlinkButtonBorderBrush" Color="{ThemeResource SystemColorHotlightColor}"/>
+              <SolidColorBrush x:Key="HyperlinkButtonForeground" Color="{ThemeResource SystemColorHotlightColor}"/>
+              <SolidColorBrush x:Key="HyperlinkButtonBackgroundPointerOver" Color="{ThemeResource SystemColorHighlightColor}"/>
+              <SolidColorBrush x:Key="HyperlinkButtonBorderBrushPointerOver" Color="{ThemeResource SystemColorHighlightTextColor}"/>
+              <SolidColorBrush x:Key="HyperlinkButtonForegroundPointerOver" Color="{ThemeResource SystemColorHighlightTextColor}"/>
+              <SolidColorBrush x:Key="HyperlinkButtonBackgroundPressed" Color="{ThemeResource SystemColorHighlightColor}"/>
+              <SolidColorBrush x:Key="HyperlinkButtonBorderBrushPressed" Color="{ThemeResource SystemColorHighlightTextColor}"/>
+              <SolidColorBrush x:Key="HyperlinkButtonForegroundPressed" Color="{ThemeResource SystemColorHighlightTextColor}"/>
+             </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+            <Style x:Key="CommitLinkStyle" TargetType="HyperlinkButton">
+             <Setter Property="FontFamily" Value="Consolas"/>
+             <Setter Property="FontSize" Value="14"/>
+             <Setter Property="Background" Value="{ThemeResource HyperlinkButtonBackground}"/>
+             <Setter Property="BorderBrush" Value="{ThemeResource HyperlinkButtonBorderBrush}"/>
+             <Setter Property="Foreground" Value="{ThemeResource HyperlinkButtonForeground}"/>
+             <Setter Property="BorderThickness" Value="1"/>
+             <Setter Property="CornerRadius" Value="4"/>
+             <Setter Property="Padding" Value="6,0"/>
+             <Setter Property="MinWidth" Value="0"/>
+             <Setter Property="MinHeight" Value="24"/>
+             <Setter Property="HorizontalAlignment" Value="Left"/>
+             <Setter Property="VerticalAlignment" Value="Top"/>
+             <Setter Property="IsTabStop" Value="True"/>
+             <Setter Property="UseSystemFocusVisuals" Value="True"/>
+            </Style>
+           </ResourceDictionary>
+          </StackPanel.Resources>
+         </StackPanel>
+        </StackPanel>
+       </Expander>
+       <ProgressBar x:Name="UpdateProgress" Minimum="0" Maximum="100" Visibility="Collapsed" AutomationProperties.Name="Windows update progress"/>
        <StackPanel x:Name="UpdateActions" Visibility="Collapsed"><Button x:Name="UpdatePrimary" Content="Download update"/></StackPanel>
       </StackPanel>
      </Border>

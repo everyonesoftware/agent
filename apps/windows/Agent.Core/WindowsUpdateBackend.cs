@@ -1,8 +1,13 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Runtime.CompilerServices;
 using Velopack;
+using Velopack.Exceptions;
+using Velopack.Locators;
 using Velopack.Logging;
 using Velopack.Sources;
+
+[assembly: InternalsVisibleTo("Agent.Core.Tests")]
 
 namespace Agent.Core;
 
@@ -12,12 +17,26 @@ public sealed class WindowsGithubSource : GithubSource
     public const string Repository = "https://github.com/everyonesoftware/agent";
     public const string Channel = "win-x64";
     private readonly Dictionary<GithubRelease, string> versions = new();
+    private readonly HashSet<GithubRelease> releasesWithManifest = new();
 
-    public WindowsGithubSource(IFileDownloader? downloader = null) : base(Repository, accessToken: null, prerelease: true, downloader: downloader) { }
+    public WindowsGithubSource(IFileDownloader? downloader = null) : base(Repository, accessToken: null, prerelease: true,
+        downloader: downloader ?? new WindowsDiscoveryDownloader(WindowsDiscoveryDownloader.PublicHttp, DefaultCooldownPath(), TimeProvider.System)) { }
+
+    internal WindowsGithubSource(HttpClient discoveryHttp, string? cooldownPath, TimeProvider clock)
+        : this(new WindowsDiscoveryDownloader(discoveryHttp, cooldownPath, clock)) { }
+
+    private static string? DefaultCooldownPath()
+    {
+        string localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify);
+        return string.IsNullOrEmpty(localData) ? null : Path.Combine(localData, "EveryoneSoftware", "Agent", "windows-update-cooldown");
+    }
+
+    internal bool IsStartupCheckDeferred => Downloader is WindowsDiscoveryDownloader { IsStartupCheckDeferred: true };
 
     protected override async Task<GithubRelease[]> GetReleases(bool includePrereleases)
     {
         versions.Clear();
+        releasesWithManifest.Clear();
         var result = new List<(GithubRelease Release, Version Version, bool MainRelease)>();
         // Bound API use; never silently call a truncated inventory "up to date".
         for (int page = 1; page <= 10; page++)
@@ -33,12 +52,32 @@ public sealed class WindowsGithubSource : GithubSource
                 if (!mainRelease) continue;
                 string version = tag![1..];
                 if (!Version.TryParse(version, out var parsed) || parsed.Major != 0 || parsed.Minor != 1 || parsed.Build is < 1 or > 65534 || parsed.Revision != -1 || version != parsed.ToString()) continue;
-                var release = item.Deserialize(WindowsUpdateJsonContext.Default.GithubRelease) ?? throw new InvalidDataException("Missing Windows release.");
-                if (!release.Assets.Any(a => a.Name == $"releases.{Channel}.json")) continue;
                 // A release's metadata must not redirect us to another tag, repository, or platform.
                 string prefix = $"{Repository}/releases/download/{tag}/";
+                var assets = new List<GithubReleaseAsset>();
+                int manifestAssets = 0;
+                bool validManifestAsset = false;
+                foreach (var asset in item.GetProperty("assets").EnumerateArray())
+                {
+                    var names = asset.EnumerateObject().Where(p => p.NameEquals("name")).Select(p => p.Value).ToArray();
+                    if (names.Length > 0 && names.All(n => n.ValueKind == JsonValueKind.String &&
+                        EmbeddedWindowsNotes.ManifestName.Equals(n.GetString(), StringComparison.OrdinalIgnoreCase)))
+                    {
+                        // Manifest metadata is optional. Do not pass malformed notes fields to Velopack's parser.
+                        manifestAssets++;
+                        var urls = asset.EnumerateObject().Where(p => p.NameEquals("browser_download_url")).Select(p => p.Value).ToArray();
+                        validManifestAsset = names.Length == 1 && names[0].GetString() == EmbeddedWindowsNotes.ManifestName &&
+                            urls is [{ ValueKind: JsonValueKind.String } url] && url.GetString() == prefix + EmbeddedWindowsNotes.ManifestName;
+                        continue;
+                    }
+                    if (names.Length != 1) throw new InvalidDataException("Missing or ambiguous Windows release asset name.");
+                    assets.Add(asset.Deserialize(WindowsUpdateJsonContext.Default.GithubReleaseAsset) ?? throw new InvalidDataException("Missing Windows release asset."));
+                }
+                if (!assets.Any(a => a.Name == $"releases.{Channel}.json")) continue;
+                var release = new GithubRelease { Assets = assets.ToArray() };
                 if (release.Assets.Any(a => a.BrowserDownloadUrl != prefix + a.Name))
                     throw new InvalidDataException("Unexpected Windows release asset origin.");
+                if (manifestAssets == 1 && validManifestAsset) releasesWithManifest.Add(release);
                 versions.Add(release, version);
                 result.Add((release, parsed, mainRelease));
             }
@@ -74,34 +113,54 @@ public sealed class WindowsGithubSource : GithubSource
             throw new InvalidDataException("Windows release must contain exactly one matching full package.");
         return new VelopackAssetFeed { Assets = safe.ToArray() };
     }
+
+    internal bool HasManifest(VelopackAsset offer) => offer is GitBaseAsset entry && releasesWithManifest.Contains(entry.Release);
 }
 
-[JsonSerializable(typeof(GithubRelease))]
+[JsonSerializable(typeof(GithubReleaseAsset))]
 internal partial class WindowsUpdateJsonContext : JsonSerializerContext { }
 
 /// <summary>Lazy construction keeps native locator work out of startup. Download never implies apply.</summary>
 public sealed class WindowsUpdateBackend : IWindowsUpdateBackend
 {
-    private readonly Lazy<UpdateManager> manager = new(() => new UpdateManager(new WindowsGithubSource(), new UpdateOptions
+    private readonly Lazy<VerificationUpdateManager> manager;
+    private readonly WindowsGithubSource source;
+    private readonly string? informationalVersion;
+    private readonly HttpClient? notesTransport;
+
+    public WindowsUpdateBackend(string? informationalVersion = null) : this(informationalVersion, new WindowsGithubSource(), null, null) { }
+
+    internal WindowsUpdateBackend(string? informationalVersion, WindowsGithubSource source, IVelopackLocator? locator, HttpClient? transport)
     {
-        ExplicitChannel = WindowsGithubSource.Channel,
-        AllowVersionDowngrade = false,
-        MaximumDeltasBeforeFallback = -1
-    }));
+        this.informationalVersion = informationalVersion;
+        this.source = source;
+        notesTransport = transport;
+        manager = new(() => new VerificationUpdateManager(source, new UpdateOptions
+        {
+            ExplicitChannel = WindowsGithubSource.Channel,
+            AllowVersionDowngrade = false,
+            MaximumDeltasBeforeFallback = -1
+        }, locator));
+    }
     private UpdateInfo? offered;
     private bool downloaded;
     public bool IsInstalled => manager.Value.IsInstalled;
+    public bool IsStartupCheckDeferred => source.IsStartupCheckDeferred;
     public Version CurrentVersion => Version.Parse(manager.Value.CurrentVersion?.ToString() ?? "0.0.0");
+    public ReleaseNotes? OfferedNotes { get; private set; }
 
     public async Task<Version?> CheckAsync()
     {
         offered = null;
+        OfferedNotes = null;
         downloaded = false;
         var update = await manager.Value.CheckForUpdatesAsync();
         if (update is null) return null;
         var version = Version.Parse(update.TargetFullRelease.Version.ToString());
         if (version <= CurrentVersion || update.IsDowngrade || update.TargetFullRelease.PackageId != "AgentWindows")
             throw new InvalidDataException("Unsafe Windows update target.");
+        if (source.HasManifest(update.TargetFullRelease))
+            OfferedNotes = await EmbeddedWindowsNotes.TryLoadAsync(CurrentVersion, informationalVersion, update.TargetFullRelease, notesTransport);
         offered = update;
         return version;
     }
@@ -113,10 +172,18 @@ public sealed class WindowsUpdateBackend : IWindowsUpdateBackend
         return offered;
     }
 
-    public async Task DownloadAsync(Version version, Action<int> progress, CancellationToken token)
+    public async Task<ReleaseNotes?> RetryNotesAsync(Version version)
+    {
+        var target = RequireOffer(version).TargetFullRelease;
+        if (source.HasManifest(target))
+            OfferedNotes = await EmbeddedWindowsNotes.TryLoadAsync(CurrentVersion, informationalVersion, target, notesTransport);
+        return OfferedNotes;
+    }
+
+    public async Task DownloadAsync(Version version, Action<int> progress, Action verifying, CancellationToken token)
     {
         downloaded = false;
-        await manager.Value.DownloadUpdatesAsync(RequireOffer(version), progress, token);
+        await manager.Value.DownloadAndVerifyAsync(RequireOffer(version), progress, verifying, token);
         token.ThrowIfCancellationRequested();
         downloaded = true;
     }
@@ -126,5 +193,45 @@ public sealed class WindowsUpdateBackend : IWindowsUpdateBackend
         var update = RequireOffer(version);
         if (!downloaded) throw new InvalidOperationException("Download the Windows update first.");
         manager.Value.ApplyUpdatesAndRestart(update.TargetFullRelease, Array.Empty<string>());
+    }
+
+    private sealed class VerificationUpdateManager(IUpdateSource source, UpdateOptions options, IVelopackLocator? locator)
+        : UpdateManager(source, options, locator)
+    {
+        private Action? onVerification;
+
+        internal async Task DownloadAndVerifyAsync(UpdateInfo update, Action<int> progress, Action verifying, CancellationToken token)
+        {
+            bool verificationStarted = false;
+            onVerification = () =>
+            {
+                token.ThrowIfCancellationRequested();
+                verificationStarted = true;
+                verifying();
+            };
+            try
+            {
+                await DownloadUpdatesAsync(update, progress, token).ConfigureAwait(false);
+                if (verificationStarted) return;
+
+                // Velopack 1.2.161 returns without hashing when the complete file is cached.
+                // Reuse its verifier under the package lock, without rehashing fresh downloads.
+                using var updateLock = await AcquireUpdateLock().ConfigureAwait(false);
+                try { await VerifyPackageChecksumAsync(update.TargetFullRelease).ConfigureAwait(false); }
+                catch (ChecksumFailedException ex)
+                {
+                    // Let the next explicit download replace a corrupt cache entry.
+                    File.Delete(ex.FilePath);
+                    throw;
+                }
+            }
+            finally { onVerification = null; }
+        }
+
+        protected override Task VerifyPackageChecksumAsync(VelopackAsset release, string? filePathOverride = null)
+        {
+            onVerification?.Invoke();
+            return base.VerifyPackageChecksumAsync(release, filePathOverride);
+        }
     }
 }

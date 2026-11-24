@@ -6,10 +6,11 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { changelog } from './native-changelog.mjs';
+import { changelog, windowsPublicationHistory } from './native-changelog.mjs';
 export const sha256 = b=>createHash('sha256').update(b).digest('hex');
 const sha=/^[a-f0-9]{40}$/, digest=/^[a-f0-9]{64}$/;
 const names={android:'agent-android-release.json',windows:'agent-windows-release.json',container:'agent-container-release.json'};
+const manifestLimit=1024*1024;
 export function verifiedAndroidSigner(output) {
   const count=/^Number of signers:\s*(\d+)\s*$/m.exec(output)?.[1];
   const certificates=[...output.matchAll(/^Signer #\d+ certificate SHA-256 digest: ([a-fA-F0-9]{64})\s*$/gm)];
@@ -31,7 +32,7 @@ export function source(root='.') {
   if(!sha.test(commit)||!Number.isSafeInteger(count)||count<1) throw new Error('Invalid source identity.');
   return {commit,count,version:`0.1.${count}`};
 }
-function json(files,name) { if(!files.has(name)||files.get(name).length>1024*1024) throw new Error('Missing/oversized manifest: '+name); return JSON.parse(files.get(name)); }
+function json(files,name) { if(!files.has(name)||files.get(name).length>manifestLimit) throw new Error('Missing/oversized manifest: '+name); return JSON.parse(files.get(name)); }
 export function verifyPlatform(platform,files,expected={}) {
   const m=json(files,names[platform]);
   if(m.schemaVersion!==1||m.platform!==platform||!sha.test(m.commit)||!Number.isSafeInteger(m.versionCode)||m.versionCode<1) throw new Error('Invalid publication source/schema.');
@@ -147,6 +148,27 @@ export function loadDirectory(platform,directory,expected={}) {
   for(const name of files.keys()) if(!allowed.has(name)) throw new Error('Unexpected publication file: '+name);
   return {platform,files,manifest};
 }
+export function publishRelease(remote,{root='.',identity,items}) {
+  const prior=discover({...remote,list:()=>remote.list().filter(r=>r.tag_name!==`v${identity.version}`)}), sections=[];
+  for(const item of items) {
+    if(item.platform==='windows') {
+      const manifest=verifyPlatform('windows',item.files,identity);
+      manifest.changelog=windowsPublicationHistory({root,to:manifest.commit,count:manifest.versionCode,maxBytes:manifestLimit});
+      const encode=()=>Buffer.from(JSON.stringify(manifest)+'\n');
+      let bytes=encode();
+      if(bytes.length>manifestLimit) {
+        manifest.changelog={schemaVersion:1,truncated:true};
+        bytes=encode();
+      }
+      item.files.set(names.windows,bytes);
+    }
+    const notes=changelog({root,platform:item.platform,from:prior[item.platform]?.manifest.commit??null,to:identity.commit});
+    item.files.set(`agent-${item.platform}-changelog.json`,Buffer.from(JSON.stringify(notes,null,2)+'\n'));
+    const groups=[['Improvements',notes.improvements],['Fixes',notes.fixes]].filter(([,entries])=>entries.length).map(([title,entries])=>`### ${title}\n\n`+entries.map(e=>`- ${e.text} (${e.commit.slice(0,7)})`).join('\n'));
+    sections.push(`## ${item.platform==='android'?'Android':item.platform==='windows'?'Windows':'Container'}\n\n`+groups.join('\n\n'));
+  }
+  return publishInventory(remote,{...identity,items,notes:sections.join('\n\n')});
+}
 export function main(argv=process.argv.slice(2)) {
   const command=argv.shift(),o=options(argv,['repository','directory','apk','apksigner','aapt','count','commit','digest']);
   if(command==='verify') {let count=0;for(const platform of ['android','windows','container']) {const path=join(o.directory,platform);if(existsSync(path)) {loadDirectory(platform,path);count++;}}if(!count)throw new Error('No platform inventory found.');return;}
@@ -169,14 +191,7 @@ export function main(argv=process.argv.slice(2)) {
   if(command==='publish') {
     const identity=source(),remote=client(o.repository),items=[];
     for(const platform of ['android','windows','container']) if(existsSync(join(o.directory,platform))) items.push(loadDirectory(platform,join(o.directory,platform),identity));
-    const prior=discover({...remote,list:()=>remote.list().filter(r=>r.tag_name!==`v${identity.version}`)}), sections=[];
-    for(const item of items) {
-      const notes=changelog({platform:item.platform,from:prior[item.platform]?.manifest.commit??null,to:identity.commit});
-      item.files.set(`agent-${item.platform}-changelog.json`,Buffer.from(JSON.stringify(notes,null,2)+'\n'));
-      const groups=[['Improvements',notes.improvements],['Fixes',notes.fixes]].filter(([,entries])=>entries.length).map(([title,entries])=>`### ${title}\n\n`+entries.map(e=>`- ${e.text} (${e.commit.slice(0,7)})`).join('\n'));
-      sections.push(`## ${item.platform==='android'?'Android':item.platform==='windows'?'Windows':'Container'}\n\n`+groups.join('\n\n'));
-    }
-    return publishInventory(remote,{...identity,items,notes:sections.join('\n\n')});
+    return publishRelease(remote,{identity,items});
   }
   throw new Error('Expected package-android, verify, container or publish.');
 }

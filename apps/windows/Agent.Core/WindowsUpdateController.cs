@@ -4,23 +4,31 @@ namespace Agent.Core;
 public interface IWindowsUpdateBackend
 {
     bool IsInstalled { get; }
+    bool IsStartupCheckDeferred => false;
     Version CurrentVersion { get; }
     Task<Version?> CheckAsync();
-    Task DownloadAsync(Version version, Action<int> progress, CancellationToken token);
+    ReleaseNotes? OfferedNotes => null;
+    Task<ReleaseNotes?> RetryNotesAsync(Version version) => Task.FromResult<ReleaseNotes?>(null);
+    Task DownloadAsync(Version version, Action<int> progress, Action verifying, CancellationToken token);
     void ApplyAndRestart(Version version);
 }
 
 public enum WindowsUpdatePhase { Idle, Checking, Current, Available, Downloading, Verifying, Ready, Restarting, Error, NotInstalled }
-public sealed record WindowsUpdateStatus(WindowsUpdatePhase Phase, string Message, Version? Version = null, int Progress = 0);
+public sealed record WindowsUpdateStatus(WindowsUpdatePhase Phase, string Message, Version? Version = null, int Progress = 0)
+{
+    public ReleaseNotes? Notes { get; init; }
+    public bool RetryingNotes { get; init; }
+}
 
-/// <summary>No work is performed until an explicit user action. Exceptions never enter UI status text.</summary>
+/// <summary>Discovery is serialized with explicit download and restart. Exceptions never enter UI status text.</summary>
 public sealed class WindowsUpdateController : IDisposable
 {
     private readonly IWindowsUpdateBackend backend;
     private readonly Func<Task> preserveSession;
     private readonly CancellationTokenSource lifetime = new();
     private int busy;
-    private bool disposed;
+    private int startupStarted;
+    private volatile bool disposed;
     public WindowsUpdateStatus Status { get; private set; } = new(WindowsUpdatePhase.Idle, "Check for updates when you choose.");
     public event Action<WindowsUpdateStatus>? Changed;
 
@@ -37,26 +45,55 @@ public sealed class WindowsUpdateController : IDisposable
         Changed?.Invoke(status);
     }
 
-    public async Task CheckAsync()
+    public Task CheckAsync() => StartCheck(automatic: false);
+
+    public async Task RetryChangelogAsync()
     {
         if (disposed || Interlocked.CompareExchange(ref busy, 1, 0) != 0) return;
         try
         {
+            var offer = Status;
+            if (offer.Phase != WindowsUpdatePhase.Available || offer.Version is not { } version || offer.Notes is not null) return;
+            Set(offer with { RetryingNotes = true });
+            ReleaseNotes? notes = null;
+            try { notes = await Task.Run(() => backend.RetryNotesAsync(version)); }
+            catch { /* Optional metadata does not invalidate the retained package. */ }
+            Set(offer with { Notes = notes });
+        }
+        finally { Interlocked.Exchange(ref busy, 0); }
+    }
+
+    public Task CheckOnStartupAsync() => Interlocked.Exchange(ref startupStarted, 1) == 0
+        ? StartCheck(automatic: true) : Task.CompletedTask;
+
+    private Task StartCheck(bool automatic)
+    {
+        if (disposed || Interlocked.CompareExchange(ref busy, 1, 0) != 0) return Task.CompletedTask;
+        return CheckReservedAsync(automatic);
+    }
+
+    private async Task CheckReservedAsync(bool automatic)
+    {
+        try
+        {
             if (Status.Phase is WindowsUpdatePhase.Ready or WindowsUpdatePhase.Restarting) return;
-            if (!backend.IsInstalled)
-            {
-                Set(new(WindowsUpdatePhase.NotInstalled, "Install Agent using the Windows installer to enable in-app updates. Loose development builds cannot update."));
-                return;
-            }
+            if (automatic && await Task.Run(() => backend.IsStartupCheckDeferred)) return;
             Set(new(WindowsUpdatePhase.Checking, "Looking for a newer Windows version…"));
-            var version = await backend.CheckAsync();
-            Set(version is not null && version > backend.CurrentVersion
-                ? new(WindowsUpdatePhase.Available, $"Agent {version}", version)
-                : new(WindowsUpdatePhase.Current, "No newer Windows version is available."));
+            var result = await Task.Run(async () =>
+            {
+                if (!backend.IsInstalled)
+                    return new WindowsUpdateStatus(WindowsUpdatePhase.NotInstalled, "Install Agent using the Windows installer to enable in-app updates. Loose development builds cannot update.");
+                var version = await backend.CheckAsync();
+                return version is not null && version > backend.CurrentVersion
+                    ? new WindowsUpdateStatus(WindowsUpdatePhase.Available, $"Agent {version}", version) { Notes = backend.OfferedNotes }
+                    : new(WindowsUpdatePhase.Current, "No newer Windows version is available.");
+            });
+            Set(result);
         }
         catch { Set(new(WindowsUpdatePhase.Error, "Could not check for updates. Check your internet connection or try again later (GitHub may be rate-limiting requests).")); }
         finally { Interlocked.Exchange(ref busy, 0); }
     }
+
 
     public async Task DownloadAsync()
     {
@@ -64,14 +101,14 @@ public sealed class WindowsUpdateController : IDisposable
         try
         {
             if (Status.Phase != WindowsUpdatePhase.Available || Status.Version is not { } version) return;
-            Set(new(WindowsUpdatePhase.Downloading, $"Agent {version}…", version));
-            await backend.DownloadAsync(version, value =>
+            var offer = Status;
+            Set(offer with { Phase = WindowsUpdatePhase.Downloading, Message = "", Progress = 0 });
+            await Task.Run(() => backend.DownloadAsync(version, value =>
             {
                 if (Status.Phase == WindowsUpdatePhase.Downloading)
-                    Set(new(WindowsUpdatePhase.Downloading, $"Agent {version}…", version, Math.Clamp(value, 0, 100)));
-            }, lifetime.Token);
-            Set(new(WindowsUpdatePhase.Verifying, "Package verification complete.", version, 100));
-            Set(new(WindowsUpdatePhase.Ready, $"Agent {version} is downloaded.", version, 100));
+                    Set(offer with { Phase = WindowsUpdatePhase.Downloading, Message = "", Progress = Math.Clamp(value, 0, 100) });
+            }, () => Set(offer with { Phase = WindowsUpdatePhase.Verifying, Message = "", Progress = 100 }), lifetime.Token));
+            Set(offer with { Phase = WindowsUpdatePhase.Ready, Message = "", Progress = 100 });
         }
         catch { Set(new(WindowsUpdatePhase.Error, "Download failed or was cancelled. Nothing was installed. Check for updates to try again.")); }
         finally { Interlocked.Exchange(ref busy, 0); }
@@ -80,15 +117,15 @@ public sealed class WindowsUpdateController : IDisposable
     public async Task RestartAsync()
     {
         if (disposed || Interlocked.CompareExchange(ref busy, 1, 0) != 0) return;
-        var version = Status.Version;
+        var ready = Status;
         try
         {
-            if (Status.Phase != WindowsUpdatePhase.Ready || version is null) return;
-            Set(new(WindowsUpdatePhase.Restarting, "Saving your session before restarting…", version, 100));
+            if (ready.Phase != WindowsUpdatePhase.Ready || ready.Version is not { } version) return;
+            Set(ready with { Phase = WindowsUpdatePhase.Restarting, Message = "Saving your session before restarting…" });
             await preserveSession();
             if (!disposed) backend.ApplyAndRestart(version);
         }
-        catch { Set(new(WindowsUpdatePhase.Ready, "Could not save your session or start the installer. Agent has not requested another restart. Try Restart and install again.", version, 100)); }
+        catch { Set(ready with { Message = "Could not save your session or start the installer. Agent has not requested another restart. Try Restart and install again." }); }
         finally { Interlocked.Exchange(ref busy, 0); }
     }
 

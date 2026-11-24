@@ -46,3 +46,26 @@ test('empty feedback does not consume rows but nonempty Settings messages remain
   assert.match(settings, /SetSettingsText\("ProviderMessage",\s*"Couldn’t check/);
   assert.match(settings, /SetSettingsText\("AllowanceMessage",\s*"Refresh failed/);
 });
+
+test('update offer keeps its product and version in the header, with collapsed cached change details', () => {
+  assert.match(shell, /x:Name="UpdateTitle"[^>]*FontSize="20"/);
+  assert.match(shell, /<Expander x:Name="WhatsNew"[^>]*IsExpanded="False"[\s\S]*?x:Name="Changelog"/);
+  assert.doesNotMatch(main + settings, /WhatsNew"\)\.Expanding|LoadNotesAsync/);
+  assert.match(settings, /WindowsUpdatePhase\.Available => ""/);
+  assert.match(settings, /notes\.Improvements\.Count \+ notes\.Fixes\.Count/);
+  assert.match(settings, /notesContent\.Children\.Add\(new Expander\s*\{\s*Header = "Commit details"/);
+});
+
+test('commit boxes are accessible native links with full Agent destinations', () => {
+  assert.match(settings, /WindowsGithubSource\.Repository\}\/compare\/\{notes\.From\}\.\.\.\{notes\.To\}/);
+  assert.match(settings, /WindowsGithubSource\.Repository\}\/commit\/\{commit\.Sha\}/);
+  assert.match(settings, /NavigateUri = new Uri\(uri\)/);
+  assert.match(settings, /AutomationProperties\.SetName\(link, accessibleName\)/);
+  assert.match(shell, /x:Name="Changelog"[\s\S]*?StackPanel\.Resources[\s\S]*?x:Key="Default"[\s\S]*?x:Key="Light"[\s\S]*?x:Key="HighContrast"[\s\S]*?x:Key="CommitLinkStyle" TargetType="HyperlinkButton"[\s\S]*?Value="Consolas"/);
+});
+
+test('the dispatcher delivers each update phase and verification uses an indeterminate bar', () => {
+  assert.match(main, /updates\.Changed\s*\+=\s*status\s*=>\s*DispatcherQueue\.TryEnqueue\(\(\)\s*=>\s*RenderUpdates\(status\)\)/);
+  assert.match(settings, /bool indeterminate = status\.Phase is [^;]*WindowsUpdatePhase\.Verifying[^;]*;/);
+  assert.match(settings, /progress\.IsIndeterminate = indeterminate;/);
+});

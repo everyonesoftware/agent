@@ -25,8 +25,8 @@ public sealed partial class MainWindow:Window
     private JsonNode? usage,researchSettings,device;
     private ContentDialog? currentDialog;
     private readonly WindowsUpdateController updates;
-    private readonly ChangelogClient changelog=new();
-    private string? notesVersion;
+    private Version? renderedOffer;
+    private ReleaseNotes? renderedNotes;
     private static readonly SolidColorBrush Sage=new(Color.FromArgb(255,180,214,163));
     private T C<T>(string name) where T:class => (T)root.FindName(name);
     private static TextBlock Text(string value,double size=14)=>new(){Text=value,FontSize=size,TextWrapping=TextWrapping.Wrap,IsTextSelectionEnabled=true};
@@ -42,8 +42,10 @@ public sealed partial class MainWindow:Window
         ExtendsContentIntoTitleBar=true;SetTitleBar(C<Border>("TitleBar"));AppWindow.Resize(new Windows.Graphics.SizeInt32(1240,850));
         AppWindow.TitleBar.ButtonBackgroundColor=Color.FromArgb(255,24,27,26);AppWindow.TitleBar.ButtonForegroundColor=Color.FromArgb(255,225,230,226);
         AppWindow.TitleBar.ButtonInactiveBackgroundColor=Color.FromArgb(255,24,27,26);AppWindow.TitleBar.ButtonInactiveForegroundColor=Color.FromArgb(255,163,174,166);
-        updates=new(new WindowsUpdateBackend(),PreserveSessionAsync);updates.Changed+=status=>DispatcherQueue.TryEnqueue(()=>RenderUpdates(status));
-        string installed=Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0]??"Unknown";
+        string? informationalVersion=Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        updates=new(new WindowsUpdateBackend(informationalVersion ?? ""),PreserveSessionAsync);
+        updates.Changed+=status=>DispatcherQueue.TryEnqueue(()=>RenderUpdates(status));
+        string installed=informationalVersion?.Split('+')[0]??"Unknown";
         C<TextBlock>("InstalledVersion").Text="Current Version: "+installed;
         C<TextBlock>("SidebarVersion").Text="Version "+installed;
         Hook("Login",()=>LoginAsync(false));Hook("Register",()=>LoginAsync(true));
@@ -73,10 +75,11 @@ public sealed partial class MainWindow:Window
         Hook("AddMemory",()=>EditMemoryAsync(null));Hook("ExportMemory",ExportMemoryAsync);Hook("ResetPassword",ResetPasswordAsync);
         Hook("SignOut",SignOutAsync);Hook("ChangeServer",ChangeServerAsync);Hook("TestConnection",async()=>{await Need().GetAsync("/api/auth/me",accountLifetime.Token);Notify("Connected to your Agent server.",false);});
         Hook("CheckUpdates",updates.CheckAsync,false);Hook("UpdatePrimary",async()=>{if(updates.Status.Phase==WindowsUpdatePhase.Ready)await updates.RestartAsync();else await updates.DownloadAsync();},false);
-        C<Expander>("WhatsNew").Expanding+=async(_,_)=>await LoadNotesAsync();
-        Closed+=(_,_)=>{closed=true;accountLifetime.Cancel();request?.Cancel();client?.Dispose();updates.Dispose();changelog.Dispose();};
+        Hook("RetryChangelog",updates.RetryChangelogAsync,false);
+        Closed+=(_,_)=>{closed=true;accountLifetime.Cancel();request?.Cancel();client?.Dispose();updates.Dispose();};
         root.Loaded+=async(_,_)=>await GuardAsync(RestoreAsync);
     }
+    internal Task CheckOnStartupAsync()=>updates.CheckOnStartupAsync();
     private void Hook(string name,Func<Task> action,bool serialize=true)=>C<Button>(name).Click+=async(_,_)=>await GuardAsync(action,serialize);
     private async Task GuardAsync(Func<Task> action,bool serialize=true)
     {

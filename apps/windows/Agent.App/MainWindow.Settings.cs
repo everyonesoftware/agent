@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text;
 using System.Text.Json.Nodes;
 using Agent.Core;
@@ -249,25 +248,106 @@ public sealed partial class MainWindow
     }
     private void RenderUpdates(WindowsUpdateStatus status)
     {
-        if(closed)return;C<TextBlock>("UpdateTitle").Text=status.Phase switch{WindowsUpdatePhase.Idle=>"Not checked yet",WindowsUpdatePhase.Checking=>"Checking…",WindowsUpdatePhase.Current=>"Up to date",WindowsUpdatePhase.Available=>"Update available",WindowsUpdatePhase.Downloading=>"Downloading update…",WindowsUpdatePhase.Verifying=>"Verifying update…",WindowsUpdatePhase.Ready=>"Ready to install",WindowsUpdatePhase.Restarting=>"Restarting…",_=>"Updates unavailable"};
-        SetSettingsText("OfferedVersion", status.Version is null?"":"Agent "+status.Version);SetSettingsText("UpdateStatus", status.Message);
-        bool available=status.Phase is WindowsUpdatePhase.Available or WindowsUpdatePhase.Ready;
-        C<StackPanel>("UpdateActions").Visibility=available?Visibility.Visible:Visibility.Collapsed;C<Button>("UpdatePrimary").Content=status.Phase==WindowsUpdatePhase.Ready?"Restart and install":"Download update";
-        C<Button>("CheckUpdates").IsEnabled=status.Phase is not (WindowsUpdatePhase.Checking or WindowsUpdatePhase.Downloading or WindowsUpdatePhase.Verifying or WindowsUpdatePhase.Ready or WindowsUpdatePhase.Restarting);
-        C<ProgressBar>("UpdateProgress").Visibility=status.Phase is WindowsUpdatePhase.Downloading or WindowsUpdatePhase.Verifying?Visibility.Visible:Visibility.Collapsed;C<ProgressBar>("UpdateProgress").Value=status.Progress;
-        C<Expander>("WhatsNew").Visibility=status.Version is null?Visibility.Collapsed:Visibility.Visible;if(notesVersion!=status.Version?.ToString()){notesVersion=null;C<Expander>("WhatsNew").IsExpanded=false;C<Expander>("WhatsNew").Header="What’s new";C<StackPanel>("Changelog").Children.Clear();}
-    }
-    private async Task LoadNotesAsync()
-    {
-        string? version=updates.Status.Version?.ToString();if(version is null||notesVersion==version)return;var panel=C<StackPanel>("Changelog");panel.Children.Clear();panel.Children.Add(Text("Loading changelog…"));
-        string informational=Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion??"";string commit=informational.Split('+').ElementAtOrDefault(1)??"";
-        try
+        if (closed) return;
+        C<TextBlock>("UpdateTitle").Text = status.Phase switch
         {
-            var notes=await changelog.LoadAsync(version,commit);if(closed||updates.Status.Version?.ToString()!=version)return;notesVersion=version;panel.Children.Clear();
-            foreach(var group in new[]{("Improvements",notes.Improvements),("Fixes",notes.Fixes)}){if(group.Item2.Count==0)continue;panel.Children.Add(Text(group.Item1,16));foreach(string bullet in group.Item2)panel.Children.Add(Text("• "+bullet));}
-            C<Expander>("WhatsNew").Header=$"What’s new · {notes.Improvements.Count+notes.Fixes.Count} changes";
-            panel.Children.Add(new Expander{Header="Commit details",Content=Text(notes.From+"…"+notes.To+"\n\n"+string.Join("\n",notes.Commits.Select(c=>c.Sha+" "+c.Subject)))});
+            WindowsUpdatePhase.Idle => "Not checked yet",
+            WindowsUpdatePhase.Checking => "Checking for updates",
+            WindowsUpdatePhase.Current => "Up to date",
+            WindowsUpdatePhase.Available => "Update available",
+            WindowsUpdatePhase.Downloading => "Downloading update",
+            WindowsUpdatePhase.Verifying => "Verifying update",
+            WindowsUpdatePhase.Ready => "Ready to install",
+            WindowsUpdatePhase.Restarting => "Restarting",
+            WindowsUpdatePhase.Error => "Update failed",
+            _ => "Updates unavailable"
+        };
+        SetSettingsText("OfferedVersion", status.Version is { } version ? $"Agent {version}" : "");
+        SetSettingsText("UpdateStatus", status.Phase switch
+        {
+            WindowsUpdatePhase.Available => "",
+            WindowsUpdatePhase.Idle or WindowsUpdatePhase.Checking or WindowsUpdatePhase.Current => "",
+            WindowsUpdatePhase.Downloading => $"{status.Progress}%",
+            _ => status.Message
+        });
+
+        bool available = status.Phase == WindowsUpdatePhase.Available;
+        bool ready = status.Phase == WindowsUpdatePhase.Ready;
+        bool indeterminate = status.Phase is WindowsUpdatePhase.Checking or WindowsUpdatePhase.Verifying or WindowsUpdatePhase.Restarting;
+        bool working = indeterminate || status.Phase == WindowsUpdatePhase.Downloading;
+        C<StackPanel>("UpdateActions").Visibility = available || ready ? Visibility.Visible : Visibility.Collapsed;
+        C<Button>("UpdatePrimary").Content = ready ? "Restart and install" : "Download update";
+        C<Button>("CheckUpdates").IsEnabled = !working && !ready && !status.RetryingNotes && status.Phase != WindowsUpdatePhase.NotInstalled;
+        C<Button>("UpdatePrimary").IsEnabled = !status.RetryingNotes;
+        var progress = C<ProgressBar>("UpdateProgress");
+        progress.Visibility = working || ready ? Visibility.Visible : Visibility.Collapsed;
+        progress.IsIndeterminate = indeterminate;
+        progress.Value = status.Progress;
+
+        var disclosure = C<Expander>("WhatsNew");
+        disclosure.Visibility = status.Version is null ? Visibility.Collapsed : Visibility.Visible;
+        C<Button>("RetryChangelog").Visibility = available && status.Notes is null ? Visibility.Visible : Visibility.Collapsed;
+        C<Button>("RetryChangelog").IsEnabled = !status.RetryingNotes;
+        C<TextBlock>("ChangelogUnavailable").Text = status.RetryingNotes ? "Checking changelog…" : "Changelog unavailable.";
+        if (renderedOffer != status.Version || !ReferenceEquals(renderedNotes, status.Notes))
+        {
+            if (renderedOffer != status.Version) disclosure.IsExpanded = false;
+            renderedOffer = status.Version;
+            renderedNotes = status.Notes;
+            RenderUpdateNotes(disclosure, status.Notes);
         }
-        catch{if(closed||updates.Status.Version?.ToString()!=version)return;panel.Children.Clear();panel.Children.Add(Text("Changelog unavailable. The update remains downloadable."));var retry=new Button{Content="Retry changelog"};retry.Click+=async(_,_)=>await LoadNotesAsync();panel.Children.Add(retry);}
+    }
+
+    private void RenderUpdateNotes(Expander disclosure, ReleaseNotes? notes)
+    {
+        var notesContent = C<StackPanel>("Changelog");
+        notesContent.Children.Clear();
+        C<TextBlock>("ChangelogUnavailable").Visibility = notes is null ? Visibility.Visible : Visibility.Collapsed;
+        disclosure.Header = "What’s new";
+        if (notes is null) return;
+
+        int count = notes.Improvements.Count + notes.Fixes.Count;
+        disclosure.Header = $"What’s new · {count} {(count == 1 ? "change" : "changes")}";
+        foreach (var (heading, bullets) in new[] { ("Improvements", notes.Improvements), ("Fixes", notes.Fixes) })
+        {
+            if (bullets.Count == 0) continue;
+            notesContent.Children.Add(new TextBlock { Text = heading, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+            foreach (string bullet in bullets) notesContent.Children.Add(Text($"• {bullet}"));
+        }
+        if (count == 0) notesContent.Children.Add(Text("No user-facing Windows changes in this source range."));
+
+        var details = new StackPanel { Spacing = 8 };
+        details.Children.Add(CommitLink($"{notes.From[..7]}…{notes.To[..7]}",
+            $"{WindowsGithubSource.Repository}/compare/{notes.From}...{notes.To}",
+            $"Compare source range {notes.From[..7]} to {notes.To[..7]} on GitHub (opens in your browser)"));
+        foreach (var commit in notes.Commits)
+        {
+            var row = new Grid { ColumnSpacing = 9 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.Children.Add(CommitLink(commit.Sha[..7], $"{WindowsGithubSource.Repository}/commit/{commit.Sha}",
+                $"View commit {commit.Sha[..7]} on GitHub (opens in your browser)"));
+            var subject = Text(commit.Subject);
+            subject.VerticalAlignment = VerticalAlignment.Center;
+            Grid.SetColumn(subject, 1);
+            row.Children.Add(subject);
+            details.Children.Add(row);
+        }
+        notesContent.Children.Add(new Expander { Header = "Commit details", Content = details,
+            HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch });
+    }
+
+    private HyperlinkButton CommitLink(string caption, string uri, string accessibleName)
+    {
+        // The native control opens its URI only on activation, never on disclosure.
+        var link = new HyperlinkButton
+        {
+            Content = caption,
+            NavigateUri = new Uri(uri),
+            Style = (Style)C<StackPanel>("Changelog").Resources["CommitLinkStyle"]
+        };
+        AutomationProperties.SetName(link, accessibleName);
+        ToolTipService.SetToolTip(link, accessibleName);
+        return link;
     }
 }
