@@ -268,29 +268,20 @@
   <Button x:Name="SidebarBackdrop" Grid.Row="1" Grid.Column="1" Visibility="Collapsed" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="#A0000000" BorderThickness="0" CornerRadius="0" IsTabStop="False" AllowFocusOnInteraction="False" AutomationProperties.AccessibilityView="Raw"/>
   <Border x:Name="Sidebar" Grid.RowSpan="2" Width="232" HorizontalAlignment="Left" Background="#181b1a" BorderBrush="#333936" BorderThickness="0,0,1,0" Padding="14,24,14,12">
    <Grid>
-    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-    <StackPanel Orientation="Horizontal" Spacing="9" Margin="6,0,0,24">
-     <Image x:Name="SidebarIcon" Width="26" Height="26" AutomationProperties.AccessibilityView="Raw"/>
-     <TextBlock Text="Agent" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/>
-    </StackPanel>
-    <Button x:Name="NewChat" Grid.Row="1" Content="＋  New conversation" MinHeight="39" FontSize="12" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Margin="0,0,0,18"/>
-    <TextBox x:Name="HistorySearch" Grid.Row="2" PlaceholderText="Search conversations" AutomationProperties.Name="Search conversations" MinHeight="39" FontSize="12" Background="#181b1a" Margin="0,0,0,14"/>
-    <ListView x:Name="History" Grid.Row="3" SelectionMode="None" IsItemClickEnabled="True" Padding="0,0,8,0" Background="Transparent" AutomationProperties.Name="Saved conversations"/>
-    <TextBlock x:Name="HistoryEmpty" Grid.Row="3" Margin="8,8" Foreground="#a3aea6" FontSize="12" IsHitTestVisible="False"/>
-    <Border x:Name="AccountFooter" Grid.Row="4" BorderBrush="#333936" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="6,12,0,0">
-     <Grid ColumnSpacing="10" RowSpacing="10">
-      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <Button x:Name="NewChat" Content="＋  New conversation" MinHeight="39" FontSize="12" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Margin="0,0,0,18"/>
+    <TextBox x:Name="HistorySearch" Grid.Row="1" PlaceholderText="Search conversations" AutomationProperties.Name="Search conversations" MinHeight="39" FontSize="12" Background="#181b1a" Margin="0,0,0,14"/>
+    <ListView x:Name="History" Grid.Row="2" SelectionMode="None" IsItemClickEnabled="True" Padding="0,0,8,0" Background="Transparent" AutomationProperties.Name="Saved conversations"/>
+    <TextBlock x:Name="HistoryEmpty" Grid.Row="2" Margin="8,8" Foreground="#a3aea6" FontSize="12" IsHitTestVisible="False"/>
+    <Border x:Name="AccountFooter" Grid.Row="3" BorderBrush="#333936" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="6,12,0,0">
+     <Grid ColumnSpacing="10">
       <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
       <Grid Width="30" Height="30" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw">
        <Ellipse Fill="#2c332e"/>
        <TextBlock x:Name="AccountInitial" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#a3aea6" FontSize="12"/>
       </Grid>
-      <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-       <TextBlock x:Name="SignedInAs" FontSize="12" FontWeight="SemiBold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
-       <TextBlock Text="Your account" FontSize="10" Foreground="#a3aea6"/>
-      </StackPanel>
+      <TextBlock x:Name="SignedInAs" Grid.Column="1" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
       <Button x:Name="SettingsNav" Grid.Column="2" AutomationProperties.Name="Settings" ToolTipService.ToolTip="Settings" Width="36" MinHeight="36" Padding="0" Background="Transparent" BorderThickness="0"><SymbolIcon Symbol="Setting"/></Button>
-      <TextBlock x:Name="SidebarVersion" Grid.Row="1" Grid.ColumnSpan="3" FontSize="10" Foreground="#a3aea6"/>
      </Grid>
     </Border>
    </Grid>

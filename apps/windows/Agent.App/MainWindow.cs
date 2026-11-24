@@ -38,7 +38,7 @@ public sealed partial class MainWindow:Window
         root=(Grid)XamlReader.Load(reader.ReadToEnd());Content=root;Title="Agent";
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory,"Assets","Agent.ico"));
         var brandImage=new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory,"Assets","Agent.png")));
-        foreach(string name in new[]{"AppIcon","SignInIcon","SidebarIcon"})C<Image>(name).Source=brandImage;
+        foreach(string name in new[]{"AppIcon","SignInIcon"})C<Image>(name).Source=brandImage;
         ExtendsContentIntoTitleBar=true;SetTitleBar(C<Border>("TitleBar"));AppWindow.Resize(new Windows.Graphics.SizeInt32(1240,850));
         AppWindow.TitleBar.ButtonBackgroundColor=Color.FromArgb(255,24,27,26);AppWindow.TitleBar.ButtonForegroundColor=Color.FromArgb(255,225,230,226);
         AppWindow.TitleBar.ButtonInactiveBackgroundColor=Color.FromArgb(255,24,27,26);AppWindow.TitleBar.ButtonInactiveForegroundColor=Color.FromArgb(255,163,174,166);
@@ -47,7 +47,7 @@ public sealed partial class MainWindow:Window
         updates.Changed+=status=>DispatcherQueue.TryEnqueue(()=>RenderUpdates(status));
         string installed=informationalVersion?.Split('+')[0]??"Unknown";
         C<TextBlock>("InstalledVersion").Text="Current Version: "+installed;
-        C<TextBlock>("SidebarVersion").Text="Version "+installed;
+
         Hook("Login",()=>LoginAsync(false));Hook("Register",()=>LoginAsync(true));
         Hook("NewChat",()=>{chat.Reset();C<TextBox>("Composer").Text="";C<CheckBox>("ResearchToggle").IsChecked=false;RenderMessages();UpdateActiveConversation();ShowSettings(false);return Task.CompletedTask;});
         Hook("SettingsNav", async () =>

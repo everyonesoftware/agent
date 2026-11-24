@@ -19,7 +19,9 @@ test('the signed-in shell has the web welcome, searchable history and compact ac
   assert.match(shell, /x:Name="HistorySearch"[^>]*PlaceholderText="Search conversations"/);
   const footer = shell.split('<Border x:Name="AccountFooter"')[1]?.split('</Border>')[0];
   assert.ok(footer, 'missing account footer');
-  for (const name of ['SignedInAs', 'AccountInitial', 'SettingsNav', 'SidebarVersion']) assert.ok(footer.includes(`x:Name="${name}"`), name);
+  for (const name of ['SignedInAs', 'AccountInitial', 'SettingsNav']) assert.ok(footer.includes(`x:Name="${name}"`), name);
+  assert.doesNotMatch(footer, /Your account|SidebarVersion/);
+  assert.match(shell, /x:Name="UpdatesSection"[\s\S]*?<TextBlock x:Name="InstalledVersion"/);
   assert.doesNotMatch(shell, /x:Name="ChatNav"/);
 });
 
