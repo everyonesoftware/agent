@@ -25,6 +25,7 @@ func registerUsageRoutes(mux *http.ServeMux, accounts *accountStore, base *siwcS
 }
 
 func (s *usageService) register(mux *http.ServeMux) {
+	mux.Handle("POST /api/usage/resets/consume", s.accounts.middleware(http.HandlerFunc(s.consumeUsageReset)))
 	for _, route := range []string{"GET /api/usage/history", "GET /api/usage/status", "POST /api/usage/connect", "POST /api/usage/cancel", "POST /api/usage/refresh", "POST /api/usage/disconnect"} {
 		mux.Handle(route, s.accounts.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Cache-Control", "no-store")

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChatGPT resets · Agent mockup</title>
+<style>
+:root{color-scheme:dark;font:14px/1.5 'Segoe UI',Arial,sans-serif;color:#e1e6e2;background:#202322;--muted:#a0aaa3;--line:#3b423e;--accent:#b4d6a3;--field:#252a27}
+*{box-sizing:border-box}body{margin:0}main{max-width:650px;margin:auto;padding:28px 18px 36px}h1,h2,h3,p{margin:0}h1{font-size:24px;font-weight:600;letter-spacing:-.5px}h2{font-size:16px;font-weight:600}h3{font-size:14px;font-weight:600}.row{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap}.brand{display:inline-flex;align-items:center;gap:9px;font-size:15px;font-weight:600}.brand svg{flex:none}.eyebrow{font-size:11px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase}.heading{border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:16px}.card{background:var(--field);padding:20px;border:1px solid var(--line);border-radius:8px}.badge{display:inline-flex;align-items:center;gap:6px;border:1px solid #425244;border-radius:20px;padding:4px 9px;color:var(--accent);font-size:11px}.badge:before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}.account,.button{border:1px solid var(--line);border-radius:5px;font-size:12px}.account{margin:10px 0;padding:9px 11px;background:#202322}.account svg,.chevron{width:14px;height:14px;color:var(--muted);flex:none}.toolbar{display:flex;flex-wrap:wrap;gap:8px}.button{padding:8px 12px;color:#c7cfca}.danger{color:#e0b1a9}.section{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}.muted{color:var(--muted);font-size:12px}.window{margin:11px 0}.window .row{font-size:12px;align-items:baseline}.window strong{color:var(--accent);font-weight:600}.track{height:6px;border-radius:8px;background:#39403b;margin-top:5px;overflow:hidden}.fill{height:100%;width:var(--remaining);background:var(--accent);border-radius:inherit}.allowance-actions{justify-content:flex-start;gap:8px 14px}.about{font-size:12px;color:var(--muted)}summary{cursor:pointer}summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.about p{max-width:34ch;margin-top:4px}.subhead{display:flex;align-items:center;gap:7px}.subhead svg{width:17px;height:17px;color:var(--accent)}.reset-title{margin-bottom:9px}.balance{border:1px solid #48564a;border-radius:6px;background:#202722;padding:11px 12px}.balance-head{display:flex;align-items:baseline;gap:7px;color:#dce8dc;font-weight:600}.balance-head strong{font-size:22px;line-height:1.1;color:var(--accent);font-variant-numeric:tabular-nums}.expiry{list-style:none;margin:8px 0 0;padding:7px 0 0;border-top:1px solid #3b473d;font-size:12px}.expiry li{display:flex;justify-content:space-between;align-items:baseline;gap:2px 12px;flex-wrap:wrap;padding:2px 0}.expiry time{color:#d5ded7}.history{margin-top:8px}.history summary{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:6px 2px;list-style:none;font-size:13px;font-weight:600}.history summary::-webkit-details-marker{display:none}.history summary:hover{color:var(--accent)}.history[open] .chevron{transform:rotate(180deg)}.history ol{margin:0;padding:0;list-style:none}.history li{display:grid;grid-template-columns:minmax(0,1fr) max-content;align-items:center;gap:6px 12px;border-top:1px solid var(--line);padding:7px 2px;font-size:12px}.history li strong{display:block;font-weight:600}.tag{padding:2px 8px;border-radius:12px;border:1px solid #48564a;color:var(--accent);font-size:11px}.tag.expired{color:#e3c59a;border-color:#5a5041}.note{margin-top:10px;font-size:11px;color:var(--muted)}@media(max-width:390px){main{padding:16px 12px 26px}.card{padding:14px}.window .row{column-gap:5px}}
+button{font:inherit;cursor:pointer}button.button{font-size:12px;min-height:40px;background:var(--field)}button.primary{background:var(--accent);border-color:transparent;color:#202322;font-weight:600}button.primary:not(:disabled):hover{background:#c6e3b7}button:disabled{opacity:.5;cursor:default}button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}dialog{color:inherit;background:var(--field);border:1px solid #48564a;border-radius:10px;padding:20px;width:min(420px,calc(100% - 24px));max-height:calc(100% - 24px);box-shadow:0 16px 48px #0007}dialog::backdrop{background:#101311ba}dialog h2{font-size:18px}dialog p{margin-top:8px}.dialog-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px;margin-top:18px}
+</style>
+</head>
+<body>
+<main>
+  <header class="row heading"><div class="brand"><svg aria-hidden="true" width="26" height="26" viewBox="0 0 26 26"><rect width="26" height="26" rx="6" fill="#b4d6a3"/><circle cx="13" cy="13" r="7.1" stroke="#202322" stroke-width="2.4" fill="none"/></svg>Agent</div><span class="eyebrow">Design mockup · Sample data</span></header>
+  <h1>Settings</h1>
+  <article class="card" aria-labelledby="connection" style="margin-top:12px">
+    <header class="row"><h2 id="connection">ChatGPT connection</h2><span class="badge">Connected</span></header>
+    <div class="row account"><span id="demo-account">demo@example.com</span><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="m4 6 4 4 4-4"/></svg></div>
+    <div class="toolbar"><span class="button">Add account ↗</span><span class="button danger">Disconnect</span></div>
+    <section class="section" aria-labelledby="allowance">
+      <header class="row"><h3 id="allowance">Allowance</h3><span class="muted">All times ET</span></header>
+      <div class="window"><div class="row"><span><strong>64% remaining</strong> · 5-hour window</span><span class="muted">Renews Nov 27, 4:20 PM</span></div><div class="track" aria-hidden="true"><div class="fill" style="--remaining:64%"></div></div></div>
+      <div class="window"><div class="row"><span><strong>81% remaining</strong> · Weekly window</span><span class="muted">Renews Dec 2, 8:00 AM</span></div><div class="track" aria-hidden="true"><div class="fill" style="--remaining:81%"></div></div></div>
+      <div class="row allowance-actions"><span class="button">View usage history</span><details class="about"><summary>About allowance</summary><p>Allowance renews on its own schedule. The expiration dates below are for available resets, not for allowance windows.</p></details></div>
+    </section>
+    <section class="section" aria-labelledby="resets">
+      <header class="row reset-title"><h3 class="subhead" id="resets" tabindex="-1"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11a9 9 0 1 1 2.2 6M3 5v6h6m3-4v5l3 2"/></svg>Resets</h3><button class="button primary" id="use-reset" type="button" aria-haspopup="dialog" aria-controls="reset-dialog" disabled>Use a reset</button></header>
+      <div class="balance"><p class="balance-head" role="status"><strong id="reset-count">2</strong> <span id="reset-count-label">resets available</span></p>
+        <ul class="expiry" aria-label="Upcoming reset expirations"><li><span>1 reset expires</span><time datetime="2026-12-01T23:59:00-05:00">Dec 1, 2026 at 11:59 PM ET</time></li><li><span>1 reset expires</span><time datetime="2026-12-15T23:59:00-05:00">Dec 15, 2026 at 11:59 PM ET</time></li></ul>
+
+      </div>
+
+      <details class="history"><summary>Reset history <svg class="chevron" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6 4 4 4-4"/></svg></summary>
+        <ol aria-label="Reset events, newest first">
+          <li><div><strong>1 reset used</strong><time class="muted" datetime="2026-11-24T14:18:00-05:00">Nov 24, 2026 at 2:18 PM ET</time></div><span class="tag" aria-hidden="true">Used</span></li>
+          <li><div><strong>1 reset expired</strong><time class="muted" datetime="2026-11-17T23:59:00-05:00">Nov 17, 2026 at 11:59 PM ET</time></div><span class="tag expired" aria-hidden="true">Expired</span></li>
+          <li><div><strong>1 reset used</strong><time class="muted" datetime="2026-11-08T09:42:00-05:00">Nov 8, 2026 at 9:42 AM ET</time></div><span class="tag" aria-hidden="true">Used</span></li>
+        </ol>
+      </details>
+    </section>
+  </article>
+  <p class="note">Interactive prototype. No real account is connected and no live allowance is changed. Reload to restore the sample resets.</p>
+</main>
+<dialog id="reset-dialog" aria-labelledby="reset-dialog-title" aria-describedby="reset-warning reset-demo-note">
+  <h2 id="reset-dialog-title">Use 1 reset?</h2>
+  <p id="reset-warning">This will use the reset that expires <strong id="reset-expiration"></strong> for <strong id="reset-account"></strong>. <span id="reset-after"></span> This can’t be undone.</p>
+  <p class="muted" id="reset-demo-note">This demo updates the sample reset balance and history only.</p>
+  <div class="dialog-actions">
+    <button class="button" id="cancel-reset" type="button" autofocus>Cancel</button>
+    <button class="button primary" id="confirm-reset" type="button">Use reset</button>
+  </div>
+</dialog>
+<script>
+  const byId = id => document.getElementById(id);
+  const launcher = byId('use-reset');
+  const dialog = byId('reset-dialog');
+  const expiry = document.querySelector('.expiry');
+  const history = document.querySelector('.history ol');
+  let pending = null;
+
+  function updateBalance() {
+    const count = expiry.children.length;
+    byId('reset-count').textContent = count;
+    byId('reset-count-label').textContent = count === 1 ? 'reset available' : 'resets available';
+    launcher.disabled = count === 0;
+    expiry.hidden = count === 0;
+  }
+
+  launcher.addEventListener('click', () => {
+    if (dialog.open || !expiry.firstElementChild) return;
+    pending = expiry.firstElementChild;
+    const remaining = expiry.children.length - 1;
+    byId('reset-expiration').textContent = pending.querySelector('time').textContent;
+    byId('reset-account').textContent = byId('demo-account').textContent;
+    byId('reset-after').textContent = remaining === 1 ? 'You’ll have 1 reset left.' : `You’ll have ${remaining} resets left.`;
+    dialog.showModal();
+  });
+
+  function closeConfirmation() {
+    pending = null;
+    dialog.close();
+    (launcher.disabled ? byId('resets') : launcher).focus();
+  }
+
+  byId('cancel-reset').addEventListener('click', closeConfirmation);
+  dialog.addEventListener('cancel', event => {
+    event.preventDefault();
+    closeConfirmation();
+  });
+
+  byId('confirm-reset').addEventListener('click', () => {
+    if (!dialog.open || pending?.parentElement !== expiry) return;
+    pending.remove();
+    pending = null;
+    const now = new Date();
+    const event = document.createElement('li');
+    event.innerHTML = '<div><strong>1 reset used</strong><time class="muted"></time></div><span class="tag" aria-hidden="true">Used</span>';
+    const time = event.querySelector('time');
+    time.dateTime = now.toISOString();
+    time.textContent = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+    }).format(now);
+    history.prepend(event);
+    updateBalance();
+    closeConfirmation();
+
+  });
+
+  updateBalance();
+</script>
+</body>
+</html>

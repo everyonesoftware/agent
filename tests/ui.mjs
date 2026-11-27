@@ -82,6 +82,7 @@ const providerProfiles = [
 const calls = [];
 let usageAvailable = true, usageDelay = 0, usageMutationDelay = 0, usageRefreshFailure = false, usageStatusFailure = false, devicePollGate = null;
 const usageRecords = new Map();
+let resetRequestGate, resetFailure = false;
 const usageStatus = id => structuredClone(usageRecords.get(id) || {profile_id:id,available:usageAvailable,state:usageAvailable?(providerProfiles.find(p=>p.id===id)?.connected?'connected':'disconnected'):'unavailable',connection_id:'',identity_match:'unverified'});
 
 let conversations = [
@@ -171,6 +172,31 @@ const server = createServer(async (req, res) => {
     if (call.payload.profile_id !== activeProfile) { json(409, { error: 'Active account changed.' }); return; }
     if (!disconnectFailure) { const selected = providerProfiles.find(p => p.id === activeProfile); if (selected) Object.assign(selected, { connected: false, oauth_selected: false, plan_usage_enabled: false }); usageRecords.delete(activeProfile); }
     json(disconnectFailure ? 500 : 200, disconnectFailure ? { error: 'Test disconnect failure.' } : { remote_revocation_confirmed: remoteRevoked }); return;
+  }
+  if (url.pathname === '/api/usage/resets/consume') {
+    let text = ''; for await (const chunk of req) text += chunk;
+    const payload = call.payload = JSON.parse(text);
+    const record = usageRecords.get(payload.profile_id);
+    const next = record?.resets?.next;
+    if (payload.profile_id !== activeProfile || payload.connection_id !== record?.connection_id || !next || payload.credit_id !== next.credit_id ||
+        payload.confirmed_count !== record.resets.available_count || payload.confirmed_expires_at !== next.expires_at ||
+        (next.pending_attempt_id && payload.attempt_id !== next.pending_attempt_id)) {
+      json(409, {error:'The reset target changed.'}); return;
+    }
+    if (resetRequestGate) await resetRequestGate;
+    if (resetFailure === 'pending') {
+      record.resets = {...record.resets, next:{...next,pending_attempt_id:payload.attempt_id}};
+      json(503, {error:'Reset result unavailable.'}); return;
+    }
+    if (resetFailure === 'nothingToReset' || resetFailure === 'noCredit') {
+      const {pending_attempt_id, ...unreserved} = next;
+      record.resets = {...record.resets, next:unreserved};
+      json(200, {outcome:resetFailure, status:record}); return;
+    }
+    const previous = record.resets;
+    record.resets = {...previous, available_count:0, expirations:[], next:undefined,
+      history:[...previous.history, {kind:'used', at:Math.floor(Date.now()/1000)}]};
+    json(200, {outcome:'reset', status:record}); return;
   }
   if (url.pathname.startsWith('/api/usage/')) {
     const action = url.pathname.split('/').pop();
@@ -578,19 +604,113 @@ try {
   approveDevice('p1'); authorizationAutoApprove=true;
   await expectEventually("document.querySelector('#usage-device').hidden && document.querySelector('#usage-windows [role=meter]')?.getAttribute('aria-valuenow')==='68' && document.querySelector('#connection-badge').textContent==='Connected'", 'Approval polling did not refresh connection, models and allowance');
   ok(!calls.some(c=>c.path==='/api/usage/connect'), 'Unified authentication never requires a second usage sign-in');
-  ok(await js("document.querySelector('#usage-panel').closest('.settings-card').querySelector('#connection-title') && !document.querySelector('#usage-panel .connection-heading') && document.querySelector('#usage-updated').title.includes('local time')"), 'Allowance is integrated with exact local freshness available on demand');
+  ok(await js("document.querySelector('#usage-panel').closest('.settings-card').querySelector('#connection-title') && !document.querySelector('#usage-panel .connection-heading') && document.querySelector('#usage-updated').title.endsWith(' ET')"), 'Allowance is integrated with exact Eastern freshness available on demand');
   ok(await js("document.querySelector('#account-select-label').classList.contains('visually-hidden') && document.querySelector('#account-select').labels[0].textContent==='Active ChatGPT account' && document.querySelector('#usage-message').hidden && document.querySelector('#usage-badge').classList.contains('visually-hidden') && !document.querySelector('#usage-identity') && !document.querySelector('[aria-labelledby=connection-title]').innerText.includes('Powered by Codex')"), 'Compact connected card removes redundant copy while preserving the accessible account name');
   await js("document.querySelector('#settings-panel').scrollTop=0");
   await screenshot('agent-allowance-integrated-desktop');
-  await js("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.copiedUsageCode=value;}}})");
   for (const [width,height] of [[1280,850],[390,640],[320,640]]) {
     await viewport(width,height);
-    ok(await js("Array.from(document.querySelectorAll('.quota-window')).every(row=>{const label=row.querySelector('.quota-label').getBoundingClientRect(),reset=row.querySelector('.quota-reset');return Math.abs(label.top-reset.getBoundingClientRect().top)<8 && row.querySelector('.quota-label strong').textContent==='68% remaining' && reset.textContent.startsWith('Resets in ');}) && document.querySelector('#usage-history-open-chatgpt').getBoundingClientRect().top>=document.querySelector('#usage-windows').getBoundingClientRect().bottom && document.querySelector('#usage-refresh').getBoundingClientRect().height>=44"), `Compact allowance rows, inline resets and history fit ${width}px`);
+    ok(await js("Array.from(document.querySelectorAll('.quota-window')).every(row=>{const label=row.querySelector('.quota-label').getBoundingClientRect(),renewal=row.querySelector('.quota-reset');return (innerWidth<400 || Math.abs(label.top-renewal.getBoundingClientRect().top)<8) && row.querySelector('.quota-label strong').textContent==='68% remaining' && renewal.textContent.startsWith('Renews ') && renewal.title.includes(' ET');}) && document.querySelector('#usage-history-open-chatgpt').getBoundingClientRect().top>=document.querySelector('#usage-windows').getBoundingClientRect().bottom && document.querySelector('#usage-refresh').getBoundingClientRect().height>=44"), `Compact allowance rows, renewals and history fit ${width}px`);
     ok(await js("document.querySelector('#disconnect-chatgpt').getBoundingClientRect().height>=44 && document.querySelector('#settings-panel').scrollWidth<=document.querySelector('#settings-panel').clientWidth && document.documentElement.scrollWidth<=innerWidth"), `Unified Disconnect and allowance fit ${width}px`);
     await js("document.querySelector('#usage-panel').scrollIntoView({block:'start'})");
     await screenshot('agent-allowance-connected-'+width);
   }
   await viewport(1280,850);
+  await expectEventually("document.querySelector('#reset-balance')?.textContent.includes('unavailable') && document.querySelector('#use-reset').disabled", 'Missing reset evidence must display unavailable, not zero');
+  const resetWrites = () => calls.filter(c => c.path === '/api/usage/resets/consume');
+  const resetExpiry = Date.parse('2031-12-02T04:59:00Z') / 1000;
+  const resetRecord = () => usageRecords.get('p1');
+  const completeResets = {available_count:1, expirations:[{count:1,expires_at:resetExpiry}], details_complete:true,
+    next:{credit_id:'credit-earliest',expires_at:resetExpiry}, history:[{kind:'expired',at:1810000000},{kind:'used',at:1820000000}]};
+  resetRecord().resets = {...completeResets, available_count:2, details_complete:false, next:undefined};
+  await click('#usage-refresh');
+  await expectEventually("document.querySelector('#reset-balance').textContent.includes('2 resets available') && !document.querySelector('#reset-details-note').hidden && document.querySelector('#use-reset').disabled", 'Partial details show the confirmed count without enabling a reset');
+  resetRecord().resets = completeResets;
+  await click('#usage-refresh');
+  await expectEventually("document.querySelector('#reset-balance').textContent.includes('1 reset available') && !document.querySelector('#use-reset').disabled", 'Current reset balance should enable use');
+  ok(await js("!document.querySelector('#reset-history').open && document.querySelector('#reset-expirations time').innerText==='Dec 1, 2031 at 11:59 PM ET'"), 'Eastern expiration is distinct from collapsed reset history');
+  await click('#reset-history summary');
+  ok(await js("Array.from(document.querySelectorAll('#reset-events li strong'), e=>e.textContent).join(',') === '1 reset used,1 reset expired'"), 'Agent-recorded reset history is newest first');
+  resetRecord().snapshot.stale = true;
+  await js("window.dispatchEvent(new Event('focus'))");
+  await expectEventually("document.querySelector('#reset-balance').textContent.includes('unavailable') && document.querySelector('#reset-expirations').hidden && document.querySelector('#use-reset').disabled", 'Stale evidence must not expose an actionable balance');
+  resetRecord().snapshot.stale = false;
+  await js("window.dispatchEvent(new Event('focus'))");
+  await expectEventually("!document.querySelector('#use-reset').disabled", 'Current reset balance was not restored');
+  await click('#use-reset');
+  resetRecord().resets = {...completeResets,next:{...completeResets.next,credit_id:'credit-changed'}};
+  await js("window.dispatchEvent(new Event('focus'))");
+  await expectEventually("!document.querySelector('#reset-dialog').open && document.querySelector('#reset-error').innerText.includes('no longer current')", 'A changed earliest credit invalidates the captured confirmation');
+  ok(resetWrites().length === 0, 'A refresh cannot retarget a reset confirmation');
+  resetRecord().resets = completeResets;
+  await click('#usage-refresh');
+  await expectEventually("!document.querySelector('#use-reset').disabled", 'Original fixture credit did not return');
+  await viewport(320,640);
+  await js("document.querySelector('#reset-panel').scrollIntoView({block:'center'})");
+  ok(await js("document.querySelector('#reset-panel').scrollWidth <= document.querySelector('#reset-panel').clientWidth && document.querySelector('#use-reset').getBoundingClientRect().height >= 44"), 'Resets fit at 320px with a touch-sized action');
+  await screenshot('agent-resets-320');
+  await click('#use-reset');
+  ok(await js("document.activeElement.id==='cancel-reset' && document.querySelector('#reset-warning').innerText.includes('personal@example.com') && document.querySelector('#reset-warning').innerText.includes('0 resets left') && document.querySelector('#reset-dialog').getBoundingClientRect().right <= innerWidth"), 'Narrow reset confirmation identifies account and remaining balance and focuses Cancel');
+  await screenshot('agent-reset-confirm-320');
+  await click('#cancel-reset');
+  ok(resetWrites().length === 0 && await js("!document.querySelector('#reset-dialog').open && document.activeElement.id==='use-reset'"), 'Cancel sends no write and restores focus');
+  await click('#use-reset');
+  await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  await expectEventually("!document.querySelector('#reset-dialog').open && document.activeElement.id==='use-reset'", 'Escape dismisses reset confirmation and restores focus');
+  ok(resetWrites().length === 0, 'Escape sends no write');
+  await viewport(1280,850);
+  resetFailure = 'pending';
+  await click('#use-reset'); await click('#confirm-reset');
+  await expectEventually("document.querySelector('#reset-error').innerText.includes('Reset result unavailable.') && !document.querySelector('#use-reset').disabled", 'Failed confirmation must reconcile with a read and surface the error');
+  ok(resetWrites().length === 1, 'A failed reset never replays automatically');
+  await js('window.beforeResetReload = true');
+  await cdp('Page.reload');
+  await expectEventually("!window.beforeResetReload && document.querySelector('#use-reset')?.disabled === false", 'Pending reset cannot be reconfirmed after reload');
+  ok(resetWrites().length === 1, 'Reload reads the reservation without replaying the write');
+  await click('#use-reset');
+  ok(await js("document.querySelector('#reset-warning').innerText.includes('retry that same attempt') && document.activeElement.id==='cancel-reset'"), 'Pending recovery still requires explicit confirmation');
+  const pendingAttempt = resetRecord().resets.next.pending_attempt_id;
+  resetRecord().resets.next.pending_attempt_id = 'c3b21870-e8a9-4718-99fa-f70429b1c6d5';
+  await js("window.dispatchEvent(new Event('focus'))");
+  await expectEventually("!document.querySelector('#reset-dialog').open && document.querySelector('#reset-error').innerText.includes('no longer current')", 'A changed reservation invalidates confirmation even when the credit and count match');
+  ok(resetWrites().length === 1, 'Changing a reservation does not submit a write');
+  resetRecord().resets.next.pending_attempt_id = pendingAttempt;
+  await click('#usage-refresh');
+  await expectEventually("!document.querySelector('#use-reset').disabled", 'Original pending reservation did not return');
+  resetFailure = false;
+  let releaseReset;
+  resetRequestGate = new Promise(resolve => { releaseReset=resolve; });
+  try {
+    await click('#use-reset'); await click('#confirm-reset'); await click('#confirm-reset');
+    await until(()=>resetWrites().length === 2 && resetWrites().at(-1).payload, 'Reset confirmation request missing');
+    const submission = resetWrites().at(-1);
+    assert.equal(submission.method,'POST');
+    const {attempt_id, ...scope} = submission.payload;
+    assert.deepEqual(scope, {profile_id:'p1',connection_id:resetRecord().connection_id,credit_id:'credit-earliest',confirmed_count:1,confirmed_expires_at:resetExpiry});
+    assert.match(submission.payload.attempt_id,/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i);
+    assert.equal(submission.payload.attempt_id,resetWrites()[0].payload.attempt_id,'An explicit retry of an ambiguous result reuses its original key');
+    ok(await js("document.querySelector('#confirm-reset').disabled && document.querySelector('#reset-balance').textContent.includes('1 reset available')"), 'No duplicate submission or optimistic deduction');
+  } finally { releaseReset(); resetRequestGate=undefined; }
+  await expectEventually("!document.querySelector('#reset-dialog').open && document.querySelector('#reset-balance').textContent.includes('0 resets available') && document.querySelector('#reset-expirations').hidden && document.activeElement.id==='resets'", 'Acknowledged reset updates balance without expiry rows and restores focus to the heading');
+  ok(resetWrites().length === 2 && await js("document.querySelectorAll('#reset-events li').length===3"), 'Only explicit confirmations write; server history covers the new event');
+  resetRecord().resets = {...completeResets, expirations:[{count:1,expires_at:null}], next:{credit_id:'credit-undated',expires_at:null}};
+  await click('#usage-refresh');
+  await expectEventually("!document.querySelector('#use-reset').disabled", 'Undated credit did not load');
+  for (const [outcome, message] of [['nothingToReset','no allowance to reset'], ['noCredit','no longer available']]) {
+    resetFailure = outcome;
+    await click('#use-reset');
+    ok(await js("document.querySelector('#reset-warning').innerText.includes('expiration is unavailable')"), 'Confirmation identifies an undated credit');
+    await click('#confirm-reset');
+    await expectEventually(`!document.querySelector('#reset-dialog').open && document.querySelector('#reset-error').innerText.includes(${JSON.stringify(message)}) && !document.querySelector('#use-reset').disabled`, 'Definitive no-op did not report its outcome and restore eligibility');
+    assert.equal(resetWrites().at(-1).payload.confirmed_expires_at, null);
+    assert.equal(resetWrites().at(-1).payload.confirmed_count, 1);
+    ok(await js("document.querySelector('#reset-balance').textContent.includes('1 reset available') && document.querySelectorAll('#reset-events li').length===2"), 'A definitive no-op does not invent consumption or history');
+  }
+  assert.equal(resetWrites().length, 4);
+  assert.notEqual(resetWrites()[2].payload.attempt_id, resetWrites()[3].payload.attempt_id, 'An explicit confirmation after a definitive no-op uses a new key');
+  resetFailure = false;
+  delete resetRecord().resets;
   usageRefreshFailure=true; usageMutationDelay=200;
   const refreshBefore=calls.filter(c=>c.path==='/api/usage/refresh').length;
   await click('#usage-refresh'); await click('#usage-refresh');
@@ -641,6 +761,7 @@ try {
   await click('#check-chatgpt');
   await expectEventually("document.querySelector('#connect-chatgpt').textContent.includes('Reconnect') && !document.querySelector('#connect-chatgpt').disabled", 'Expired unified reconnect missing');
   await click('#connect-chatgpt'); await expectEventually("!document.querySelector('#usage-device').hidden && !document.querySelector('#usage-cancel').disabled", 'Expired reconnect did not start device flow');
+  await js("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.copiedUsageCode=value;}}})");
   await click('#usage-copy'); await expectEventually("window.copiedUsageCode==='TEST-CODE' && document.querySelector('#device-feedback').textContent==='Code copied.'", 'Device copy feedback missing');
   await js("navigator.clipboard.writeText=async()=>{throw new Error('Fixture clipboard denied')}"); await click('#usage-copy');
   await expectEventually("document.querySelector('#device-feedback').textContent.includes('manually')", 'Device copy fallback missing');

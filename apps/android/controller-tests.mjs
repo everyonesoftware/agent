@@ -22,7 +22,7 @@ const tests='app/src/test/java/com/everyonesoftware/agent/';
 const classes=process.argv.slice(2).length ? process.argv.slice(2) : ['AgentControllerTest','AgentApiTest','ChatProtocolTest'];
 function run(args) { const r=spawnSync(java,args,{cwd:root,stdio:'inherit',timeout:120000}); if(r.error) throw r.error; if(r.status!==0) throw Object.assign(new Error('Controller test process failed'),{status:r.status || 1}); }
 try {
- run(['-cp',compiler,'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler','-no-stdlib','-no-reflect','-jvm-target','17','-classpath',cp,'-d',out,...['AgentApi.kt','ChatProtocol.kt'].map(f=>src+f),process.env.AGENT_CONTROLLER_SOURCE || src+'AgentController.kt',...classes.map(c=>(c==='AgentControllerRouterTest' ? 'fixtures/' : tests)+c+'.kt')]);
+ run(['-cp',compiler,'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler','-no-stdlib','-no-reflect','-jvm-target','17','-classpath',cp,'-d',out,...['AgentApi.kt','ChatProtocol.kt','ResetCredits.kt'].map(f=>src+f),process.env.AGENT_CONTROLLER_SOURCE || src+'AgentController.kt',...classes.map(c=>(c==='AgentControllerRouterTest' ? 'fixtures/' : tests)+c+'.kt')]);
  run(['-cp',out+path.delimiter+cp,'org.junit.runner.JUnitCore',...classes.map(c=>'com.everyonesoftware.agent.'+c)]);
 } catch(error) { process.exitCode=error.status || 1; if(!error.status) console.error(error); }
 finally { fs.rmSync(out,{recursive:true,force:true}); }

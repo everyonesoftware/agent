@@ -162,22 +162,38 @@ class MainActivity: ComponentActivity() {
 }
 private fun timeText(seconds: Double?): String = if(seconds==null || seconds<=0) "Unknown" else DateTimeFormatter.ofPattern("MMM d, HH:mm").withZone(ZoneId.systemDefault()).format(Instant.ofEpochSecond(seconds.toLong()))
 @Composable private fun ChatGPTView(controller: AgentController,state: AgentState) {
- val active=state.profiles?.text("active_profile_id").orEmpty(); val profiles=state.profiles?.rows("profiles").orEmpty()
+ val active=state.activeProfile; val profiles=state.profiles?.rows("profiles").orEmpty()
  var select by remember { mutableStateOf(false) }; var protectedId by remember { mutableStateOf<String?>(null) }; var disconnect by remember { mutableStateOf(false) }; var password by remember { mutableStateOf("") }
  Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) { Text(state.status?.text("state")?.ifBlank { if(state.status?.flag("connected")==true) "Connected" else "Not connected" } ?: "Status unavailable"); IconButton(onClick={ controller.refreshSettings() },enabled=!state.busy) { Icon(Icons.Default.Refresh,"Refresh ChatGPT status") } }
- Box { OutlinedButton(onClick={ select=true },enabled=!state.busy && profiles.isNotEmpty()) { Text(profiles.firstOrNull { it.text("id")==active }?.let { it.text("label").ifBlank { it.text("email").ifBlank { it.text("id") } } } ?: "Select active account") }; DropdownMenu(select,{ select=false }) { profiles.forEach { profile -> DropdownMenuItem(text={ Text(profile.text("label").ifBlank { profile.text("email").ifBlank { profile.text("id") } }) },onClick={ select=false; if(profile.flag("registration_pending")) controller.startDevice("retry",profile.text("id")) else if(profile.text("id")!=active) { protectedId=profile.text("id"); disconnect=false } }) } } }
+ Box { OutlinedButton(onClick={ select=true },enabled=!state.busy && profiles.isNotEmpty()) { Text(profiles.firstOrNull { it.text("id")==active }?.profileLabel() ?: "Select active account") }; DropdownMenu(select,{ select=false }) { profiles.forEach { profile -> DropdownMenuItem(text={ Text(profile.profileLabel()) },onClick={ select=false; if(profile.flag("registration_pending")) controller.startDevice("retry",profile.text("id")) else if(profile.text("id")!=active) { protectedId=profile.text("id"); disconnect=false } }) } } }
  deviceAuthorizations(state).forEach { authorization -> Action(authorization.label,!state.busy && state.profiles!=null && state.deviceLogin==null) { controller.startDevice(authorization.mode,authorization.profile) } }
  if(active.isNotEmpty()) Action("Disconnect",!state.busy) { protectedId=active; disconnect=true }
  state.deviceLogin?.let { login -> Text("Enter this code on the OpenAI verification page:"); SelectionContainer { Text(login.text("user_code"),style=MaterialTheme.typography.headlineMedium) }; val context=LocalContext.current; Action("Open verification page") { context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(validatedVerificationUrl(login.text("verification_url"))))) }; Action("Cancel sign-in",!state.busy) { controller.cancelDevice() } }
  if(protectedId!=null) AlertDialog(onDismissRequest={ protectedId=null; password="" },title={ Text(if(disconnect) "Disconnect ChatGPT" else "Switch active account") },text={ Column { Text("Enter your Agent password to confirm."); Field("Agent password",password,{ password=it },true) } },confirmButton={ TextButton(onClick={ controller.changeProfile(protectedId!!,password,disconnect); protectedId=null; password="" },enabled=password.isNotEmpty() && !state.busy) { Text("Confirm") } },dismissButton={ TextButton(onClick={ protectedId=null; password="" }) { Text("Cancel") } })
  if(active.isNotEmpty()) {
-  Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) { Text("Allowance",style=MaterialTheme.typography.titleMedium); IconButton(onClick={ controller.refreshAllowance() },enabled=!state.busy) { Icon(Icons.Default.Refresh,"Refresh allowance") } }
+  HorizontalDivider()
+  Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+   Text("Allowance",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium)
+   Text("All times ET",style=MaterialTheme.typography.bodySmall)
+   IconButton(onClick={ controller.refreshAllowance() },enabled=!state.busy && state.usage?.text("connection_id")?.isNotBlank()==true) { Icon(Icons.Default.Refresh,"Refresh allowance") }
+  }
   val snapshot=state.usage?.obj("snapshot"); val windows=snapshot?.rows("windows").orEmpty()
-  Text(if(windows.isEmpty()) "Allowance unavailable" else (if(snapshot!!.flag("stale")) "Last known · " else "Updated · ")+timeText(snapshot.number("fetched_at")),style=MaterialTheme.typography.bodySmall)
+  if(windows.isEmpty()) Text("Allowance unavailable",style=MaterialTheme.typography.bodySmall)
+  else if(snapshot!!.flag("stale")) Text("Last known · "+(renewalTime(snapshot.number("fetched_at")) ?: "Time unknown"),style=MaterialTheme.typography.bodySmall)
   if(state.usage?.text("error")?.isNotBlank()==true) Text(state.usage.text("error"),color=MaterialTheme.colorScheme.error)
-  windows.forEach { window -> val used=window.number("used_percent"); Text("${window.text("label")} · ${used?.let { "${(100-it).coerceIn(0.0,100.0).toInt()}% remaining" } ?: "Unknown"}"); Text("Resets ${timeText(window.number("reset_at"))}",style=MaterialTheme.typography.bodySmall) }
+  windows.forEach { window ->
+   val remaining=window.number("used_percent")?.takeIf { it in 0.0..100.0 }?.let { 100-it }
+   Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
+    FlowRow(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+     Text("${remaining?.let { "${it.toInt()}% remaining" } ?: "Remaining unknown"} · ${window.text("label")}",style=MaterialTheme.typography.bodySmall)
+     Text(renewalTime(window.number("reset_at"))?.let { "Renews $it" } ?: "Renewal unavailable",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    if(remaining!=null) LinearProgressIndicator(progress={ remaining.toFloat()/100 },modifier=Modifier.fillMaxWidth().height(6.dp),gapSize=0.dp,drawStopIndicator={})
+   }
+  }
   Action("View usage history",!state.busy) { controller.history("chatgpt") }
-  Disclosure("About allowance") { Text("Codex reports allowance for the selected ChatGPT connection. Windows may not cover every ChatGPT feature. Last-known values are marked; failed refreshes do not mean zero allowance.") }
+  Disclosure("About allowance") { Text("Allowance renews on its own schedule. The expiration dates below are for available resets, not for allowance windows.") }
+  ResetsView(controller,state)
  }
 }
 @Composable private fun ResearchSettings(controller: AgentController,state: AgentState) {

@@ -57,6 +57,7 @@ type usageStatus struct {
 	Login         *usageLogin    `json:"login,omitempty"`
 	Snapshot      *usageSnapshot `json:"snapshot,omitempty"`
 	Error         string         `json:"error,omitempty"`
+	Resets        *usageResets   `json:"resets,omitempty"`
 }
 type usageRecord struct {
 	ConnectionID string `json:"connection_id"`
@@ -76,6 +77,7 @@ type usageSession struct {
 	userID          string
 	identityKey     string
 	historyWriteErr error
+	resetCredits    *providerResetCredits
 }
 type usageService struct {
 	inferenceFactory func(context.Context, string, string) (*codexUsageRPC, error)
@@ -92,13 +94,14 @@ type usageService struct {
 	starts           connectionPasswordLimiter
 	closed           bool
 	historyErr       error
+	resetHistoryErr  error
 	samplerCancel    context.CancelFunc
 	samplerDone      chan struct{}
 	samplerCursor    string
 }
 
 func newUsageService(accounts *accountStore, base *siwcService) *usageService {
-	return &usageService{historyErr: migrateUsageHistory(accounts.db), accounts: accounts, base: base, sessions: make(map[string]*usageSession), factory: startCodexUsageRPC,
+	return &usageService{historyErr: migrateUsageHistory(accounts.db), resetHistoryErr: migrateUsageResets(accounts.db), accounts: accounts, base: base, sessions: make(map[string]*usageSession), factory: startCodexUsageRPC,
 		executable: func() (string, error) {
 			name := strings.TrimSpace(os.Getenv("CODEX_USAGE_BINARY"))
 			if name == "" {
@@ -325,9 +328,19 @@ func (s *usageService) view(entry *usageSession) usageStatus {
 		}
 		result.Snapshot = &copySnapshot
 	}
+	if result.State == "connected" && result.Error == "" && result.IdentityMatch != "different" && result.Snapshot != nil && !result.Snapshot.Stale && entry.identityKey != "" {
+		result.Resets = normalizeResetCredits(entry.resetCredits, s.now().Unix())
+		if result.Resets != nil {
+			s.loadResetHistory(entry, result.Resets)
+		}
+	}
 	return result
 }
 func (s *usageService) status(ctx context.Context, entry *usageSession, email string) {
+	s.checkUsageStatus(ctx, entry, email, false)
+}
+
+func (s *usageService) checkUsageStatus(ctx context.Context, entry *usageSession, email string, forceQuota bool) {
 	if entry.record.ConnectionID == "" {
 		return
 	}
@@ -352,7 +365,7 @@ func (s *usageService) status(ctx context.Context, entry *usageSession, email st
 		entry.view.Snapshot = nil
 		entry.identityKey = ""
 	}
-	if !resetDue && entry.view.Login == nil && !entry.lastAttempt.IsZero() && s.now().Sub(entry.lastAttempt) < time.Minute && strings.EqualFold(strings.TrimSpace(email), entry.checkedEmail) {
+	if !forceQuota && !resetDue && entry.view.Login == nil && !entry.lastAttempt.IsZero() && s.now().Sub(entry.lastAttempt) < time.Minute && strings.EqualFold(strings.TrimSpace(email), entry.checkedEmail) {
 		return
 	}
 	var result struct {
@@ -406,11 +419,12 @@ func (s *usageService) status(ctx context.Context, entry *usageSession, email st
 		entry.view.Snapshot = nil
 	}
 	entry.identityKey = identityKey
-	if resetDue || wasPending || entry.view.Snapshot == nil || s.now().Unix()-entry.view.Snapshot.FetchedAt >= 60 {
+	if forceQuota || resetDue || wasPending || entry.view.Snapshot == nil || entry.view.Snapshot.Stale || s.now().Unix()-entry.view.Snapshot.FetchedAt >= 60 {
 		s.refreshQuota(ctx, entry)
 	}
 }
 func (s *usageService) refreshQuota(ctx context.Context, entry *usageSession) {
+	entry.resetCredits = nil
 	if entry.view.Identity == nil || entry.view.IdentityMatch == "different" {
 		return
 	}
@@ -435,6 +449,7 @@ func (s *usageService) refreshQuota(ctx context.Context, entry *usageSession) {
 	entry.view.State = "connected"
 	entry.view.Error = ""
 	entry.view.Snapshot = &usageSnapshot{FetchedAt: s.now().Unix(), Windows: windows}
+	entry.resetCredits = raw.ResetCredits
 	entry.historyWriteErr = s.recordHistory(ctx, entry)
 }
 
@@ -450,8 +465,9 @@ type usageRateBucket struct {
 	Secondary *usageRateWindow `json:"secondary"`
 }
 type usageRateLimits struct {
-	RateLimits *usageRateBucket           `json:"rateLimits"`
-	ByID       map[string]usageRateBucket `json:"rateLimitsByLimitId"`
+	RateLimits   *usageRateBucket           `json:"rateLimits"`
+	ByID         map[string]usageRateBucket `json:"rateLimitsByLimitId"`
+	ResetCredits *providerResetCredits      `json:"rateLimitResetCredits"`
 }
 
 func normalizeUsageWindows(raw usageRateLimits) []usageWindow {

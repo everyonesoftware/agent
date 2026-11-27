@@ -4,6 +4,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
 import java.net.URLEncoder
+import java.time.Instant
+import java.util.UUID
 
 fun enc(value: String): String = URLEncoder.encode(value,"UTF-8")
 data class AgentState(
@@ -13,7 +15,8 @@ data class AgentState(
  val models: List<JsonObject> = emptyList(), val model: String = "", val status: JsonObject? = null, val profiles: JsonObject? = null, val usage: JsonObject? = null,
  val researchSettings: JsonObject? = null, val memory: JsonObject? = null, val deviceLogin: JsonObject? = null,
  val pendingResearch: JsonObject? = null, val activeResearch: String = "", val run: JsonObject? = null,
- val history: JsonObject? = null, val historyProvider: String = "chatgpt", val historyRange: String = "24h", val historyWindow: String = ""
+ val history: JsonObject? = null, val historyProvider: String = "chatgpt", val historyRange: String = "24h", val historyWindow: String = "",
+ val resetFeedback: String = ""
 )
 
 data class DeviceAuthorization(val label: String, val mode: String = "", val profile: String = "")
@@ -46,6 +49,7 @@ class AgentController(private val store: SessionStore, private val scope: Corout
  private var chatGeneration = 0
  private var researchOwner: ChatOwner? = null
  private var stoppedResearch: ResearchFlow? = null
+ private val redeemedResets = mutableSetOf<ResetTarget>()
  private fun owns(owner: ChatOwner, request: JsonObject) = owner.account==epoch && owner.conversation==state.value.conversation && owner.generation==chatGeneration && owner.request==request.text("run_id")
  private fun update(change: (AgentState)->AgentState) { mutable.update(change) }
  init { store.read()?.let { session -> api = AgentApi(session.endpoint,store); update { it.copy(endpoint=session.endpoint,restoring=true) }; action { val user = api!!.get("/api/auth/me"); update { it.copy(user=user,restoring=false) }; refreshChat() } } }
@@ -74,7 +78,7 @@ class AgentController(private val store: SessionStore, private val scope: Corout
    } }
   }.also { activeJob = it; it.start() }
  }
- private fun invalidate() { epoch++; navigationGeneration++; chatGeneration++; settingsRefreshPending=false; activeJob?.cancel(); researchControlJob?.cancel(); researchControlJob=null; pollJob?.cancel(); api?.cancel(); research=null; researchOwner=null; stoppedResearch=null }
+ private fun invalidate() { epoch++; navigationGeneration++; chatGeneration++; settingsRefreshPending=false; activeJob?.cancel(); researchControlJob?.cancel(); researchControlJob=null; pollJob?.cancel(); api?.cancel(); research=null; researchOwner=null; stoppedResearch=null; redeemedResets.clear() }
  fun close() { invalidate(); scope.cancel() }
  fun login(endpoint: String, username: String, password: String, register: Boolean) {
   if(state.value.busy) return
@@ -168,7 +172,7 @@ class AgentController(private val store: SessionStore, private val scope: Corout
  }
  private suspend fun safeRead(path: String): JsonObject? = try { api!!.get(path) } catch(e: Exception) { if(e is CancellationException) throw e; update { it.copy(notice="Some settings could not be loaded. Refresh to retry.") }; null }
  private suspend fun loadSettings() {
-  update { it.copy(status=null,profiles=null,usage=null,researchSettings=null,memory=null) }
+  update { it.copy(status=null,profiles=null,usage=null,researchSettings=null,memory=null,resetFeedback="") }
   val status=safeRead("/api/auth/status"); val profiles=safeRead("/api/auth/profiles")
   update { it.copy(status=status,profiles=profiles) }
   val profile=profiles?.text("active_profile_id").orEmpty()
@@ -181,8 +185,8 @@ class AgentController(private val store: SessionStore, private val scope: Corout
   check(profile.isNotEmpty() && connection.isNotEmpty()) { "Refresh the ChatGPT connection first" }
   try {
    val usage=api!!.request("POST","/api/usage/refresh",json("profile_id" to profile,"connection_id" to connection))
-   check(usage.text("profile_id")==profile) { "Allowance account changed. Refresh Settings to retry." }
-   update { it.copy(usage=usage) }
+   check(usage.text("profile_id")==profile && usage.text("connection_id")==connection) { "Allowance account changed. Refresh Settings to retry." }
+   update { it.copy(usage=usage,resetFeedback="") }
   } catch(e: Exception) {
    if(e is CancellationException) throw e
    fun lastKnown(usage: JsonObject): JsonObject = JsonObject(usage + ("error" to JsonPrimitive(e.message ?: "Allowance refresh failed")) +
@@ -196,6 +200,51 @@ class AgentController(private val store: SessionStore, private val scope: Corout
     update { it.copy(usage=lastKnown(evidence)) }
    }
    throw e
+  }
+ }
+ internal fun resetOffer(state: AgentState, credits: ResetCredits?) = state.resetOffer(credits, redeemedResets)
+ internal fun consumeReset(confirmed: ResetOffer) = action {
+  val current=state.value
+  check(resetOffer(current,current.resetCredits(Instant.now().epochSecond))==confirmed) {
+   "The reset offer changed. Review the current balance before trying again."
+  }
+  val client=requireNotNull(api)
+  val captured=epoch
+  val target=confirmed.target
+  fun owns(s: AgentState) = captured==epoch && s.activeProfile==target.profile &&
+   s.usage?.text("connection_id")==target.connection
+  update { it.copy(resetFeedback="Using reset…") }
+  try {
+   val result=client.request("POST","/api/usage/resets/consume",json(
+    "profile_id" to target.profile,"connection_id" to target.connection,
+    "credit_id" to target.credit,"attempt_id" to (confirmed.credit.pendingAttemptId ?: UUID.randomUUID().toString()),
+    "confirmed_count" to confirmed.count,"confirmed_expires_at" to confirmed.credit.expiresAt))
+   val usage=result.obj("status")
+   check(usage.text("profile_id")==target.profile && usage.text("connection_id")==target.connection)
+   val outcome=result.text("outcome")
+   val feedback=when(outcome) {
+    "reset" -> if(usage["resets"] is JsonObject) "" else "Reset used. Refresh allowance to update the balance."
+    "alreadyRedeemed" -> "That reset was already used."
+    "nothingToReset" -> "There was no allowance usage to reset."
+    "noCredit" -> "No reset credit was used."
+    else -> error("Unrecognized reset outcome")
+   }
+   if(owns(state.value) && (outcome=="reset" || outcome=="alreadyRedeemed")) redeemedResets.add(target)
+   update { if(owns(it)) it.copy(usage=usage,resetFeedback=feedback) else it }
+  } catch(e: Exception) {
+   if(e is CancellationException) throw e
+   // A lost response may mean the provider already applied the reset. Never
+   // replay the POST or keep the old balance actionable. Fresh server status
+   // can expose a durable attempt ID for a new explicit confirmation.
+   update { s -> if(!owns(s)) s else {
+    val usage=s.usage!!
+    val stale=if(usage["snapshot"] is JsonObject)
+     mapOf("snapshot" to JsonObject(usage.obj("snapshot") + ("stale" to JsonPrimitive(true)))) else emptyMap()
+    val detail=(e as? ApiFailure)?.message?.plus(" ").orEmpty()
+    s.copy(usage=JsonObject((usage - "resets") + stale),
+     resetFeedback="${detail}Refresh allowance to check the reset balance and history.")
+   } }
+   if(e is ApiFailure && e.status==401) throw e
   }
  }
  fun startDevice(mode: String = "", profile: String = "") = action {
@@ -214,7 +263,14 @@ class AgentController(private val store: SessionStore, private val scope: Corout
    try {
     val status=api!!.get("/api/usage/status?profile_id=${enc(login.text("profile_id"))}&connection_id=${enc(login.text("connection_id"))}")
     if(captured != epoch) return@launch
-    if(status.text("state") == "connected" && status["login"] !is JsonObject) { update { it.copy(deviceLogin=null) }; loadSettings(); refreshChat(); return@launch }
+    if(status.text("state") == "connected" && status["login"] !is JsonObject) {
+     // Serialize Settings readback with account and reset mutations.
+     while(captured==epoch && state.value.deviceLogin==login && state.value.busy) delay(100)
+     if(captured==epoch && state.value.deviceLogin==login) action {
+      update { it.copy(deviceLogin=null) }; loadSettings(); refreshChat()
+     }
+     return@launch
+    }
     if(System.currentTimeMillis()/1000 >= (login.number("expires_at") ?: 0.0)) { update { it.copy(deviceLogin=null,notice="ChatGPT sign-in expired; try again") }; return@launch }
    } catch(e: Exception) { if(e is CancellationException) throw e; update { it.copy(notice="Could not check sign-in. Retry or cancel; the existing account is kept.") } }
   } }

@@ -39,6 +39,7 @@ public sealed partial class MainWindow
 
     private void WireSettingsLayout()
     {
+        WireResets();
         var groups = new[] { C<StackPanel>("ServerActions"), C<StackPanel>("AccountActions"),
             C<StackPanel>("DeviceActions"), C<StackPanel>("BraveActions"), C<StackPanel>("MemoryActions") };
         var card = C<Border>("ConnectionSection");
@@ -89,6 +90,7 @@ public sealed partial class MainWindow
     private async Task RefreshProviderAsync(CancellationToken? cancellation = null)
     {
         var c=Need();long epoch=accountEpoch;SetConnectionBadge("Checking…");
+        RenderResets(acceptStatus: false);
         try
         {
             var token = cancellation ?? accountLifetime.Token;
@@ -119,6 +121,7 @@ public sealed partial class MainWindow
     private async Task RefreshUsageAsync(bool refresh, CancellationToken? cancellation = null)
     {
         if(activeProfile==""){RenderAllowance();return;}var c=Need();long epoch=accountEpoch;string profile=activeProfile;
+        RenderResets(acceptStatus: false);
         try
         {
             var result=refresh?await c.PostAsync("/api/usage/refresh",new{profile_id=profile,connection_id=connectionId},accountLifetime.Token):await c.GetAsync("/api/usage/status?profile_id="+Wire.Segment(profile),cancellation ?? accountLifetime.Token);
@@ -126,10 +129,11 @@ public sealed partial class MainWindow
             if(result["login"] is JsonNode login&&result.Text("state") is "pending" or "checking")RenderDevice(new JsonObject{["profile_id"]=profile,["connection_id"]=connectionId,["login_id"]=login.Text("login_id"),["verification_url"]=login.Text("verification_url"),["user_code"]=login.Text("user_code")});
         }
         catch (OperationCanceledException) when (cancellation?.IsCancellationRequested == true) { throw; }
-        catch{if(IsCurrentSession(c,epoch)&&profile==activeProfile){if(usage?["snapshot"] is JsonObject snapshot)snapshot["stale"]=true;RenderAllowance();SetSettingsText("AllowanceMessage", "Refresh failed. "+(usage?["snapshot"] is null?"No allowance observation is available.":"Showing last-known values; they may no longer be current."));}throw;}
+        catch{if(IsCurrentSession(c,epoch)&&profile==activeProfile){InvalidateResetBalance();RenderAllowance();SetSettingsText("AllowanceMessage", "Refresh failed. "+(usage?["snapshot"] is null?"No allowance observation is available.":"Showing last-known values; they may no longer be current."));}throw;}
     }
     private void RenderAllowance()
     {
+        RenderResets();
         var panel=C<StackPanel>("AllowanceWindows");panel.Children.Clear();bool stale=usage?["snapshot"].Flag("stale")??false;
         SetSettingsText("AllowanceMessage", stale?"Showing last-known allowance; these values may no longer be current.":usage is null?"Connect ChatGPT above to see allowance.":usage.Text("state")=="connected"?"":usage.Text("state","Unavailable"));
         long fetched=usage?["snapshot"]?["fetched_at"]?.GetValue<long>()??0;

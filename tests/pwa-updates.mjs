@@ -143,12 +143,12 @@ test('real page safety bridge reads live chat, request, password and dialog stat
   const budgetDirty=page.match(/      function searchBudgetDirty\(\) \{[\s\S]*?\n      \}/);
   assert.ok(budgetFields && budgetDirty,'include the real budget draft check rather than a stub');
   const context={window:{},document:Object.assign(new Events(),{querySelectorAll:selector=>{context.passwordSelector=selector;return context.passwords;},querySelector:()=>context.dialog}),input:{value:''},searchKey:{value:''},passwords:[],dialog:null,
-    busy:false,loadingConversation:false,passwordBusy:false,authBusy:false,connectionBusy:false,connectionSubmitting:false,usageBusy:false,deviceBusy:false,deviceLogin:null,searchBusy:false,searchBudgetDraft:null,searchBudgetBase:null,memoryBusy:false,memorySuggestionBusy:false,memorySuggestionState:null,memoryForm:{hidden:true},memoryEl:id=>{assert.equal(id,'form');return context.memoryForm;}};
+    busy:false,loadingConversation:false,passwordBusy:false,authBusy:false,connectionBusy:false,connectionSubmitting:false,usageBusy:false,resetOperation:false,deviceBusy:false,deviceLogin:null,searchBusy:false,searchBudgetDraft:null,searchBudgetBase:null,memoryBusy:false,memorySuggestionBusy:false,memorySuggestionState:null,memoryForm:{hidden:true},memoryEl:id=>{assert.equal(id,'form');return context.memoryForm;}};
   vm.runInNewContext('const searchBudgetFields = '+budgetFields[1]+';\n'+budgetDirty[0]+'\n'+match[1],context);
   const safety=()=>context.window.agentUpdateSafety();
   assert.equal(safety().pending,false); assert.equal(safety().unsaved,false);
   assert.match(context.passwordSelector,/autocomplete/, 'revealed password fields must remain guarded');
-  for(const name of ['busy','loadingConversation','passwordBusy','authBusy','connectionBusy','connectionSubmitting','usageBusy','deviceBusy','deviceLogin','searchBusy','memoryBusy','memorySuggestionBusy']) {context[name]=true; assert.equal(safety().pending,true,name); context[name]=false;}
+  for(const name of ['busy','loadingConversation','passwordBusy','authBusy','connectionBusy','connectionSubmitting','usageBusy','resetOperation','deviceBusy','deviceLogin','searchBusy','memoryBusy','memorySuggestionBusy']) {context[name]=true; assert.equal(safety().pending,true,name); context[name]=false;}
   context.memorySuggestionState={custom:'private suggested memory draft'};
   assert.equal(safety().unsaved,true,'suggestion review guards reload');
   assert.ok(!JSON.stringify(safety()).includes(context.memorySuggestionState.custom),'suggestion drafts never leave safety bridge');

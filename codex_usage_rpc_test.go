@@ -180,6 +180,9 @@ func TestCodexUsageRPCRejectsUnsupportedOperations(t *testing.T) {
 		{"account/login/start", map[string]any{"type": "chatgptDeviceCode", "accessToken": "secret"}},
 		{"account/read", map[string]any{"refreshToken": true}}, {"account/login/cancel", map[string]any{"loginId": 1}},
 		{"account/logout", map[string]any{"token": "secret"}}, {"account/rateLimits/read", []string{}},
+		{"account/rateLimitResetCredit/consume", map[string]string{"idempotencyKey": "d6549d1c-13d7-4cdf-9f44-258799eb98bf"}},
+		{"account/rateLimitResetCredit/consume", map[string]string{"idempotencyKey": "invalid", "creditId": "credit"}},
+		{"account/rateLimitResetCredit/consume", map[string]string{"idempotencyKey": "d6549d1c-13d7-4cdf-9f44-258799eb98bf", "creditId": "credit", "token": "secret"}},
 	} {
 		if err := rpc.Call(ctx, test.method, test.params, nil); err == nil {
 			t.Errorf("accepted %s with %#v", test.method, test.params)
@@ -191,6 +194,7 @@ func TestCodexUsageRPCRejectsUnsupportedOperations(t *testing.T) {
 	}{
 		{"account/read", map[string]any{"refreshToken": false}}, {"account/login/start", map[string]any{"type": "chatgptDeviceCode"}},
 		{"account/login/cancel", map[string]any{"loginId": "login-fixture"}}, {"account/rateLimits/read", map[string]any{}}, {"account/logout", map[string]any{}},
+		{"account/rateLimitResetCredit/consume", map[string]string{"idempotencyKey": "d6549d1c-13d7-4cdf-9f44-258799eb98bf", "creditId": "credit"}},
 	} {
 		if err := rpc.Call(ctx, test.method, test.params, nil); err != nil {
 			t.Errorf("rejected %s: %v", test.method, err)

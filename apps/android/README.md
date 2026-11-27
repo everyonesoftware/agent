@@ -49,7 +49,7 @@ Install both debug APKs on the owned emulator, reverse only its port, and run:
 ```sh
 adb -s "$OWNED_SERIAL" reverse tcp:19371 tcp:19371
 adb -s "$OWNED_SERIAL" shell am instrument -w -r -e agentFixture http://127.0.0.1:19371/ com.everyonesoftware.agent.test/androidx.test.runner.AndroidJUnitRunner > "$RESULT_LOG" 2>&1
-node apps/android/verify-instrumentation.mjs "$RESULT_LOG" 6
+node apps/android/verify-instrumentation.mjs "$RESULT_LOG" 8
 ```
 
 The full suite requires `agentFixture`; omitting it must not report a false pass.

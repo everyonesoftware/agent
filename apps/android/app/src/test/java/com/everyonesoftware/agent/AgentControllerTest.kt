@@ -42,6 +42,165 @@ class AgentControllerTest {
  companion object {
   private fun response(body: String, code: Int=200)=MockResponse().setResponseCode(code).setBody(body).setHeader("Content-Type","application/json")
   private suspend fun until(check: ()->Boolean) { withTimeout(10000) { while(!check()) delay(5) } }
+  private const val profile="profile_abcdefghijklmnopqrstuv"
+  private const val pendingAttempt="12345678-1234-4234-8234-123456789abc"
+  private fun resetStatus(credit: String="first", count: Int=2, complete: Boolean=true) = """{
+   "profile_id":"$profile","connection_id":"connection","state":"connected","available":true,
+   "snapshot":{"stale":false,"windows":[{"id":"primary","used_percent":25}]},
+   "resets":{"available_count":$count,"details_complete":$complete,
+   "expirations":[{"count":1,"expires_at":null},{"count":1,"expires_at":4102444800}],
+   "next":{"credit_id":"$credit","expires_at":4102444800},"history":[{"kind":"expired","at":1795050000},{"kind":"used","at":1796000000}]}}
+  """.trimIndent()
+  private fun AgentController.offer(): ResetOffer? = state.value.let { resetOffer(it,it.resetCredits(java.time.Instant.now().epochSecond)) }
+ }
+ @Test fun resetSummarySeparatesIncompleteMissingAndZeroAndUsesEasternTime() = runBlocking {
+  Fixture(this).use { f ->
+   f.handler={ r -> if(r.requestUrl!!.encodedPath=="/api/usage/status") response(resetStatus(count=3,complete=false)) else null }
+   f.login(); f.settings()
+   val s=f.controller.state.value
+   val summary=s.resetCredits(1796000000L)!!
+   assertEquals(3L,summary.count)
+   assertEquals(listOf(4102444800L,null),summary.expirations.map { it.at })
+   assertEquals(listOf("used","expired"),summary.history.map { it.kind })
+   assertFalse(summary.complete)
+   assertNull(f.controller.offer())
+   assertNull(s.resetCredits(4102444800L))
+   val usage=s.usage!!
+   assertNull(s.copy(usage=JsonObject(usage-"resets")).resetCredits(1796000000L))
+   assertNull(s.copy(usage=JsonObject(usage+("snapshot" to json("stale" to true)))).resetCredits(1796000000L))
+   val zero=s.copy(usage=JsonObject(usage+("resets" to parseObject("""{"available_count":0,"details_complete":true,"expirations":[],"history":[]}"""))))
+   assertEquals(0L,zero.resetCredits(1796000000L)?.count)
+   assertEquals("Feb 1, 2026 at 7:00 AM ET",resetTime(java.time.Instant.parse("2026-02-01T12:00:00Z").epochSecond))
+   assertEquals("Jul 1, 2026 at 8:00 AM ET",resetTime(java.time.Instant.parse("2026-07-01T12:00:00Z").epochSecond))
+  }
+ }
+ @Test fun resetUsesExactConfirmationAndPublishesAuthoritativeStatusOnlyOnce() = runBlocking {
+  Fixture(this).use { f ->
+   val release=CountDownLatch(1)
+   try {
+    f.handler={ r -> when(r.requestUrl!!.encodedPath) {
+     "/api/usage/status" -> response(resetStatus())
+     "/api/usage/resets/consume" -> {
+      release.await(5,TimeUnit.SECONDS)
+      response("""{"outcome":"reset","status":${resetStatus(credit="different").replace("\"used_percent\":25","\"used_percent\":4")}}""")
+     }
+     else -> null
+    } }
+    f.login(); f.settings()
+    val offer=f.controller.offer()!!
+    assertEquals(2L,offer.count)
+    assertEquals(4102444800L,offer.credit.expiresAt)
+    val job=f.controller.consumeReset(offer)!!
+    until { f.requests.any { it.path=="/api/usage/resets/consume" } }
+    assertNull(f.controller.consumeReset(offer))
+    release.countDown(); job.join()
+    val request=f.requests.single { it.path=="/api/usage/resets/consume" }
+    val body=parseObject(request.body.clone().readUtf8())
+    java.util.UUID.fromString(body.text("attempt_id"))
+    assertEquals(json("profile_id" to profile,"connection_id" to "connection","credit_id" to "first","attempt_id" to body.text("attempt_id"),
+     "confirmed_count" to 2,"confirmed_expires_at" to 4102444800L),body)
+    assertEquals("different",f.controller.offer()!!.credit.id)
+    assertEquals(4.0,f.controller.state.value.usage!!.obj("snapshot").rows("windows").single().number("used_percent")!!,0.0)
+    f.controller.consumeReset(offer)!!.join()
+    assertEquals(1,f.requests.count { it.path=="/api/usage/resets/consume" })
+   } finally { release.countDown() }
+  }
+ }
+ @Test fun ambiguousResetWaitsForFreshReadAndExplicitConfirmationOfDurableAttempt() = runBlocking {
+  Fixture(this).use { f ->
+   val attempted=CopyOnWriteArrayList<String>()
+   f.handler={ r -> when(r.requestUrl!!.encodedPath) {
+    "/api/usage/status", "/api/usage/refresh" -> response(if(attempted.isEmpty()) resetStatus() else
+     resetStatus().replace("\"credit_id\":\"first\"", "\"credit_id\":\"first\",\"pending_attempt_id\":\"${attempted.first()}\""))
+    "/api/usage/resets/consume" -> {
+     attempted.add(parseObject(r.body.clone().readUtf8()).text("attempt_id"))
+     response("""{"error":"Could not verify the reset."}""",503)
+    }
+    else -> null
+   } }
+   f.login(); f.settings()
+   val offer=f.controller.offer()!!
+   f.controller.consumeReset(offer)!!.join()
+   assertNull(f.controller.offer())
+   assertTrue(f.controller.state.value.usage!!.obj("snapshot").flag("stale"))
+   assertTrue(f.controller.state.value.resetFeedback.contains("Refresh allowance"))
+   f.controller.refreshAllowance()!!.join()
+   assertNotNull(f.controller.offer())
+   f.controller.consumeReset(offer)!!.join()
+   assertEquals("Readback and stale confirmation must not write",1,attempted.size)
+   f.controller.consumeReset(f.controller.offer()!!)!!.join()
+   assertEquals(listOf(attempted.first(),attempted.first()),attempted.toList())
+  }
+ }
+ @Test fun freshControllerResumesServerAttemptWithExplicitNullExpiration() = runBlocking {
+  Fixture(this).use { f ->
+   val noExpiry="""{"available_count":1,"details_complete":true,"expirations":[{"count":1,"expires_at":null}],"next":{"credit_id":"first","expires_at":null,"pending_attempt_id":"$pendingAttempt"},"history":[]}"""
+   val status=JsonObject(parseObject(resetStatus())+("resets" to parseObject(noExpiry)))
+   f.handler={ r -> when(r.requestUrl!!.encodedPath) {
+    "/api/usage/status" -> response(status.toString())
+    "/api/usage/resets/consume" -> response("""{"outcome":"nothingToReset","status":$status}""")
+    else -> null
+   } }
+   f.login(); f.settings()
+   assertFalse(f.requests.any { it.path=="/api/usage/resets/consume" })
+   f.controller.consumeReset(f.controller.offer()!!)!!.join()
+   val body=parseObject(f.requests.single { it.path=="/api/usage/resets/consume" }.body.clone().readUtf8())
+   assertEquals(json("profile_id" to profile,"connection_id" to "connection","credit_id" to "first","attempt_id" to pendingAttempt,
+    "confirmed_count" to 1,"confirmed_expires_at" to null),body)
+  }
+ }
+ @Test fun pendingResetCannotBeConfirmedAfterConnectionChanges() = runBlocking {
+  Fixture(this).use { f ->
+   val old=resetStatus().replace("\"credit_id\":\"first\"", "\"credit_id\":\"first\",\"pending_attempt_id\":\"$pendingAttempt\"")
+   f.handler={ r -> if(r.requestUrl!!.encodedPath=="/api/usage/status") response(old) else null }
+   f.login(); f.settings()
+   val offer=f.controller.offer()!!
+   val new=resetStatus().replace("\"connection_id\":\"connection\"", "\"connection_id\":\"replacement\"")
+   f.handler={ r -> when(r.requestUrl!!.encodedPath) {
+    "/api/usage/status" -> response(new)
+    "/api/usage/resets/consume" -> response("""{"outcome":"nothingToReset","status":$new}""")
+    else -> null
+   } }
+   f.controller.refreshSettings(); f.idle()
+   f.controller.consumeReset(offer)!!.join()
+   assertFalse(f.requests.any { it.path=="/api/usage/resets/consume" })
+   f.controller.consumeReset(f.controller.offer()!!)!!.join()
+   val body=parseObject(f.requests.single { it.path=="/api/usage/resets/consume" }.body.clone().readUtf8())
+   assertEquals("replacement",body.text("connection_id"))
+   assertNotEquals(pendingAttempt,body.text("attempt_id"))
+  }
+ }
+ @Test fun malformedPendingAttemptLeavesBalanceVisibleButCannotBeConfirmed() = runBlocking {
+  Fixture(this).use { f ->
+   val bad=resetStatus().replace("\"credit_id\":\"first\"", "\"credit_id\":\"first\",\"pending_attempt_id\":\"not-an-attempt\"")
+   f.handler={ r -> if(r.requestUrl!!.encodedPath=="/api/usage/status") response(bad) else null }
+   f.login(); f.settings()
+   assertEquals(2L,f.controller.state.value.resetCredits(1796000000L)?.count)
+   assertNull(f.controller.offer())
+  }
+ }
+ @Test fun definitiveNoCreditLetsFreshEligibleStatusOfferSameCreditAgain() = runBlocking {
+  Fixture(this).use { f ->
+   val attempted=CopyOnWriteArrayList<String>()
+   f.handler={ r -> when(r.requestUrl!!.encodedPath) {
+    "/api/usage/status", "/api/usage/refresh" -> response(resetStatus())
+    "/api/usage/resets/consume" -> {
+     attempted.add(parseObject(r.body.clone().readUtf8()).text("attempt_id"))
+     val result=if(attempted.size==1) parseObject(resetStatus()).let { JsonObject(it-"resets") }.toString() else resetStatus()
+     response("""{"outcome":"noCredit","status":$result}""")
+    }
+    else -> null
+   } }
+   f.login(); f.settings()
+   f.controller.consumeReset(f.controller.offer()!!)!!.join()
+   assertNull(f.controller.offer())
+   f.controller.refreshAllowance()!!.join()
+   assertNotNull(f.controller.offer())
+   assertEquals(1,attempted.size)
+   f.controller.consumeReset(f.controller.offer()!!)!!.join()
+   assertEquals(2,attempted.distinct().size)
+   assertNotNull(f.controller.offer())
+  }
  }
  @Test fun switchingProviderAccountInvalidatesPreparedResearchOwnership() = runBlocking {
   Fixture(this).use { f ->

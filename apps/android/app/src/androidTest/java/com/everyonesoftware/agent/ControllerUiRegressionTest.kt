@@ -14,8 +14,11 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 class ControllerUiRegressionTest {
  @get:Rule val compose=createAndroidComposeRule<ComponentActivity>()
- private inner class Fixture(val pending: Boolean=false) : Closeable {
+ private inner class Fixture(val pending: Boolean=false, val resets: Boolean=false, val failConsume: Boolean=false) : Closeable {
   val requests=CopyOnWriteArrayList<RecordedRequest>()
+  private val profile="profile_abcdefghijklmnopqrstuv"
+  private val expiry=4102444800L
+  private val status="""{"profile_id":"$profile","connection_id":"connection","state":"connected","available":true,"resets":{"available_count":1,"expirations":[{"count":1,"expires_at":$expiry}],"details_complete":true,"next":{"credit_id":"first-credit","expires_at":$expiry},"history":[{"kind":"expired","at":1795050000}]}}"""
   val server=MockWebServer()
   val controller=AgentController(MemorySessionStore(),CoroutineScope(SupervisorJob()+Dispatchers.Main.immediate))
   init {
@@ -27,7 +30,9 @@ class ControllerUiRegressionTest {
      "/api/models" -> "{\"models\":[{\"id\":\"model\"}]}"
      "/api/auth/status" -> "{\"connected\":false}"
      "/api/auth/profiles" -> "{\"active_profile_id\":\"${if(pending) "" else "profile_abcdefghijklmnopqrstuv"}\",\"profiles\":[{\"id\":\"profile_abcdefghijklmnopqrstuv\",\"label\":\"Saved account\",\"registration_pending\":$pending}]}"
-     "/api/usage/status" -> "{\"profile_id\":\"profile_abcdefghijklmnopqrstuv\",\"connection_id\":\"connection\"}"
+     "/api/usage/status" -> if(resets) status else """{"profile_id":"$profile","connection_id":"connection"}"""
+     "/api/usage/resets/consume" -> if(failConsume) return MockResponse().setResponseCode(503).setBody("""{"error":"Could not verify the reset."}""") else
+      """{"outcome":"reset","status":{"profile_id":"$profile","connection_id":"connection","state":"connected","available":true,"resets":{"available_count":0,"expirations":[],"details_complete":true,"history":[{"kind":"used","at":1796000000},{"kind":"expired","at":1795050000}]}}}"""
      "/api/research/settings" -> "{\"settings\":{\"revision\":\"current-revision\",\"configured\":true}}"
      "/api/research/settings/check" -> "{}"
      "/api/memories" -> "{\"entries\":[]}"
@@ -79,6 +84,41 @@ class ControllerUiRegressionTest {
    compose.onNodeWithText("Agent password").assertDoesNotExist()
    f.click("Add account")
    assertEquals("/auth/start?mode=add",f.requests.last { it.method=="POST" }.path)
+  }
+ }
+ @Test fun resetConfirmationCancelsWithoutWriteAndPublishesOnlyServerHistory() {
+  Fixture(resets=true).use { f ->
+   f.click("Use a reset")
+   compose.onNodeWithText("Use 1 reset?").assertIsDisplayed()
+   compose.onNode(hasText("Saved account",substring=true) and hasText("This can’t be undone.",substring=true)).assertExists()
+   compose.onNodeWithText("This can’t be undone.",substring=true).assertExists()
+   compose.onNodeWithText("Cancel").performClick()
+   assertFalse(f.requests.any { it.method=="POST" })
+   f.click("Use a reset")
+   compose.onNodeWithText("Use reset").performClick()
+   compose.waitUntil(10000) { !f.controller.state.value.busy }
+   val request=f.requests.single { it.method=="POST" }
+   assertEquals("/api/usage/resets/consume",request.path)
+   val body=parseObject(request.body.clone().readUtf8())
+   java.util.UUID.fromString(body.text("attempt_id"))
+   assertEquals(json("profile_id" to "profile_abcdefghijklmnopqrstuv","connection_id" to "connection","credit_id" to "first-credit","attempt_id" to body.text("attempt_id"),
+    "confirmed_count" to 1,"confirmed_expires_at" to 4102444800L),body)
+   compose.onNodeWithTag("settings-scroll").performScrollToNode(hasText("Use a reset"))
+   compose.onNodeWithText("Use a reset").assertIsNotEnabled()
+   f.click("Reset history")
+   compose.onNodeWithTag("settings-scroll").performScrollToNode(hasText("1 reset used"))
+   compose.onAllNodesWithText("1 reset used").assertCountEquals(1)
+  }
+ }
+ @Test fun uncertainResetDoesNotReplayOrKeepTheObsoleteOffer() {
+  Fixture(resets=true,failConsume=true).use { f ->
+   f.click("Use a reset")
+   compose.onNodeWithText("Use reset").performClick()
+   compose.waitUntil(10000) { !f.controller.state.value.busy }
+   compose.onNodeWithTag("settings-scroll").performScrollToNode(hasText("Use a reset"))
+   compose.onNodeWithText("Use a reset").assertIsNotEnabled()
+   compose.onNodeWithText("Could not verify the reset.",substring=true).assertExists()
+   assertEquals(1,f.requests.count { it.method=="POST" })
   }
  }
 }

@@ -399,7 +399,7 @@ const homePage = `<!doctype html>
     .usage-help { margin-top:12px; }
     .usage-help summary { cursor:pointer; padding:6px 0; }
     .quota-window { margin:14px 0; }
-    .quota-summary { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+    .quota-summary { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:2px 8px; }
     .quota-label { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px; min-width:0; }
     .quota-label strong { font-size:12px; font-weight:500; color:var(--accent); }
     .quota-track { height:6px; border-radius:3px; background:#39403b; margin:8px 0 5px; overflow:hidden; }
@@ -414,7 +414,40 @@ const homePage = `<!doctype html>
     #usage-verification { display:inline-flex; align-items:center; }
     #usage-error, #usage-confirm-error { color:#efada5; }
     .usage-history-trigger { font-size:11px; color:var(--muted); white-space:nowrap; }
-    #usage-history-open-chatgpt { margin-top:8px; }
+    .allowance-actions { display:flex; align-items:flex-start; flex-wrap:wrap; gap:4px 14px; margin-top:8px; }
+    .allowance-actions .usage-help { margin-top:0; }
+    .allowance-actions summary { min-height:44px; padding:13px 0; }
+    .allowance-actions p { max-width:42ch; margin:0 0 5px; }
+    #reset-panel { padding-top:14px; }
+    #reset-panel .usage-heading { margin-bottom:9px; }
+    #resets { display:flex; align-items:center; gap:7px; font-weight:600; }
+    #resets svg { width:17px; height:17px; color:var(--accent); }
+    #use-reset, #confirm-reset { margin:0; min-height:44px; }
+    .reset-balance-card { border:1px solid #48564a; border-radius:6px; background:#202722; padding:11px 12px; }
+    #reset-balance { margin:0; color:#dce8dc; font-size:13px; font-weight:600; }
+    #reset-count { margin-right:3px; font-size:22px; line-height:1.1; color:var(--accent); font-variant-numeric:tabular-nums; }
+    #reset-details-note { margin:6px 0 0; }
+    #reset-expirations { margin:8px 0 0; padding:7px 0 0; border-top:1px solid #3b473d; list-style:none; }
+    #reset-expirations li { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:2px 12px; padding:2px 0; }
+    #reset-expirations time { color:#d5ded7; }
+    #reset-history { margin-top:8px; }
+    #reset-history summary { display:flex; align-items:center; justify-content:space-between; min-height:44px; padding:6px 2px; list-style:none; font-size:13px; font-weight:600; cursor:pointer; }
+    #reset-history summary::-webkit-details-marker { display:none; }
+    #reset-history summary:hover { color:var(--accent); }
+    #reset-history summary svg { width:14px; height:14px; color:var(--muted); }
+    #reset-history[open] summary svg { transform:rotate(180deg); }
+    #reset-events { margin:0; padding:0; list-style:none; }
+    #reset-events li { display:grid; grid-template-columns:minmax(0,1fr) max-content; align-items:center; gap:6px 12px; border-top:1px solid var(--line); padding:7px 2px; }
+    #reset-events strong { display:block; font-weight:600; }
+    #reset-events time { color:var(--muted); }
+    .reset-event-tag { padding:2px 8px; border-radius:12px; border:1px solid #48564a; color:var(--accent); font-size:11px; }
+    .reset-event-tag.expired { color:#e3c59a; border-color:#5a5041; }
+    #reset-error { color:#efada5; }
+    #reset-dialog { max-width:calc(100% - 24px); padding:20px; border-color:#48564a; border-radius:10px; }
+    #reset-dialog h2 { font-size:18px; font-weight:600; }
+    #reset-dialog #reset-warning { color:inherit; }
+    #reset-dialog .dialog-actions { flex-wrap:wrap; }
+    #cancel-reset { min-height:44px; }
     #usage-history-dialog { width:min(900px,calc(100% - 48px)); max-width:none; max-height:calc(100dvh - 48px); overflow:auto; padding:18px 20px; border:1px solid #394139; border-radius:10px; background:var(--field); color:#e1e6e2; box-shadow:0 24px 100px #0008; }
     #usage-history-dialog::backdrop { background:#0009; }
     #usage-history-dialog h2 { margin:0; font-size:18px; font-weight:500; }
@@ -555,13 +588,23 @@ const homePage = `<!doctype html>
           <p id="provider-feedback" role="status" aria-live="polite" hidden></p>
           <div class="device-panel" id="usage-device" hidden aria-live="polite"><strong>Connect ChatGPT with Codex</strong><p>Open the OpenAI verification page, sign in to the intended ChatGPT account and workspace, and enter this code. Return here after approval. This connects both conversations and allowance.</p><div class="device-code"><code id="usage-code"></code><button class="reset" id="usage-copy" type="button">Copy code</button></div><div class="usage-actions"><a id="usage-verification" target="_blank" rel="noopener noreferrer" hidden>Open verification page ↗</a><button class="reset" id="usage-cancel" type="button">Cancel</button></div><p id="usage-expiry"></p><p id="device-feedback" role="status"></p></div>
           <section class="usage-subsection" id="usage-panel" aria-labelledby="usage-heading" hidden>
-            <div class="usage-heading"><h3 id="usage-heading">Allowance</h3><div class="allowance-tools"><span id="usage-updated"></span><button id="usage-refresh" class="connection-refresh" type="button" aria-label="Refresh allowance" title="Refresh allowance"><span id="usage-badge" class="visually-hidden">Checking…</span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button></div></div>
+            <div class="usage-heading"><h3 id="usage-heading">Allowance</h3><div class="allowance-tools"><span id="usage-updated"></span><span class="connection-detail">All times ET</span><button id="usage-refresh" class="connection-refresh" type="button" aria-label="Refresh allowance" title="Refresh allowance"><span id="usage-badge" class="visually-hidden">Checking…</span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button></div></div>
             <p id="usage-message">Allowance for your ChatGPT connection.</p>
 
             <div id="usage-windows"></div>
             <p id="usage-error" role="alert" hidden></p><p id="usage-feedback" role="status"></p>
-            <button id="usage-history-open-chatgpt" class="reset usage-history-trigger" type="button" aria-haspopup="dialog" aria-controls="usage-history-dialog" disabled>View usage history</button>
-            <details class="usage-help"><summary>About allowance</summary><p>Codex reports allowance for the selected ChatGPT connection. Windows may not cover every ChatGPT feature or Agent-specific limit. Refresh failures retain explicitly marked last-known values; they do not create another connection.</p></details>
+            <div class="allowance-actions"><button id="usage-history-open-chatgpt" class="reset usage-history-trigger" type="button" aria-haspopup="dialog" aria-controls="usage-history-dialog" disabled>View usage history</button>
+            <details class="usage-help"><summary>About allowance</summary><p>Allowance renews on its own schedule. The expiration dates below are for available resets, not for allowance windows.</p></details></div>
+            <section class="usage-subsection" id="reset-panel" aria-labelledby="resets">
+              <div class="usage-heading"><h3 id="resets" tabindex="-1"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11a9 9 0 1 1 2.2 6M3 5v6h6m3-4v5l3 2"/></svg>Resets</h3><button id="use-reset" class="send" type="button" aria-haspopup="dialog" aria-controls="reset-dialog" disabled>Use a reset</button></div>
+              <div class="reset-balance-card"><p id="reset-balance" role="status" aria-atomic="true"><strong id="reset-count" hidden></strong> <span id="reset-count-label">Reset balance unavailable</span></p>
+                <ul id="reset-expirations" aria-label="Upcoming reset expirations" hidden></ul><p id="reset-details-note" hidden></p>
+              </div>
+              <p id="reset-error" role="alert" hidden></p>
+              <details id="reset-history"><summary>Reset history <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6 4 4 4-4"/></svg></summary>
+                <p id="reset-history-note">Agent-recorded reset events</p><ol id="reset-events" aria-label="Agent-recorded reset events, newest first"></ol>
+              </details>
+            </section>
           </section>
 
 
@@ -733,6 +776,12 @@ const homePage = `<!doctype html>
     </form>
   </dialog>
 
+  <dialog class="connection-dialog" id="reset-dialog" aria-labelledby="reset-dialog-title" aria-describedby="reset-warning">
+    <h2 id="reset-dialog-title">Use 1 reset?</h2>
+    <p id="reset-warning"></p>
+    <p id="reset-progress" role="status" tabindex="-1" hidden>Using reset…</p>
+    <div class="dialog-actions"><button class="reset" id="cancel-reset" type="button" autofocus>Cancel</button><button class="send" id="confirm-reset" type="button">Use reset</button></div>
+  </dialog>
   <dialog id="usage-history-dialog" aria-labelledby="usage-history-title">
     <header class="history-top"><div><h2 id="usage-history-title">Usage history</h2></div><div class="history-popup-actions"><label><span class="history-range-label">History</span><select id="usage-history-range"><option value="24h">24 hours</option><option value="week">1 week</option><option value="period">Entire period</option></select></label><button id="usage-history-close" type="button" aria-label="Close usage history">×</button></div></header>
     <div class="history-headline"><strong id="usage-history-value">Unavailable</strong><span id="usage-history-reset"></span></div>
@@ -1476,12 +1525,15 @@ const homePage = `<!doctype html>
       let usageProfile = '', usageData = null, usageEpoch = 0, usageTimer = null;
       let usageBusy = false, usageController = null;
       let deviceLogin = null, deviceEpoch = 0, deviceTimer = null, deviceController = null, deviceBusy = false, authorizationController = null;
+      const resetEl = id => document.getElementById(id);
+      const resetDialog = resetEl('reset-dialog'), resetLauncher = resetEl('use-reset');
+      let resetTarget = null, resetOperation = null;
       // BEGIN update reload safety
       // Only booleans and a revision leave this closure; drafts/passwords stay in memory.
       let updateDraftRevision = 0;
       document.addEventListener('input', () => { ++updateDraftRevision; });
       window.agentUpdateSafety = () => ({
-        pending: busy || loadingConversation || passwordBusy || authBusy || connectionBusy || connectionSubmitting || usageBusy || deviceBusy || Boolean(deviceLogin) || searchBusy || memoryBusy || memorySuggestionBusy,
+        pending: busy || loadingConversation || passwordBusy || authBusy || connectionBusy || connectionSubmitting || usageBusy || Boolean(resetOperation) || deviceBusy || Boolean(deviceLogin) || searchBusy || memoryBusy || memorySuggestionBusy,
         unsaved: Boolean(memorySuggestionState || !memoryEl('form').hidden || searchBudgetDirty() || searchKey.value || input.value || Array.from(document.querySelectorAll('input[type="password"], input[autocomplete="current-password"], input[autocomplete="new-password"]')).some(field => field.value) || document.querySelector('dialog[open]')),
         revision: updateDraftRevision,
       });
@@ -1499,6 +1551,10 @@ const homePage = `<!doctype html>
         usageProfile = '';
         usageData = null;
         usagePanel.hidden = true;
+        closeResetConfirmation(false);
+        resetEl('reset-history').open = false;
+        resetFeedback('');
+        renderResets();
       }
       function usageVisible() { return !settingsPanel.hidden && !chatApp.hidden && !document.hidden && Boolean(activeProfileID); }
       function syncUsage() {
@@ -1537,7 +1593,7 @@ const homePage = `<!doctype html>
         const badge = usageElement('badge');
         badge.textContent = usageBusy ? (usageData ? 'Refreshing…' : 'Checking…') : stale ? 'Last known' : ({connected:'Connected',disconnected:'Not connected',pending:'Awaiting approval',checking:'Checking…',expired:'Sign-in expired',unavailable:'Unavailable'}[state] || 'Unavailable');
         badge.className = state === 'connected' && !stale ? 'visually-hidden' : 'connection-badge warning';
-        usageElement('refresh').disabled = usageBusy || !usageData || !['connected','unavailable'].includes(state) || connectionBusy || Boolean(connectionRefresh) || Boolean(deviceLogin);
+        usageElement('refresh').disabled = usageBusy || Boolean(resetOperation) || !usageData || !['connected','unavailable'].includes(state) || connectionBusy || Boolean(connectionRefresh) || Boolean(deviceLogin);
         usageElement('refresh').setAttribute('aria-busy', String(usageBusy));
         usageElement('refresh').setAttribute('aria-label', badge.textContent + '. Refresh allowance');
         usageElement('message').textContent = data.available === false ? 'The Codex dependency is unavailable. ChatGPT conversations and allowance require Codex.' : stale ? 'Showing last-known allowance; these values may no longer be current.' : state === 'expired' ? 'Reconnect ChatGPT above to restore conversations and allowance.' : state === 'connected' ? 'Codex-reported allowance for your ChatGPT connection.' : state === 'checking' ? 'Checking your ChatGPT connection…' : state === 'pending' ? 'Waiting for OpenAI approval.' : 'Connect ChatGPT above to use conversations and allowance.';
@@ -1558,9 +1614,9 @@ const homePage = `<!doctype html>
             amount.textContent = valid ? remaining + '% remaining' : 'Unavailable';
             label.append(amount, document.createTextNode(' · '), name);
             const reset = document.createElement('span'); reset.className = 'quota-reset';
-            const now = Math.floor(Date.now() / 1000);
-            reset.textContent = typeof window.reset_at === 'number' && Number.isFinite(window.reset_at) && window.reset_at > now ? 'Resets in ' + historyDuration(window.reset_at - now) : 'Reset time unavailable';
-            reset.title = (usageDate(window.reset_at) ? 'Resets ' + usageDate(window.reset_at) + ' · local time' : 'Reset time unavailable') + (typeof window.window_minutes === 'number' && Number.isFinite(window.window_minutes) && window.window_minutes > 0 ? ' · ' + window.window_minutes + '-minute window' : '');
+            const renewal = settingsEasternTime(window.reset_at, false);
+            reset.textContent = renewal && window.reset_at > Date.now() / 1000 ? 'Renews ' + renewal : 'Renewal time unavailable';
+            reset.title = (renewal ? 'Renews ' + settingsEasternTime(window.reset_at) : 'Renewal time unavailable') + (typeof window.window_minutes === 'number' && Number.isFinite(window.window_minutes) && window.window_minutes > 0 ? ' · ' + window.window_minutes + '-minute window' : '');
             const summary = document.createElement('div'); summary.className = 'quota-summary'; summary.append(label, reset); row.append(summary);
             if (valid) {
               const track = document.createElement('div'); track.className = 'quota-track'; track.setAttribute('role', 'meter'); track.setAttribute('aria-label', name.textContent + ' remaining' + (stale ? ' (last known)' : '')); track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', '100'); track.setAttribute('aria-valuenow', String(remaining));
@@ -1572,10 +1628,12 @@ const homePage = `<!doctype html>
         }
         const fetchedAt = data.snapshot?.fetched_at, age = Math.floor(Date.now() / 1000) - fetchedAt;
         usageElement('updated').textContent = data.snapshot ? (typeof fetchedAt === 'number' && Number.isFinite(fetchedAt) && usageDate(fetchedAt) ? age < 60 ? 'Updated just now' : 'Updated ' + historyDuration(age) + ' ago' : 'Update time unavailable') + (stale ? ' · stale' : '') : '';
-        usageElement('updated').title = data.snapshot && usageDate(fetchedAt) ? 'Updated ' + usageDate(fetchedAt) + ' · local time' : '';
+        const updated = settingsEasternTime(fetchedAt);
+        usageElement('updated').title = data.snapshot && updated ? 'Updated ' + updated : '';
+        renderResets();
       }
       async function usageRequest(action, _unused, quiet = false) {
-        if (!usageVisible() || usageBusy || !usageProfile) return false;
+        if (!usageVisible() || usageBusy || resetOperation || !usageProfile) return false;
         const priorState = usageData?.state;
         let firstFetch = false;
         const profile = usageProfile, epoch = ++usageEpoch;
@@ -1585,6 +1643,10 @@ const homePage = `<!doctype html>
         const controller = new AbortController(); usageController=controller;
         const timeout = setTimeout(()=>controller.abort(),12000);
         if (!quiet) { usageElement('feedback').textContent = ''; renderUsage(); }
+        else { // Revalidate the captured credit after this read, before accepting confirmation.
+          resetLauncher.disabled = true;
+          resetEl('confirm-reset').disabled = true;
+        }
         try {
           const response = await fetch('/api/usage/' + action + (action === 'status' ? '?profile_id=' + encodeURIComponent(profile) : ''), action === 'status' ? {cache:'no-store',signal:controller.signal} : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal});
           const result = await response.json();
@@ -1619,6 +1681,181 @@ const homePage = `<!doctype html>
         }
       }
       usageElement('refresh').addEventListener('click', () => { void usageRequest(usageData?.state === 'unavailable' ? 'status' : 'refresh'); });
+
+      function settingsEasternTime(at, full = true) {
+        if (typeof at !== 'number' || !Number.isFinite(at) || at <= 0) return '';
+        const date = new Date(at * 1000);
+        if (!Number.isFinite(date.getTime())) return '';
+        const timeZone = 'America/New_York';
+        return date.toLocaleDateString('en-US', {timeZone, month:'short', day:'numeric', year:full ? 'numeric' : undefined})
+          + (full ? ' at ' : ', ') + date.toLocaleTimeString('en-US', {timeZone, hour:'numeric', minute:'2-digit'}) + (full ? ' ET' : '');
+      }
+      function resetTime(at) {
+        const time = document.createElement('time');
+        time.textContent = settingsEasternTime(at);
+        time.dateTime = new Date(at * 1000).toISOString();
+        return time;
+      }
+      function currentResetBalance() {
+        const data = usageData;
+        const resets = data?.resets;
+        if (data?.profile_id !== activeProfileID || data?.state !== 'connected' || data.available === false || data.error || data.snapshot?.stale) return null;
+        return Number.isSafeInteger(resets?.available_count) && resets.available_count >= 0 ? resets : null;
+      }
+      function currentResetTarget() {
+        const resets = currentResetBalance(), next = resets?.next;
+        const profile = selectedProfile, connection = usageData?.connection_id;
+        const pendingAttempt = next?.pending_attempt_id;
+        if (!usageVisible() || connectionBusy || connectionRefresh || deviceLogin || profile?.id !== activeProfileID || !connection ||
+            !resets?.available_count || resets.details_complete !== true || resets.history_unavailable || typeof next?.credit_id !== 'string' || !next.credit_id ||
+            (pendingAttempt !== undefined && (typeof pendingAttempt !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(pendingAttempt) || pendingAttempt === '00000000-0000-0000-0000-000000000000')) ||
+            (next.expires_at !== null && (!settingsEasternTime(next.expires_at) || next.expires_at * 1000 <= Date.now()))) return null;
+        return {profile:profile.id, connection, credit:next.credit_id, expiration:next.expires_at, count:resets.available_count, pendingAttempt,
+          account:profile.email || usageData.identity?.email || profile.label || 'ChatGPT account'};
+      }
+      function sameResetTarget(a, b) {
+        return a && b && a.profile === b.profile && a.connection === b.connection && a.credit === b.credit &&
+          a.expiration === b.expiration && a.count === b.count && a.account === b.account && a.pendingAttempt === b.pendingAttempt;
+      }
+      function resetFeedback(message) {
+        const error = resetEl('reset-error');
+        error.hidden = !message;
+        error.textContent = message;
+      }
+      function closeResetConfirmation(restoreFocus = true) {
+        resetTarget = null;
+        if (resetDialog.open) resetDialog.close();
+        resetEl('reset-warning').replaceChildren();
+        if (restoreFocus) (resetLauncher.disabled ? resetEl('resets') : resetLauncher).focus();
+      }
+      function renderResets() {
+        const balance = currentResetBalance(), count = balance?.available_count;
+        const countNode = resetEl('reset-count'), countLabel = resetEl('reset-count-label');
+        const countText = count === undefined ? '' : String(count);
+        const label = count === undefined ? 'Reset balance unavailable' : count === 1 ? 'reset available' : 'resets available';
+        countNode.hidden = count === undefined;
+        if (countNode.textContent !== countText) countNode.textContent = countText;
+        if (countLabel.textContent !== label) countLabel.textContent = label;
+        const expiryRows = resetEl('reset-expirations');
+        const expirations = count > 0 && Array.isArray(balance.expirations) ? balance.expirations : [];
+        expiryRows.replaceChildren();
+        for (const item of expirations.slice().sort((a,b) => (a?.expires_at ?? Infinity) - (b?.expires_at ?? Infinity))) {
+          if (!Number.isSafeInteger(item?.count) || item.count <= 0) continue;
+          if (item.expires_at !== null && (!settingsEasternTime(item.expires_at) || item.expires_at * 1000 <= Date.now())) continue;
+          const row = document.createElement('li'), title = document.createElement('span');
+          title.textContent = item.count + (item.count === 1 ? ' reset' : ' resets');
+          if (item.expires_at !== null) title.textContent += item.count === 1 ? ' expires' : ' expire';
+          const when = item.expires_at === null ? document.createElement('span') : resetTime(item.expires_at);
+          if (item.expires_at === null) when.textContent = 'Expiration unavailable';
+          row.append(title, when);
+          expiryRows.append(row);
+        }
+        expiryRows.hidden = !expiryRows.childElementCount;
+        const note = resetEl('reset-details-note');
+        note.textContent = !(count > 0) ? '' : balance.history_unavailable ? 'Resets can’t be used while reset history is unavailable.' :
+          balance.details_complete !== true ? 'Some reset details are unavailable. Refresh allowance to check again.' : '';
+        note.hidden = !note.textContent;
+
+        const evidence = usageData?.profile_id === activeProfileID ? usageData?.resets : null;
+        const events = Array.isArray(evidence?.history) ? evidence.history.filter(event => ['used','expired'].includes(event?.kind) && settingsEasternTime(event.at)) : [];
+        const eventList = resetEl('reset-events');
+        eventList.replaceChildren();
+        for (const event of events.sort((a,b) => b.at - a.at)) {
+          const row = document.createElement('li'), details = document.createElement('div');
+          const title = document.createElement('strong'), tag = document.createElement('span');
+          title.textContent = '1 reset ' + event.kind;
+          tag.className = 'reset-event-tag ' + event.kind;
+          tag.textContent = event.kind === 'used' ? 'Used' : 'Expired';
+          tag.setAttribute('aria-hidden','true');
+          details.append(title, resetTime(event.at)); row.append(details,tag); eventList.append(row);
+        }
+        resetEl('reset-history-note').textContent = !Array.isArray(evidence?.history) || evidence.history_unavailable ? 'Agent-recorded reset history is unavailable.' :
+          events.length ? 'Agent-recorded reset events' : 'No reset events recorded by Agent yet.';
+
+        const current = currentResetTarget();
+        resetLauncher.disabled = usageBusy || Boolean(resetOperation) || !current;
+        resetEl('confirm-reset').disabled = resetLauncher.disabled;
+        resetEl('cancel-reset').disabled = Boolean(resetOperation);
+        resetEl('reset-progress').hidden = !resetOperation;
+        if (resetTarget && !resetOperation && !sameResetTarget(resetTarget,current)) {
+          closeResetConfirmation();
+          resetFeedback('The confirmed reset is no longer current. Review the reset balance before trying again.');
+        }
+      }
+      resetLauncher.addEventListener('click', () => {
+        const target = currentResetTarget();
+        if (!target || usageBusy || resetOperation || document.querySelector('dialog[open]')) { renderResets(); return; }
+        resetFeedback('');
+        resetTarget = target;
+        const warning = resetEl('reset-warning'), account = document.createElement('strong');
+        account.textContent = target.account;
+        if (target.expiration === null) warning.replaceChildren('This will use 1 reset for ', account, '. Its expiration is unavailable.');
+        else {
+          const expiration = document.createElement('strong');
+          expiration.append(resetTime(target.expiration));
+          warning.replaceChildren('This will use the reset that expires ', expiration, ' for ', account, '.');
+        }
+        const remaining = target.count - 1;
+        warning.append(' You’ll have ' + remaining + (remaining === 1 ? ' reset' : ' resets') + ' left. This can’t be undone.');
+        if (target.pendingAttempt) warning.append(' Agent couldn’t confirm the previous attempt. Confirm to retry that same attempt.');
+        resetDialog.showModal();
+        resetEl('cancel-reset').focus();
+      });
+      resetEl('cancel-reset').addEventListener('click', () => { if (!resetOperation) closeResetConfirmation(); });
+      resetDialog.addEventListener('cancel', event => {
+        event.preventDefault();
+        if (!resetOperation) closeResetConfirmation();
+      });
+      resetEl('confirm-reset').addEventListener('click', async () => {
+        const target = resetTarget;
+        if (!resetDialog.open || resetOperation || usageBusy) return;
+        if (!sameResetTarget(target,currentResetTarget())) { renderResets(); return; }
+        // Only a fresh server read can identify the durable pending reservation.
+        let attempt;
+        try { attempt = target.pendingAttempt ?? crypto.randomUUID(); }
+        catch (_) { closeResetConfirmation(); resetFeedback('Using a reset requires a secure connection to Agent.'); return; }
+        const epoch = usageEpoch;
+        resetOperation = true;
+        renderUsage();
+        resetEl('reset-progress').focus();
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 25000);
+        let status, message = '';
+        try {
+          const response = await fetch('/api/usage/resets/consume', {method:'POST', redirect:'error', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({profile_id:target.profile,connection_id:target.connection,credit_id:target.credit,attempt_id:attempt,
+              confirmed_count:target.count,confirmed_expires_at:target.expiration}), signal:controller.signal});
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(typeof result.error === 'string' ? result.error : 'Agent couldn’t confirm the reset.');
+          }
+          if (!['reset','alreadyRedeemed','nothingToReset','noCredit'].includes(result.outcome) ||
+              result.status?.profile_id !== target.profile || result.status?.connection_id !== target.connection) throw new Error('Agent couldn’t verify the reset result.');
+          status = result.status;
+          if (result.outcome === 'nothingToReset') message = 'ChatGPT reported there was no allowance to reset.';
+          if (result.outcome === 'noCredit') message = 'ChatGPT reported that this reset is no longer available.';
+        } catch (error) {
+          message = error.name === 'AbortError' || error instanceof TypeError || error instanceof SyntaxError ?
+            'Agent couldn’t confirm the reset. Check the refreshed balance before trying again.' : error.message;
+        } finally {
+          clearTimeout(timeout);
+          resetOperation = null;
+          const current = epoch === usageEpoch && usageVisible() && usageProfile === target.profile && activeProfileID === target.profile && usageData?.connection_id === target.connection;
+          if (current) {
+            // Keep the last allowance display while withholding the reset balance until readback.
+            usageData = status || {...usageData, resets:undefined};
+            resetTarget = null;
+            renderUsage();
+            closeResetConfirmation();
+            resetFeedback(message);
+            if (status) usagePoll();
+            else void usageRequest('status',undefined,true);
+          } else {
+            closeResetConfirmation(false);
+            if (usageVisible() && usageProfile === activeProfileID) void usageRequest('status',undefined,true);
+          }
+        }
+      });
       // Device login targets its own pending profile, which may not yet be active.
       function stopDeviceLogin() {
         ++deviceEpoch; clearTimeout(deviceTimer); deviceTimer = null;

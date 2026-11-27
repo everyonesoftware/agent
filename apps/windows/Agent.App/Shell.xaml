@@ -207,6 +207,26 @@
          <Expander Header="About allowance"><TextBlock Text="Codex reports allowance for the selected ChatGPT connection. Windows may not cover every ChatGPT feature or Agent-specific limit. Refresh failures retain explicitly marked last-known values; they do not create another connection."/></Expander>
         </StackPanel>
        </Border>
+       <Border x:Name="ResetsSection" Visibility="Collapsed" BorderBrush="#333936" BorderThickness="0,1,0,0" Padding="0,12,0,0">
+        <StackPanel Spacing="10">
+         <Grid ColumnSpacing="10">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+          <TextBlock Text="Resets" FontWeight="SemiBold" VerticalAlignment="Center" AutomationProperties.HeadingLevel="Level3"/>
+          <Button x:Name="UseReset" Grid.Column="1" IsEnabled="False" Style="{StaticResource AccentButtonStyle}" Content="Use a reset"/>
+         </Grid>
+         <Border Background="#202322" BorderBrush="#333936" BorderThickness="1" CornerRadius="8" Padding="12">
+          <StackPanel Spacing="6">
+           <TextBlock x:Name="ResetBalance" FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite"/>
+           <StackPanel x:Name="ResetExpirations" Spacing="4" AutomationProperties.Name="Upcoming reset expirations"/>
+           <TextBlock x:Name="ResetDetails" Visibility="Collapsed" Foreground="#a3aea6"/>
+          </StackPanel>
+         </Border>
+         <TextBlock x:Name="ResetNotice" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite"/>
+         <Expander x:Name="ResetHistory" Header="Reset history" IsExpanded="False" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+          <StackPanel x:Name="ResetEvents" Spacing="8"/>
+         </Expander>
+        </StackPanel>
+       </Border>
       </StackPanel>
      </Border>
      <Border x:Name="ResearchSection" Style="{StaticResource SettingsCard}">

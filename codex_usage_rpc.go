@@ -145,6 +145,12 @@ func (r *codexUsageRPC) Call(ctx context.Context, method string, params, result 
 		if len(object) != 0 {
 			return errCodexUsageRPC
 		}
+	case codexConsumeResetMethod:
+		var credit, attempt string
+		if len(object) != 2 || json.Unmarshal(object["creditId"], &credit) != nil || !validResetCreditID(credit) ||
+			json.Unmarshal(object["idempotencyKey"], &attempt) != nil || !validResetAttemptID(attempt) {
+			return errCodexUsageRPC
+		}
 	default:
 		return errCodexUsageRPC
 	}
